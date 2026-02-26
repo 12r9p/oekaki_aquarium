@@ -1,5 +1,5 @@
 import type { ClientConfig, AppLayerConfig } from "@aquarium/shared";
-import { DEFAULT_WORLD } from "@aquarium/shared";
+import { DEFAULT_WORLD, LAYER_CONFIG } from "@aquarium/shared";
 
 // ============================================================
 // WorldConfig: 全クライアントのViewportを統合した仮想水槽
@@ -28,6 +28,18 @@ export interface ValidZone {
   floorY: number;
 }
 
+const defaultLayers: AppLayerConfig[] = [
+  { id: "layer_system", name: "System (モニター・壁)", type: "foreground", zIndex: -100, visible: true, opacity: 1.0 },
+  ...LAYER_CONFIG.map(l => ({
+    id: `layer_fish_${l.id}`,
+    name: `Lyr ${l.id} (魚レイヤー)`,
+    type: "fish" as const,
+    zIndex: l.zIndex,
+    visible: true,
+    opacity: 1.0
+  })).sort((a, b) => b.zIndex - a.zIndex) // 奥から手前へ
+];
+
 // シングルトンとして管理する仮想水槽状態
 const world: WorldConfig = {
   width: DEFAULT_WORLD.width,
@@ -35,7 +47,7 @@ const world: WorldConfig = {
   validZones: [],
   forbiddenZones: [],
   spawnPoints: [],
-  layers: [],
+  layers: defaultLayers,
 };
 
 /**

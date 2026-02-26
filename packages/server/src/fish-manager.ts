@@ -1,5 +1,5 @@
 import { v4 as uuidv4 } from "uuid";
-import type { ActiveFish, FishConfig, PendingFish, Vector2 } from "@aquarium/shared";
+import type { ActiveFish, FishConfig, PendingFish, Vector2, FishType } from "@aquarium/shared";
 
 // ============================================================
 // FishManager: 待機魚・活動魚の状態管理
@@ -114,7 +114,7 @@ export function setPinned(
 /** 魚のプロパティを更新する */
 export function updateFishParams(
   fishId: string,
-  updates: Partial<{ scale: number; speed: number; isPinned: boolean; pinnedLayerId: number }>
+  updates: Partial<{ scale: number; speed: number; isPinned: boolean; pinnedLayerId: number; type: FishType; isArchived: boolean }>
 ): boolean {
   const fish = activePool.get(fishId);
   if (!fish) return false;
@@ -122,7 +122,31 @@ export function updateFishParams(
   if (updates.speed !== undefined) fish.userParams.speed = updates.speed;
   if (updates.isPinned !== undefined) fish.isPinned = updates.isPinned;
   if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
+  if (updates.type !== undefined) fish.type = updates.type;
+  if (updates.isArchived !== undefined) fish.isArchived = updates.isArchived;
   return true;
+}
+
+/** 魚を複製する */
+export function duplicateFish(fishId: string): ActiveFish | undefined {
+  const src = activePool.get(fishId);
+  if (!src) return undefined;
+
+  const newFish: ActiveFish = {
+    ...src,
+    id: uuidv4(), // 新しいIDを発行
+    timestamp: Date.now(), // 現在時刻で末尾（最前面）に追加
+    physics: {
+      pos: { x: src.physics.pos.x + 50, y: src.physics.pos.y + 50 }, // 少しずらして配置
+      vel: { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 0.5 },
+      speedMultiplier: 1.0,
+    },
+    // アーカイブ状態は引き継がない（複製したら即座に出現させる）
+    isArchived: false,
+  };
+
+  activePool.set(newFish.id, newFish);
+  return newFish;
 }
 
 /** 魚を削除 */

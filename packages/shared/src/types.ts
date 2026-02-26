@@ -49,6 +49,8 @@ export interface ActiveFish extends FishConfig {
   targetScale: number;
   /** クライアント補間の目標透明度（レイヤー補正済み） */
   targetOpacity: number;
+  /** アーカイブ（非表示・計算除外）状態フラグ */
+  isArchived?: boolean;
 }
 
 // -------------------------------------------------------

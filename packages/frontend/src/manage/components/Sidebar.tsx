@@ -11,7 +11,11 @@ import {
     AccordionItem,
     AccordionTrigger,
 } from "@/components/ui/accordion";
-import { LayoutTemplate, MonitorSmartphone, Settings, KeySquare, Image as ImageIcon, LocateFixed, Map as MapIcon, Target, Palette, LayoutGrid, MonitorOff, Ban, Sparkles, Monitor, List, Layers, Plus, Trash2, Eye, EyeOff, Upload } from "lucide-react";
+import {
+    Monitor, MonitorPlay, Settings, Layers, Trash2, Eye, EyeOff, PlusCircle,
+    ImageIcon, KeySquare, Upload, HelpCircle, Ban, Sparkles, AlertTriangle, Play, ChevronUp, ChevronDown, CheckCircle2,
+    LayoutTemplate, MonitorSmartphone, LocateFixed, Map as MapIcon, Target, Palette, LayoutGrid, MonitorOff, List
+} from "lucide-react";
 
 interface SidebarProps {
     displays: DisplayClientInfo[];
@@ -32,13 +36,18 @@ interface SidebarProps {
     onUpdateSpawnPoints: (points: { id: string; x: number; y: number }[]) => void;
     layers: AppLayerConfig[];
     onUpdateLayers: (layers: AppLayerConfig[]) => void;
+
+    // 追加: 選択中レイヤーのIDとその更新関数
+    activeLayerId?: string;
+    onSetActiveLayerId?: (id: string | undefined) => void;
 }
 
 export function Sidebar({
     displays, selectedDisplayIds, onTestPattern, worldW, worldH, onAddDemoFish, onSaveViewport,
     sendRateSetting, setSendRateSetting, onUpdateWorldSize, bgUrl, onUpdateBgUrl, forbiddenZones, onUpdateForbiddenZones,
-    spawnPoints, onUpdateSpawnPoints, layers, onUpdateLayers
-}: SidebarProps): React.ReactElement {
+    spawnPoints, onUpdateSpawnPoints, layers, onUpdateLayers,
+    activeLayerId, onSetActiveLayerId
+}: SidebarProps) {
 
     // UUIDの略称表示
     const shortId = (id: string) => {
@@ -49,17 +58,24 @@ export function Sidebar({
     const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, layerId: string) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const formData = new FormData();
-        formData.append("image", file, file.name);
-        try {
-            const res = await fetch("/api/upload-scene", { method: "POST", body: formData });
-            const data = await res.json();
-            if (data.success && data.url) {
-                onUpdateLayers(layers.map(l => l.id === layerId ? { ...l, url: data.url } : l));
+        const reader = new FileReader();
+        reader.onload = async (ev) => {
+            const dataUrl = ev.target?.result as string;
+            try {
+                const res = await fetch("/api/upload-image", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ filename: file.name, data: dataUrl })
+                });
+                const data = await res.json();
+                if (data.success && data.url) {
+                    onUpdateLayers(layers.map(l => l.id === layerId ? { ...l, url: data.url, name: file.name } : l));
+                }
+            } catch (err) {
+                console.error(err);
             }
-        } catch (err) {
-            console.error(err);
-        }
+        };
+        reader.readAsDataURL(file);
     };
 
     return (
@@ -206,65 +222,116 @@ export function Sidebar({
                     </div>
 
                     <div className="flex flex-col gap-3">
-                        {layers.sort((a, b) => b.zIndex - a.zIndex).map(layer => (
-                            <div key={layer.id} className={`border border-slate-200 rounded p-3 flex flex-col gap-3 bg-white shadow-sm ${!layer.visible ? 'opacity-60 grayscale' : ''}`}>
-                                <div className="flex items-center gap-2 justify-between">
-                                    <div className="flex items-center gap-2 flex-1">
-                                        <Button variant="ghost" size="icon" className="w-6 h-6 text-slate-400 p-0" onClick={() => {
-                                            onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l));
-                                        }}>
-                                            {layer.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
-                                        </Button>
-                                        <div className={`p-1 rounded ${layer.type === 'fish' ? 'bg-sky-100 text-sky-600' : 'bg-fuchsia-100 text-fuchsia-600'}`}>
-                                            {layer.type === 'fish' ? <Layers className="w-3.5 h-3.5" /> : <ImageIcon className="w-3.5 h-3.5" />}
-                                        </div>
-                                        <Input
-                                            value={layer.name}
-                                            onChange={e => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, name: e.target.value } : l))}
-                                            className="h-7 text-xs font-semibold px-2 flex-1 outline-none border-transparent focus-visible:ring-1 bg-transparent hover:bg-slate-50"
-                                        />
-                                    </div>
-                                    <Button variant="ghost" size="icon" className="w-6 h-6 text-rose-400 hover:text-rose-600 hover:bg-rose-50" onClick={() => {
-                                        onUpdateLayers(layers.filter(l => l.id !== layer.id));
-                                    }}>
-                                        <Trash2 className="w-3.5 h-3.5" />
-                                    </Button>
-                                </div>
+                        {layers.sort((a, b) => b.zIndex - a.zIndex).map((layer, index, sortedLayers) => {
+                            const isSystem = layer.id === "layer_system";
+                            const isFirst = index === 0;
+                            const isLast = index === sortedLayers.length - 1;
+                            const moveUp = () => {
+                                if (isFirst || isSystem) return;
+                                const prev = sortedLayers[index - 1];
+                                onUpdateLayers(layers.map(l => {
+                                    if (l.id === layer.id) return { ...l, zIndex: prev.zIndex };
+                                    if (l.id === prev.id) return { ...l, zIndex: layer.zIndex };
+                                    return l;
+                                }));
+                            };
+                            const moveDown = () => {
+                                if (isLast || isSystem) return;
+                                const next = sortedLayers[index + 1];
+                                if (next.id === "layer_system") return; // システムより下には行けない
+                                onUpdateLayers(layers.map(l => {
+                                    if (l.id === layer.id) return { ...l, zIndex: next.zIndex };
+                                    if (l.id === next.id) return { ...l, zIndex: layer.zIndex };
+                                    return l;
+                                }));
+                            };
+                            const isActive = activeLayerId === layer.id;
 
-                                <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs">
-                                    <span className="text-slate-500 text-[10px] font-mono tracking-wider">Z-INDEX</span>
-                                    <div className="flex items-center gap-2">
-                                        <Input type="number" value={layer.zIndex} onChange={e => {
-                                            onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, zIndex: Number(e.target.value) || 0 } : l));
-                                        }} className="w-16 h-7 text-xs font-mono" />
-                                        <span className="text-[10px] text-slate-400">(奥) 0 〜 100 (手前)</span>
-                                    </div>
-
-                                    <span className="text-slate-500 text-[10px] font-mono tracking-wider">OPACITY</span>
-                                    <div className="flex items-center gap-2">
-                                        <Slider
-                                            value={[layer.opacity * 100]}
-                                            onValueChange={val => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, opacity: val[0] / 100 } : l))}
-                                            min={0} max={100} step={1} className="flex-1"
-                                        />
-                                        <span className="w-8 text-right font-mono text-[10px] text-slate-500">{Math.round(layer.opacity * 100)}%</span>
-                                    </div>
-
-                                    {layer.type === "image" && (
-                                        <>
-                                            <span className="text-slate-500 text-[10px] font-mono tracking-wider">IMAGE</span>
-                                            <div className="flex gap-2">
-                                                <Input value={layer.url || ""} onChange={e => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, url: e.target.value } : l))} placeholder="/images/..." className="h-7 text-xs flex-1" />
-                                                <Button variant="outline" size="icon" className="w-7 h-7 relative overflow-hidden flex-shrink-0">
-                                                    <Upload className="w-3.5 h-3.5" />
-                                                    <input type="file" accept="image/png, image/jpeg, image/gif, image/webp" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleFileUpload(e, layer.id)} />
+                            return (
+                                <div
+                                    key={layer.id}
+                                    className={`border rounded p-3 flex flex-col gap-3 shadow-sm transition-all
+                                    ${!layer.visible ? 'opacity-60 grayscale bg-slate-50' : 'bg-white'} 
+                                    ${isActive ? 'border-sky-500 ring-1 ring-sky-500' : 'border-slate-200 hover:border-slate-300'}
+                                `}
+                                    onClick={() => onSetActiveLayerId?.(layer.id)}
+                                >
+                                    <div className="flex items-center gap-2 justify-between">
+                                        <div className="flex items-center gap-2 flex-1">
+                                            <div className="flex flex-col -gap-1 mr-1">
+                                                <Button variant="ghost" size="icon" className="w-5 h-5 text-slate-400 hover:text-slate-700" onClick={(e) => { e.stopPropagation(); moveUp(); }} disabled={isFirst || isSystem}>
+                                                    <ChevronUp className="w-4 h-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="w-5 h-5 text-slate-400 hover:text-slate-700" onClick={(e) => { e.stopPropagation(); moveDown(); }} disabled={isLast || isSystem || sortedLayers[index + 1]?.id === "layer_system"}>
+                                                    <ChevronDown className="w-4 h-4" />
                                                 </Button>
                                             </div>
-                                        </>
-                                    )}
+                                            <Button variant="ghost" size="icon" className="w-6 h-6 text-slate-400 p-0" onClick={(e) => {
+                                                e.stopPropagation();
+                                                onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, visible: !l.visible } : l));
+                                            }}>
+                                                {layer.visible ? <Eye className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+                                            </Button>
+
+                                            {isActive && <CheckCircle2 className="w-4 h-4 text-sky-500" />}
+                                            <div className={`p-1 rounded ${layer.type === 'fish' ? 'bg-sky-100 text-sky-600' : layer.type === 'image' ? 'bg-fuchsia-100 text-fuchsia-600' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                {layer.type === 'fish' ? <Layers className="w-3.5 h-3.5" /> : layer.type === 'image' ? <ImageIcon className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
+                                            </div>
+                                            <Input
+                                                value={layer.name}
+                                                onChange={e => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, name: e.target.value } : l))}
+                                                onClick={e => e.stopPropagation()}
+                                                className="h-7 text-xs font-semibold px-2 flex-1 outline-none border-transparent focus-visible:ring-1 bg-transparent hover:bg-slate-50"
+                                            />
+                                        </div>
+                                        {layer.type === "image" ? (
+                                            <Button variant="ghost" size="icon" className="w-6 h-6 text-rose-400 hover:text-rose-600 hover:bg-rose-50" onClick={(e) => {
+                                                e.stopPropagation();
+                                                onUpdateLayers(layers.filter(l => l.id !== layer.id));
+                                                if (activeLayerId === layer.id) onSetActiveLayerId?.(undefined);
+                                            }}>
+                                                <Trash2 className="w-3.5 h-3.5" />
+                                            </Button>
+                                        ) : (
+                                            <div className="w-6 h-6" /> // spacer for non-deletable items
+                                        )}
+                                    </div>
+
+                                    <div className="grid grid-cols-[auto_1fr] items-center gap-x-3 gap-y-2 text-xs">
+                                        <span className="text-slate-500 text-[10px] font-mono tracking-wider">Z-INDEX</span>
+                                        <div className="flex items-center gap-2">
+                                            <Input type="number" value={layer.zIndex} onChange={e => {
+                                                onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, zIndex: Number(e.target.value) || 0 } : l));
+                                            }} className="w-16 h-7 text-xs font-mono" />
+                                            <span className="text-[10px] text-slate-400">(奥) 0 〜 100 (手前)</span>
+                                        </div>
+
+                                        <span className="text-slate-500 text-[10px] font-mono tracking-wider">OPACITY</span>
+                                        <div className="flex items-center gap-2">
+                                            <Slider
+                                                value={[layer.opacity * 100]}
+                                                onValueChange={val => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, opacity: val[0] / 100 } : l))}
+                                                min={0} max={100} step={1} className="flex-1"
+                                            />
+                                            <span className="w-8 text-right font-mono text-[10px] text-slate-500">{Math.round(layer.opacity * 100)}%</span>
+                                        </div>
+
+                                        {layer.type === "image" && (
+                                            <>
+                                                <span className="text-slate-500 text-[10px] font-mono tracking-wider">IMAGE URL/FILE</span>
+                                                <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+                                                    <Input value={layer.url || ""} onChange={e => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, url: e.target.value } : l))} placeholder="https://... またはファイル選択" className="h-7 text-xs flex-1" />
+                                                    <Button variant="outline" size="icon" className="w-7 h-7 relative overflow-hidden flex-shrink-0 cursor-pointer hover:bg-slate-100">
+                                                        <Upload className="w-3.5 h-3.5" />
+                                                        <input type="file" accept="image/png, image/jpeg, image/gif, image/webp" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleFileUpload(e, layer.id)} />
+                                                    </Button>
+                                                </div>
+                                            </>
+                                        )}
+                                    </div>
                                 </div>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </div>
                 </TabsContent>
 

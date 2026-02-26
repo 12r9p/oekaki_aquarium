@@ -164,42 +164,39 @@ function ManageApp(): React.ReactElement {
             // macOSなどでのズレを補正するため少しY座標を下げる
             ctx.fillText(emj, 64, 72);
         }
-        canvas.toBlob(async (blob) => {
-            if (!blob) return;
-            const formData = new FormData();
-            formData.append("image", blob, `demo_${Date.now()}.png`);
-
-            try {
-                const res = await fetch("/api/scan", {
-                    method: "POST",
-                    body: formData
-                });
-                const data = await res.json() as { fish: { id: string; imageUrl: string } };
-                // 放流APIを叩く (FishConfig 形式)
-                await fetch("/api/release", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        id: data.fish.id,
-                        type: preset,
-                        textureUrl: data.fish.imageUrl,
-                        userParams: {
-                            scale: 1.0,
-                            speed: preset === "looper" ? 2.0 : 1.0,
-                            rotationOffset: 0
-                        }
-                    })
-                });
-                showAlert(`デモ魚 ${emj} を追加しました`);
-                void poll();
-            } catch (e) {
-                showAlert("デモ魚追加エラー");
-            }
-        }, "image/png");
+        const dataUrl = canvas.toDataURL("image/png");
+        try {
+            const res = await fetch("/api/scan", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ image: dataUrl })
+            });
+            const data = await res.json() as { fish: { id: string; imageUrl: string } };
+            // 放流APIを叩く (FishConfig 形式)
+            await fetch("/api/release", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    id: data.fish.id,
+                    type: preset,
+                    textureUrl: data.fish.imageUrl,
+                    userParams: {
+                        scale: 1.0,
+                        speed: preset === "looper" ? 2.0 : 1.0,
+                        rotationOffset: 0
+                    }
+                })
+            });
+            showAlert(`デモ魚 ${emj} を追加しました`);
+            void poll();
+        } catch (e) {
+            showAlert("デモ魚追加エラー");
+        }
     };
 
     // LayoutTab の状態管理
     const [selectedDisplay, setSelectedDisplay] = useState<string | null>(null);
+    const [activeLayerId, setActiveLayerId] = useState<string | undefined>(undefined);
     const [arLocked, setArLocked] = useState(true);
     const displaysRef = useRef<DisplayClientInfo[]>([]);
     const pendingViewports = useRef<Map<string, NonNullable<DisplayClientInfo["viewport"]>>>(new Map());
@@ -225,7 +222,7 @@ function ManageApp(): React.ReactElement {
         worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints,
         layers, setLayers,
-        selectedDisplay, setSelectedDisplay, arLocked, setArLocked,
+        selectedDisplay, setSelectedDisplay, activeLayerId, setActiveLayerId, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports,
     };
@@ -237,7 +234,6 @@ function ManageApp(): React.ReactElement {
             <Toolbar
                 displays={displays} activeFish={activeFish} pendingFish={pendingFish}
                 connected={connected} tab={tab} setTab={setTab}
-                onAddDemoFish={addDemoFish}
             />
 
             <main className="flex flex-1 overflow-hidden relative">
@@ -303,6 +299,8 @@ interface LayoutTabProps {
         setLayers: React.Dispatch<React.SetStateAction<AppLayerConfig[]>>;
         selectedDisplay: string | null;
         setSelectedDisplay: React.Dispatch<React.SetStateAction<string | null>>;
+        activeLayerId?: string;
+        setActiveLayerId: React.Dispatch<React.SetStateAction<string | undefined>>;
         arLocked: boolean;
         setArLocked: React.Dispatch<React.SetStateAction<boolean>>;
         displaysRef: React.MutableRefObject<DisplayClientInfo[]>;
@@ -324,7 +322,7 @@ interface LayoutTabProps {
 function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPattern, onUpdateWorldSize }: LayoutTabProps) {
     const { displays, sendRateSetting, setSendRateSetting, worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints, layers, setLayers,
-        selectedDisplay, setSelectedDisplay, arLocked, setArLocked,
+        selectedDisplay, setSelectedDisplay, activeLayerId, setActiveLayerId, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports } = state;
 
@@ -383,6 +381,8 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     onUpdateSpawnPoints={onUpdateSpawnPoints}
                     layers={layers}
                     onUpdateLayers={onUpdateLayers}
+                    activeLayerId={activeLayerId}
+                    onSetActiveLayerId={setActiveLayerId}
                 />
                 {/* ---------- Left: Viewport Canvas ---------- */}
                 <ViewportCanvas
@@ -409,6 +409,7 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     spawnPoints={spawnPoints}
                     onUpdateSpawnPoints={onUpdateSpawnPoints}
                     layers={layers}
+                    activeLayerId={activeLayerId}
                 />
             </div>
 

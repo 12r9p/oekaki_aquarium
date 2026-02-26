@@ -41,24 +41,42 @@ export function applyBoundaries(fish: ActiveFish): void {
     vel.y -= PHYSICS.WALL_FORCE;
   }
 
-  // --- 2. 進入禁止エリア (Forbidden Zones) での壁反発 ---
+  // --- 2. 進入禁止エリア (Forbidden Zones) での壁反発と衝突補正 ---
   for (const fz of world.forbiddenZones) {
+    const margin = PHYSICS.WALL_MARGIN;
     // 禁止エリアのマージン分拡張したBoundingBox内にいるか
     if (
-      pos.x > fz.x - PHYSICS.WALL_MARGIN && pos.x < fz.x + fz.width + PHYSICS.WALL_MARGIN &&
-      pos.y > fz.y - PHYSICS.WALL_MARGIN && pos.y < fz.y + fz.height + PHYSICS.WALL_MARGIN
+      pos.x > fz.x - margin && pos.x < fz.x + fz.width + margin &&
+      pos.y > fz.y - margin && pos.y < fz.y + fz.height + margin
     ) {
-      // どの壁に近いかで反発方向を決める
-      const distL = Math.abs(pos.x - fz.x);
-      const distR = Math.abs(pos.x - (fz.x + fz.width));
-      const distT = Math.abs(pos.y - fz.y);
-      const distB = Math.abs(pos.y - (fz.y + fz.height));
+      // どの壁に近いかで反発方向と位置補正を決める
+      const distL = Math.abs(pos.x - (fz.x - margin));
+      const distR = Math.abs(pos.x - (fz.x + fz.width + margin));
+      const distT = Math.abs(pos.y - (fz.y - margin));
+      const distB = Math.abs(pos.y - (fz.y + fz.height + margin));
+      
       const minDist = Math.min(distL, distR, distT, distB);
 
-      if (minDist === distL) vel.x -= PHYSICS.WALL_FORCE * 1.5; // 左壁：左へ押し戻す
-      else if (minDist === distR) vel.x += PHYSICS.WALL_FORCE * 1.5; // 右壁：右へ押し戻す
-      else if (minDist === distT) vel.y -= PHYSICS.WALL_FORCE * 1.5; // 上壁：上へ押し戻す
-      else vel.y += PHYSICS.WALL_FORCE * 1.5; // 下壁：下へ押し戻す
+      // 強制的に位置をマージン外へクランプし、進行方向の速度を反転＆減衰させる
+      const bounceDamping = 0.8;
+
+      if (minDist === distL) {
+        // 左壁：左へ押し戻す
+        pos.x = fz.x - margin;
+        if (vel.x > 0) vel.x *= -bounceDamping;
+      } else if (minDist === distR) {
+        // 右壁：右へ押し戻す
+        pos.x = fz.x + fz.width + margin;
+        if (vel.x < 0) vel.x *= -bounceDamping;
+      } else if (minDist === distT) {
+        // 上壁：上へ押し戻す
+        pos.y = fz.y - margin;
+        if (vel.y > 0) vel.y *= -bounceDamping;
+      } else {
+        // 下壁：下へ押し戻す
+        pos.y = fz.y + fz.height + margin;
+        if (vel.y < 0) vel.y *= -bounceDamping;
+      }
     }
   }
 

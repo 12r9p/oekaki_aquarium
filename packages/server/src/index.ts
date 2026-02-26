@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { join } from "node:path";
 import { mkdirSync } from "node:fs";
+import { Buffer } from "node:buffer";
 import { PORTS } from "@aquarium/shared";
 import { startGameLoop } from "./game-loop";
 import {
@@ -22,7 +23,7 @@ import { scanRoute } from "./routes/scan";
 import { pendingRoute, lockRoute, unlockRoute } from "./routes/pending";
 import { releaseRoute } from "./routes/release";
 import { pinRoute } from "./routes/pin";
-import { getAllActiveFish, removeFish, updateFishParams, removePendingFish } from "./fish-manager";
+import { getAllActiveFish, removeFish, updateFishParams, removePendingFish, duplicateFish } from "./fish-manager";
 import { getPendingQueue } from "./fish-manager";
 import { getWorld } from "./world";
 
@@ -66,13 +67,27 @@ app.delete("/api/fish/:id", (c) => {
   return c.json({ success: ok });
 });
 
-// 魚のプロパティ更新
+// 魚のプロパティ更新 (スケール, 速度, アーカイブ等)
 app.put("/api/fish/:id", async (c) => {
   const id = c.req.param("id");
   const updates = await c.req.json();
   const ok = updateFishParams(id, updates);
-  if (ok) pushClientListToManagers();
+  if (ok) {
+    pushClientListToManagers();
+    broadcastToAll({ event: "reload" }); // 表示・非表示が切り替わるためリロード（またはWSパケットで除外）
+  }
   return c.json({ success: ok });
+});
+
+// 魚の複製
+app.post("/api/fish/:id/duplicate", (c) => {
+  const id = c.req.param("id");
+  const newFish = duplicateFish(id);
+  if (newFish) {
+    pushClientListToManagers();
+    broadcastToAll({ event: "reload" });
+  }
+  return c.json({ success: !!newFish, fish: newFish });
 });
 
 // 待機中（Pending）魚の削除
@@ -122,18 +137,42 @@ app.delete("/api/scene/:id", (c) => {
 
 // ---- 画像アップロード（シーン用） ----
 app.post("/api/upload-image", async (c) => {
-  const formData = await c.req.formData();
-  const file = formData.get("file");
-  if (!file || typeof file === "string") return c.json({ error: "no file" }, 400);
-  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const contentType = c.req.header("content-type") || "";
+  let fileData: ArrayBuffer | Uint8Array;
+  let ext = "png";
+
+  if (contentType.includes("application/json")) {
+    const body = await c.req.json();
+    if (!body.data) return c.json({ error: "no file data" }, 400);
+    const base64Data = body.data.replace(/^data:image\/\w+;base64,/, "");
+    fileData = Buffer.from(base64Data, "base64");
+    if (body.filename) ext = body.filename.split(".").pop()?.toLowerCase() ?? "png";
+  } else {
+    const formData = await c.req.formData();
+    const file = formData.get("file");
+    if (!file || typeof file === "string") return c.json({ error: "no file" }, 400);
+    ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+    fileData = await file.arrayBuffer();
+  }
+
   const allowedExts = ["jpg", "jpeg", "png", "gif", "webp", "svg"];
   if (!allowedExts.includes(ext)) return c.json({ error: "unsupported type" }, 400);
   const id = crypto.randomUUID();
   const filename = `${id}.${ext}`;
   const path = join(SCENE_IMAGES_DIR, filename);
-  await Bun.write(path, await file.arrayBuffer());
+  await Bun.write(path, fileData);
   const url = `/images/scene/${filename}`;
   return c.json({ success: true, url, id });
+});
+
+// ---- ギャラリー画像一覧取得 (public/images フォルダ内限定) ----
+app.get("/api/gallery", async (c) => {
+  const glob = new Bun.Glob("*.{png,jpg,jpeg,gif,webp}");
+  const files = [];
+  for await (const file of glob.scan(PUBLIC_IMAGES_DIR)) {
+    files.push(`/images/${file}`);
+  }
+  return c.json({ images: files });
 });
 
 // 管理画面用: 状態スナップショット

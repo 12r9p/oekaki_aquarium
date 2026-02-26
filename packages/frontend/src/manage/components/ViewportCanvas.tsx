@@ -24,6 +24,7 @@ interface ViewportCanvasProps {
     spawnPoints: { id: string; x: number; y: number }[];
     onUpdateSpawnPoints: (points: { id: string; x: number; y: number }[]) => void;
     layers: AppLayerConfig[];
+    activeLayerId?: string;
 }
 
 // ハンドルの種類（8点＋ボディ移動＋Worldリサイズ用）
@@ -56,7 +57,7 @@ export function ViewportCanvas({
     selected, setSelected, hoveredRef, setHoveredUI,
     undoStackRef, redoStackRef, snapshotViewports, onSaveViewport,
     arLocked, sendRateSetting, setWorldSize, forbiddenZones, onUpdateForbiddenZones,
-    spawnPoints, onUpdateSpawnPoints, layers
+    spawnPoints, onUpdateSpawnPoints, layers, activeLayerId
 }: ViewportCanvasProps): React.ReactElement {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -460,6 +461,9 @@ export function ViewportCanvas({
 
         // 新規追加 (右クリドラッグでForbiddenZone)
         if (e.button === 2) {
+            const canMoveFz = !activeLayerId || activeLayerId === "layer_system";
+            if (!canMoveFz) return;
+
             const newZone = { id: `fz_${Date.now()}_${Math.random().toString(36).slice(2)}`, x: wPt.x, y: wPt.y, width: 0, height: 0 };
             onUpdateForbiddenZones([...forbiddenZones, newZone]);
             dragRef.current = { handle: "fz_br", uuid: newZone.id, startMouseX: mx, startMouseY: my, startRect: { ...newZone } };
@@ -475,6 +479,8 @@ export function ViewportCanvas({
         const R_WORLD = 12 / z; // 当たり判定少し大きめ
         const currentWorldW = pendingWorldSizeRef.current?.w ?? worldW;
         const currentWorldH = pendingWorldSizeRef.current?.h ?? worldH;
+        // World Resizer はいつでも触れる、または選択制限をかけるか？
+        // World設定はグローバルなのでレイヤー制限には含めないでおく
         if (Math.abs(wPt.x - currentWorldW) <= R_WORLD && Math.abs(wPt.y - currentWorldH) <= R_WORLD) {
             undoStackRef.current.push(snapshotViewports());
             redoStackRef.current.length = 0;
@@ -487,109 +493,120 @@ export function ViewportCanvas({
         }
 
         // 既存の禁止エリア（アクティブ判定があればそちらを優先で触らせたいが、今回は普通に後ろから判定）
-        for (let i = forbiddenZones.length - 1; i >= 0; i--) {
-            const fz = forbiddenZones[i];
-            const pts = getHandles(fz as any);
-            const HANDLE_R_W = HANDLE_R / z;
+        const canMoveFz = !activeLayerId || activeLayerId === "layer_system";
+        if (canMoveFz) {
+            for (let i = forbiddenZones.length - 1; i >= 0; i--) {
+                const fz = forbiddenZones[i];
+                const pts = getHandles(fz as any);
+                const HANDLE_R_W = HANDLE_R / z;
 
-            // selectedでなくても触れるようにするか？とりあえず今回はどこでも触ったら選択
-            const isSel = dragRef.current?.uuid === fz.id;
+                // selectedでなくても触れるようにするか？とりあえず今回はどこでも触ったら選択
+                const isSel = dragRef.current?.uuid === fz.id;
 
-            if (Math.abs(wPt.x - pts.br.x) < HANDLE_R_W && Math.abs(wPt.y - pts.br.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_br", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
-            if (Math.abs(wPt.x - pts.tr.x) < HANDLE_R_W && Math.abs(wPt.y - pts.tr.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_tr", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
-            if (Math.abs(wPt.x - pts.bl.x) < HANDLE_R_W && Math.abs(wPt.y - pts.bl.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_bl", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
-            if (Math.abs(wPt.x - pts.tl.x) < HANDLE_R_W && Math.abs(wPt.y - pts.tl.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_tl", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
-            if (Math.abs(wPt.x - pts.r.x) < HANDLE_R_W && Math.abs(wPt.y - pts.r.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_r", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
-            if (Math.abs(wPt.x - pts.l.x) < HANDLE_R_W && Math.abs(wPt.y - pts.l.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_l", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
-            if (Math.abs(wPt.x - pts.b.x) < HANDLE_R_W && Math.abs(wPt.y - pts.b.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_b", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
-            if (Math.abs(wPt.x - pts.t.x) < HANDLE_R_W && Math.abs(wPt.y - pts.t.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_t", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.br.x) < HANDLE_R_W && Math.abs(wPt.y - pts.br.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_br", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.tr.x) < HANDLE_R_W && Math.abs(wPt.y - pts.tr.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_tr", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.bl.x) < HANDLE_R_W && Math.abs(wPt.y - pts.bl.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_bl", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.tl.x) < HANDLE_R_W && Math.abs(wPt.y - pts.tl.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_tl", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.r.x) < HANDLE_R_W && Math.abs(wPt.y - pts.r.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_r", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.l.x) < HANDLE_R_W && Math.abs(wPt.y - pts.l.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_l", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.b.x) < HANDLE_R_W && Math.abs(wPt.y - pts.b.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_b", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+                if (Math.abs(wPt.x - pts.t.x) < HANDLE_R_W && Math.abs(wPt.y - pts.t.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_t", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
 
-            // FZ本体のドラッグ
-            if (wPt.x >= fz.x && wPt.x <= fz.x + fz.width && wPt.y >= fz.y && wPt.y <= fz.y + fz.height) {
-                // Delete: Option / Alt click
-                if (e.altKey) {
-                    onUpdateForbiddenZones(forbiddenZones.filter(z => z.id !== fz.id));
+                // FZ本体のドラッグ
+                if (wPt.x >= fz.x && wPt.x <= fz.x + fz.width && wPt.y >= fz.y && wPt.y <= fz.y + fz.height) {
+                    // Delete: Option / Alt click
+                    if (e.altKey) {
+                        onUpdateForbiddenZones(forbiddenZones.filter(z => z.id !== fz.id));
+                        return;
+                    }
+
+                    dragRef.current = { handle: "fz_move", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } };
+                    setSelected(null);
+                    setSelectedLocalId(fz.id);
                     return;
                 }
-
-                dragRef.current = { handle: "fz_move", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } };
-                setSelected(null);
-                setSelectedLocalId(fz.id);
-                return;
             }
         }
 
         // 放流ポイント（SpawnPoints）のドラッグ/削除判定
-        for (let i = spawnPoints.length - 1; i >= 0; i--) {
-            const sp = spawnPoints[i];
-            const RW_SP = (HANDLE_R * 1.5) / z;
-            if (Math.abs(wPt.x - sp.x) <= RW_SP && Math.abs(wPt.y - sp.y) <= RW_SP) {
-                if (e.altKey) {
-                    onUpdateSpawnPoints(spawnPoints.filter(p => p.id !== sp.id));
+        const canMoveSp = !activeLayerId || activeLayerId === "layer_system"; // 放流ポイントもSystem層とする
+        if (canMoveSp) {
+            for (let i = spawnPoints.length - 1; i >= 0; i--) {
+                const sp = spawnPoints[i];
+                const RW_SP = (HANDLE_R * 1.5) / z;
+                if (Math.abs(wPt.x - sp.x) <= RW_SP && Math.abs(wPt.y - sp.y) <= RW_SP) {
+                    if (e.altKey) {
+                        onUpdateSpawnPoints(spawnPoints.filter(p => p.id !== sp.id));
+                        return;
+                    }
+                    dragRef.current = { handle: `sp_move` as HandleType, uuid: sp.id, startMouseX: mx, startMouseY: my, startRect: { ...sp, width: 0, height: 0, scale: 1 } };
+                    setSelected(null);
+                    setSelectedLocalId(sp.id);
                     return;
                 }
-                dragRef.current = { handle: `sp_move` as HandleType, uuid: sp.id, startMouseX: mx, startMouseY: my, startRect: { ...sp, width: 0, height: 0, scale: 1 } };
+            }
+        }
+
+        const canMoveDisp = !activeLayerId || activeLayerId === "layer_system";
+        if (canMoveDisp) {
+            if (selected) {
+                const t = displaysRef.current.find(d => d.uuid === selected);
+                if (t && t.viewport) {
+                    const pts = getHandles(t.viewport);
+                    const z = camRef.current.zoom;
+                    const RW = HANDLE_R / z + 2;
+                    let hitHandle: HandleType | null = null;
+
+                    for (const [k, v] of Object.entries(pts as any)) {
+                        if (k === "move") continue;
+                        if (Math.abs(wPt.x - (v as any).x) <= RW && Math.abs(wPt.y - (v as any).y) <= RW) { hitHandle = k as HandleType; break; }
+                    }
+                    if (!hitHandle) {
+                        const vp = t.viewport;
+                        if (wPt.x >= vp.x && wPt.x <= vp.x + vp.width && wPt.y >= vp.y && wPt.y <= vp.y + vp.height) { hitHandle = "move"; }
+                    }
+
+                    if (hitHandle) {
+                        undoStackRef.current.push(snapshotViewports());
+                        redoStackRef.current.length = 0;
+                        dragRef.current = {
+                            handle: hitHandle, uuid: selected, startMouseX: mx, startMouseY: my,
+                            startRect: { ...t.viewport! }
+                        };
+                        return;
+                    }
+                }
+            }
+
+            let hitBody: string | null = null;
+            for (const d of displaysRef.current) {
+                const vp = d.viewport;
+                if (!vp) continue;
+                if (wPt.x >= vp.x && wPt.x <= vp.x + vp.width && wPt.y >= vp.y && wPt.y <= vp.y + vp.height) {
+                    hitBody = d.uuid;
+                    break; // 手前優先なら逆順で探すべきだけど、現状は単配列ループ
+                }
+            }
+
+            if (hitBody !== selected) setSelected(hitBody);
+
+            if (hitBody) {
+                const t = displaysRef.current.find(d => d.uuid === hitBody)!;
+                undoStackRef.current.push(snapshotViewports());
+                redoStackRef.current.length = 0;
+                dragRef.current = {
+                    handle: "move", uuid: hitBody, startMouseX: mx, startMouseY: my,
+                    startRect: { ...t.viewport! }
+                };
+                setSelectedLocalId(null);
+            } else {
                 setSelected(null);
-                setSelectedLocalId(sp.id);
-                return;
+                setSelectedLocalId(null);
             }
-        }
-
-        if (selected) {
-            const t = displaysRef.current.find(d => d.uuid === selected);
-            if (t && t.viewport) {
-                const pts = getHandles(t.viewport);
-                const z = camRef.current.zoom;
-                const RW = HANDLE_R / z + 2;
-                let hitHandle: HandleType | null = null;
-
-                for (const [k, v] of Object.entries(pts as any)) {
-                    if (k === "move") continue;
-                    if (Math.abs(wPt.x - (v as any).x) <= RW && Math.abs(wPt.y - (v as any).y) <= RW) { hitHandle = k as HandleType; break; }
-                }
-                if (!hitHandle) {
-                    const vp = t.viewport;
-                    if (wPt.x >= vp.x && wPt.x <= vp.x + vp.width && wPt.y >= vp.y && wPt.y <= vp.y + vp.height) { hitHandle = "move"; }
-                }
-
-                if (hitHandle) {
-                    undoStackRef.current.push(snapshotViewports());
-                    redoStackRef.current.length = 0;
-                    dragRef.current = {
-                        handle: hitHandle, uuid: selected, startMouseX: mx, startMouseY: my,
-                        startRect: { ...t.viewport! }
-                    };
-                    return;
-                }
-            }
-        }
-
-        let hitBody: string | null = null;
-        for (const d of displaysRef.current) {
-            const vp = d.viewport;
-            if (!vp) continue;
-            if (wPt.x >= vp.x && wPt.x <= vp.x + vp.width && wPt.y >= vp.y && wPt.y <= vp.y + vp.height) {
-                hitBody = d.uuid;
-                break; // 手前優先なら逆順で探すべきだけど、現状は単配列ループ
-            }
-        }
-
-        if (hitBody !== selected) setSelected(hitBody);
-
-        if (hitBody) {
-            const t = displaysRef.current.find(d => d.uuid === hitBody)!;
-            undoStackRef.current.push(snapshotViewports());
-            redoStackRef.current.length = 0;
-            dragRef.current = {
-                handle: "move", uuid: hitBody, startMouseX: mx, startMouseY: my,
-                startRect: { ...t.viewport! }
-            };
-            setSelectedLocalId(null);
         } else {
-            setSelected(null);
-            setSelectedLocalId(null);
+            if (selected) setSelected(null);
         }
-    }, [selected, displaysRef, getCanvasPt, canvasToWorld, snapshotViewports, setSelected, undoStackRef, redoStackRef, forbiddenZones, onUpdateForbiddenZones, spawnPoints, onUpdateSpawnPoints, worldW, worldH]);
+    }, [selected, displaysRef, getCanvasPt, canvasToWorld, snapshotViewports, setSelected, undoStackRef, redoStackRef, forbiddenZones, onUpdateForbiddenZones, spawnPoints, onUpdateSpawnPoints, worldW, worldH, activeLayerId]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
         const { mx, my } = getCanvasPt(e.clientX, e.clientY);
