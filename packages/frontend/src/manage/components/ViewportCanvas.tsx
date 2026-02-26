@@ -36,7 +36,7 @@ interface DragState {
 }
 
 const HANDLE_R = 6;
-const COLORS = ["#4ecdc4", "#ff6b6b", "#f7dc6f", "#82e0aa", "#bb8fce", "#f0b27a"];
+const COLORS = ["#10b981"]; // Emerald 500 (全て緑色で統一)
 
 function getHandles(vp: { x: number; y: number; width: number; height: number; }): any {
     const { x, y, width: w, height: h } = vp;
@@ -323,19 +323,20 @@ export function ViewportCanvas({
         if (frame && frame.f) {
             frame.f.forEach((f: any) => {
                 const pt = worldToCanvas(f.x, f.y);
-                // 絵文字を利用して水槽風に描画
-                ctx.font = `${Math.max(12, 16 * cam.zoom)}px sans-serif`;
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText("🐟", pt.x, pt.y);
-
-                // Z-indexを色付きの文字で小さく描画（オプション）
                 const layerColors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
                 const zIndexGroup = Math.floor(f.z / 10) % layerColors.length;
+
+                // 点(ドット)を描画
                 ctx.fillStyle = layerColors[zIndexGroup];
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, Math.max(2, 4 * cam.zoom), 0, Math.PI * 2);
+                ctx.fill();
+
+                // Z-indexとIDを色付きの文字で小さく描画
                 ctx.font = "8px monospace";
                 ctx.textAlign = "left";
-                ctx.fillText(f.i, pt.x + 8, pt.y - 8);
+                ctx.textBaseline = "middle";
+                ctx.fillText(f.i, pt.x + 8, pt.y);
             });
         }
     }, [selected, worldW, worldH, canvasSize, worldToCanvas, forbiddenZones, spawnPoints, pendingWorldSizeRef]);

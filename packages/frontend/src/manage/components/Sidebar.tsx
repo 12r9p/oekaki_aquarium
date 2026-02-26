@@ -92,9 +92,9 @@ export function Sidebar({
                                 <AccordionItem
                                     key={d.uuid}
                                     value={d.uuid}
-                                    className={`border border-slate-200 rounded-lg overflow-hidden transition-all shadow-sm ${isSelected ? 'ring-2 ring-sky-500 ring-offset-1' : 'hover:border-slate-300'}`}
+                                    className={`border border-slate-200 rounded-lg overflow-hidden transition-all shadow-sm ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-1' : 'hover:border-slate-300'}`}
                                 >
-                                    <AccordionTrigger className={`px-4 py-3 hover:no-underline hover:bg-slate-50 ${isSelected ? 'bg-sky-50/50' : 'bg-white'}`}>
+                                    <AccordionTrigger className={`px-4 py-3 hover:no-underline hover:bg-slate-50 ${isSelected ? 'bg-emerald-50/50' : 'bg-white'}`}>
                                         <div className="flex flex-col items-start gap-1 w-full text-left">
                                             <div className="flex items-center gap-2 font-mono text-xs text-slate-700 font-semibold w-full pr-4 truncate">
                                                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConfigured ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]'}`} />
@@ -104,7 +104,7 @@ export function Sidebar({
                                                 <div className="flex items-center gap-3 text-[11px] text-slate-500 mt-0.5 ml-4 font-mono">
                                                     <span>{Math.round(vp.x)},{Math.round(vp.y)}</span>
                                                     <span>| {Math.round(vp.width)}×{Math.round(vp.height)}</span>
-                                                    <span className="text-sky-600">x{vp.scale.toFixed(2)}</span>
+                                                    <span className="text-emerald-600">x{vp.scale.toFixed(2)}</span>
                                                 </div>
                                             )}
                                         </div>
