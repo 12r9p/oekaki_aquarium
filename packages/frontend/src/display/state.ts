@@ -1,4 +1,4 @@
-import type { ClientConfig } from "@aquarium/shared";
+import type { ClientConfig, AppLayerConfig } from "@aquarium/shared";
 
 // ============================================================
 // display/state.ts
@@ -39,6 +39,7 @@ export const STATE = {
   // URLから取得するワールドサイズ (worldmap用)
   WORLD_W: parseInt(params.get("worldW") ?? "4000"),
   WORLD_H: parseInt(params.get("worldH") ?? "2000"),
+  layers: [] as AppLayerConfig[],
 };
 
 export function updateStateVP(newVp: NonNullable<ClientConfig["viewport"]>) {

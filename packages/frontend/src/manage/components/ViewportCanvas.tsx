@@ -21,10 +21,12 @@ interface ViewportCanvasProps {
     setWorldSize: (w: number, h: number) => void;
     forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
     onUpdateForbiddenZones: (zones: { id: string; x: number; y: number; width: number; height: number }[]) => void;
+    spawnPoints: { id: string; x: number; y: number }[];
+    onUpdateSpawnPoints: (points: { id: string; x: number; y: number }[]) => void;
 }
 
 // ハンドルの種類（8点＋ボディ移動＋Worldリサイズ用）
-type HandleType = "move" | "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "world_br" | "fz_move" | "fz_tl" | "fz_t" | "fz_tr" | "fz_r" | "fz_br" | "fz_b" | "fz_bl" | "fz_l" | "fz_new";
+type HandleType = "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "move" | "world_br" | `fz_${string}` | `sp_${string}`;
 interface Camera { panX: number; panY: number; zoom: number; }
 interface DragState {
     handle: HandleType;
@@ -52,7 +54,8 @@ export function ViewportCanvas({
     worldW, worldH, displaysSt, displaysRef, pendingViewports,
     selected, setSelected, hoveredRef, setHoveredUI,
     undoStackRef, redoStackRef, snapshotViewports, onSaveViewport,
-    arLocked, sendRateSetting, setWorldSize, forbiddenZones, onUpdateForbiddenZones
+    arLocked, sendRateSetting, setWorldSize, forbiddenZones, onUpdateForbiddenZones,
+    spawnPoints, onUpdateSpawnPoints
 }: ViewportCanvasProps): React.ReactElement {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -68,7 +71,7 @@ export function ViewportCanvas({
     const previewThrottleRef = useRef<number>(0);
     const pointerThrottleRef = useRef<number>(0);
     const snapGuides = useRef<{ x?: number; y?: number }>({});
-    const pendingZonesRef = useRef<typeof forbiddenZones | null>(null);
+    const pendingWorldSizeRef = useRef<{ w: number, h: number } | null>(null);
 
     const canvasSize = useCallback(() => {
         const c = canvasRef.current;
@@ -106,8 +109,10 @@ export function ViewportCanvas({
         }
 
         // ワールド矩形
+        const wDraw = pendingWorldSizeRef.current?.w ?? worldW;
+        const hDraw = pendingWorldSizeRef.current?.h ?? worldH;
         const tl = worldToCanvas(0, 0);
-        const br = worldToCanvas(worldW, worldH);
+        const br = worldToCanvas(wDraw, hDraw);
         const ww = br.x - tl.x, wh = br.y - tl.y;
         ctx.shadowColor = "rgba(0, 0, 0, 0.05)";
         ctx.shadowBlur = 10;
@@ -137,23 +142,23 @@ export function ViewportCanvas({
         ctx.lineWidth = 0.5;
         ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
         for (let x = wx0; x < wx0 + CW / cam.zoom + GRID * 2; x += GRID) {
-            if (x < 0 || x > worldW) continue;
+            if (x < 0 || x > wDraw) continue;
             const px = worldToCanvas(x, 0).x;
             ctx.beginPath(); ctx.moveTo(px, tl.y); ctx.lineTo(px, br.y); ctx.stroke();
         }
         for (let y = wy0; y < wy0 + CH / cam.zoom + GRID * 2; y += GRID) {
-            if (y < 0 || y > worldH) continue;
+            if (y < 0 || y > hDraw) continue;
             const py = worldToCanvas(0, y).y;
             ctx.beginPath(); ctx.moveTo(tl.x, py); ctx.lineTo(br.x, py); ctx.stroke();
         }
         // メジャーグリッド
         ctx.lineWidth = 1;
         ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
-        for (let x = 0; x <= worldW; x += MAJ) {
+        for (let x = 0; x <= wDraw; x += MAJ) {
             const px = worldToCanvas(x, 0).x;
             ctx.beginPath(); ctx.moveTo(px, tl.y); ctx.lineTo(px, br.y); ctx.stroke();
         }
-        for (let y = 0; y <= worldH; y += MAJ) {
+        for (let y = 0; y <= hDraw; y += MAJ) {
             const py = worldToCanvas(0, y).y;
             ctx.beginPath(); ctx.moveTo(tl.x, py); ctx.lineTo(br.x, py); ctx.stroke();
         }
@@ -171,7 +176,7 @@ export function ViewportCanvas({
         ctx.fillStyle = "#64748b"; // slate-500
         ctx.font = `${Math.max(8, 7 * cam.zoom)}px monospace`;
         ctx.textBaseline = "top";
-        for (let x = 0; x <= worldW; x += MAJ) {
+        for (let x = 0; x <= wDraw; x += MAJ) {
             const px = worldToCanvas(x, 0).x;
             if (px < RULER || px > CW) continue;
             ctx.fillText(String(x), px + 2, 3);
@@ -179,7 +184,7 @@ export function ViewportCanvas({
             ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(px, RULER - 4); ctx.lineTo(px, RULER); ctx.stroke();
         }
-        for (let y = 0; y <= worldH; y += MAJ) {
+        for (let y = 0; y <= hDraw; y += MAJ) {
             const py = worldToCanvas(0, y).y;
             if (py < RULER || py > CH) continue;
             ctx.save();
@@ -263,8 +268,7 @@ export function ViewportCanvas({
         }
 
         // 進入禁止エリア描画
-        const zones = pendingZonesRef.current || forbiddenZones;
-        zones.forEach(z => {
+        forbiddenZones.forEach(z => {
             const p = worldToCanvas(z.x, z.y);
             const p2 = worldToCanvas(z.x + z.width, z.y + z.height);
             const dw = p2.x - p.x, dh = p2.y - p.y;
@@ -287,7 +291,7 @@ export function ViewportCanvas({
                 ctx.strokeStyle = "rgba(220, 38, 38, 1)";
                 ctx.lineWidth = 1.5;
                 const pts = getHandles(z as any);
-                (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as Exclude<HandleType, "world_br" | "move" | `fz_${string}`>[]).forEach((ht) => {
+                (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as Exclude<HandleType, "world_br" | "move" | `fz_${string}` | `sp_${string}`>[]).forEach((ht) => {
                     const cp = worldToCanvas(pts[ht].x, pts[ht].y);
                     ctx.beginPath(); ctx.arc(cp.x, cp.y, HANDLE_R, 0, Math.PI * 2);
                     ctx.fill(); ctx.stroke();
@@ -295,25 +299,46 @@ export function ViewportCanvas({
             }
         });
 
+        // 放流ポイント描画
+        spawnPoints.forEach(sp => {
+            const p = worldToCanvas(sp.x, sp.y);
+            const isSel = dragRef.current?.uuid === sp.id;
+
+            ctx.fillStyle = isSel ? "#0284c7" : "#38bdf8"; // sky-600 vs sky-400
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, HANDLE_R * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+
+            ctx.fillStyle = "#fff";
+            ctx.font = `bold ${Math.max(10, 14 * cam.zoom)}px sans-serif`;
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText("✨", p.x, p.y);
+            // reset
+            ctx.textAlign = "left";
+        });
+
         // --- 魚のリアルタイム位置ポインタ描画 ---
         const frame = (window as any).__lastFrame;
         if (frame && frame.f) {
             frame.f.forEach((f: any) => {
                 const pt = worldToCanvas(f.x, f.y);
-                // レイヤーごとの色分け (適当なカラーパレット)
+                // 絵文字を利用して水槽風に描画
+                ctx.font = `${Math.max(12, 16 * cam.zoom)}px sans-serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText("🐟", pt.x, pt.y);
+
+                // Z-indexを色付きの文字で小さく描画（オプション）
                 const layerColors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
                 const zIndexGroup = Math.floor(f.z / 10) % layerColors.length;
                 ctx.fillStyle = layerColors[zIndexGroup];
-                ctx.beginPath();
-                ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.fillStyle = "#475569";
                 ctx.font = "8px monospace";
-                ctx.fillText(f.i, pt.x + 5, pt.y - 5);
+                ctx.textAlign = "left";
+                ctx.fillText(f.i, pt.x + 8, pt.y - 8);
             });
         }
-    }, [selected, worldW, worldH, canvasSize, worldToCanvas]);
+    }, [selected, worldW, worldH, canvasSize, worldToCanvas, forbiddenZones, spawnPoints, pendingWorldSizeRef]);
 
     drawRef.current = draw;
 
@@ -378,13 +403,10 @@ export function ViewportCanvas({
 
         // 新規追加 (右クリドラッグでForbiddenZone)
         if (e.button === 2) {
-            const newId = `fz_${Date.now()}`;
-            const newZone = { id: newId, x: wPt.x, y: wPt.y, width: 0, height: 0 };
-            pendingZonesRef.current = [...forbiddenZones, newZone];
-            dragRef.current = {
-                handle: "fz_new", uuid: newId, startMouseX: mx, startMouseY: my,
-                startRect: { ...newZone }
-            };
+            const newZone = { id: `fz_${Date.now()}_${Math.random().toString(36).slice(2)}`, x: wPt.x, y: wPt.y, width: 0, height: 0 };
+            onUpdateForbiddenZones([...forbiddenZones, newZone]);
+            dragRef.current = { handle: "fz_br", uuid: newZone.id, startMouseX: mx, startMouseY: my, startRect: { ...newZone } };
+            setSelected(null);
             return;
         }
 
@@ -393,12 +415,15 @@ export function ViewportCanvas({
         // まず World Resizer かどうか判定
         const z = camRef.current.zoom;
         const R_WORLD = 12 / z; // 当たり判定少し大きめ
-        if (Math.abs(wPt.x - worldW) <= R_WORLD && Math.abs(wPt.y - worldH) <= R_WORLD) {
+        const currentWorldW = pendingWorldSizeRef.current?.w ?? worldW;
+        const currentWorldH = pendingWorldSizeRef.current?.h ?? worldH;
+        if (Math.abs(wPt.x - currentWorldW) <= R_WORLD && Math.abs(wPt.y - currentWorldH) <= R_WORLD) {
             undoStackRef.current.push(snapshotViewports());
             redoStackRef.current.length = 0;
+            pendingWorldSizeRef.current = { w: worldW, h: worldH }; // Store current world size for pending updates
             dragRef.current = {
                 handle: "world_br", uuid: "world", startMouseX: mx, startMouseY: my,
-                startRect: { x: 0, y: 0, width: worldW, height: worldH, scale: 1 }
+                startRect: { x: 0, y: 0, width: currentWorldW, height: currentWorldH, scale: 1 }
             };
             return;
         }
@@ -430,6 +455,21 @@ export function ViewportCanvas({
                 }
 
                 dragRef.current = { handle: "fz_move", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } };
+                setSelected(null);
+                return;
+            }
+        }
+
+        // 放流ポイント（SpawnPoints）のドラッグ/削除判定
+        for (let i = spawnPoints.length - 1; i >= 0; i--) {
+            const sp = spawnPoints[i];
+            const RW_SP = (HANDLE_R * 1.5) / z;
+            if (Math.abs(wPt.x - sp.x) <= RW_SP && Math.abs(wPt.y - sp.y) <= RW_SP) {
+                if (e.altKey) {
+                    onUpdateSpawnPoints(spawnPoints.filter(p => p.id !== sp.id));
+                    return;
+                }
+                dragRef.current = { handle: `sp_move` as HandleType, uuid: sp.id, startMouseX: mx, startMouseY: my, startRect: { ...sp, width: 0, height: 0, scale: 1 } };
                 setSelected(null);
                 return;
             }
@@ -487,7 +527,7 @@ export function ViewportCanvas({
         } else {
             setSelected(null);
         }
-    }, [selected, displaysRef, getCanvasPt, canvasToWorld, snapshotViewports, setSelected, undoStackRef, redoStackRef]);
+    }, [selected, displaysRef, getCanvasPt, canvasToWorld, snapshotViewports, setSelected, undoStackRef, redoStackRef, forbiddenZones, onUpdateForbiddenZones, spawnPoints, onUpdateSpawnPoints, worldW, worldH]);
 
     const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
         const { mx, my } = getCanvasPt(e.clientX, e.clientY);
@@ -528,20 +568,36 @@ export function ViewportCanvas({
         const dx = (mx - drag.startMouseX) / z;
         const dy = (my - drag.startMouseY) / z;
 
+        if (drag.handle === "world_br") {
+            const wPt = canvasToWorld(mx, my);
+            let nw = Math.max(1000, wPt.x);
+            let nh = Math.max(400, wPt.y);
+            pendingWorldSizeRef.current = { w: nw, h: nh };
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(draw);
+            return;
+        }
+
+        if (drag.handle.startsWith("sp_")) {
+            const target = spawnPoints.find(p => p.id === drag.uuid);
+            if (!target) return;
+            const nx = drag.startRect.x + dx;
+            const ny = drag.startRect.y + dy;
+            onUpdateSpawnPoints(spawnPoints.map(p => p.id === target.id ? { ...p, x: nx, y: ny } : p));
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(draw);
+            return;
+        }
+
         if (drag.handle.startsWith("fz_")) {
             // ForbiddenZoneの操作
-            let zones = pendingZonesRef.current || forbiddenZones;
-            const target = zones.find(z => z.id === drag.uuid);
+            const target = forbiddenZones.find(z => z.id === drag.uuid);
             if (!target) return;
 
             let nx = drag.startRect.x, ny = drag.startRect.y, nw = drag.startRect.width, nh = drag.startRect.height;
             const h = drag.handle.replace("fz_", "");
 
-            if (h === "new") {
-                nw = dx; nh = dy;
-                if (nw < 0) { nx += nw; nw = Math.abs(nw); }
-                if (nh < 0) { ny += nh; nh = Math.abs(nh); }
-            } else if (h === "move") {
+            if (h === "move") {
                 nx += dx; ny += dy;
             } else {
                 if (h.includes("l")) { nx += dx; nw -= dx; }
@@ -549,10 +605,11 @@ export function ViewportCanvas({
                 if (h.includes("t")) { ny += dy; nh -= dy; }
                 if (h.includes("b")) { nh += dy; }
             }
-            if (nw < 20 && h !== "new") { if (h.includes("l")) nx -= (20 - nw); nw = 20; }
-            if (nh < 20 && h !== "new") { if (h.includes("t")) ny -= (20 - nh); nh = 20; }
+            // Ensure minimum size and normalize negative dimensions
+            if (nw < 5) { if (h.includes("l")) nx += (nw - 5); nw = 5; }
+            if (nh < 5) { if (h.includes("t")) ny += (nh - 5); nh = 5; }
 
-            pendingZonesRef.current = zones.map(z => z.id === target.id ? { ...z, x: nx, y: ny, width: nw, height: nh } : z);
+            onUpdateForbiddenZones(forbiddenZones.map(z => z.id === target.id ? { ...z, x: nx, y: ny, width: nw, height: nh } : z));
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             rafRef.current = requestAnimationFrame(draw);
             return;
@@ -608,20 +665,21 @@ export function ViewportCanvas({
             }
         }
         // World境界スナップ
+        const currentWorldW = pendingWorldSizeRef.current?.w ?? worldW;
+        const currentWorldH = pendingWorldSizeRef.current?.h ?? worldH;
         if (!snapObjX) {
             if (Math.abs(nx) < SNAP) { nx = 0; snapObjX = 0; }
-            if (Math.abs(nx + nw - worldW) < SNAP) { snapObjX = worldW; if (drag.handle === "move") nx = worldW - nw; else nw = worldW - nx; }
+            if (Math.abs(nx + nw - currentWorldW) < SNAP) { snapObjX = currentWorldW; if (drag.handle === "move") nx = currentWorldW - nw; else nw = currentWorldW - nx; }
         }
         if (!snapObjY) {
             if (Math.abs(ny) < SNAP) { ny = 0; snapObjY = 0; }
-            if (Math.abs(ny + nh - worldH) < SNAP) { snapObjY = worldH; if (drag.handle === "move") ny = worldH - nh; else nh = worldH - ny; }
+            if (Math.abs(ny + nh - currentWorldH) < SNAP) { snapObjY = currentWorldH; if (drag.handle === "move") ny = currentWorldH - nh; else nh = currentWorldH - ny; }
         }
         snapGuides.current = { x: snapObjX, y: snapObjY };
 
         vp.x = nx; vp.y = ny; vp.width = nw; vp.height = nh;
 
         // Scaleの再計算（横幅から逆算・表示機器の情報は変わらない前提）
-        vp.scale = nx / drag.startRect.width * (drag.startRect.scale || 1); // 適当な再計算ではなく、元のARから。ここは元通り
         vp.scale = vp.width / (drag.startRect.width / (drag.startRect.scale || 1));
 
         // リストへの差分適用
@@ -635,7 +693,7 @@ export function ViewportCanvas({
             previewThrottleRef.current = now;
             ws.send({ event: "viewport_preview", displayUuid: drag.uuid, viewport: vp });
         }
-    }, [getCanvasPt, canvasToWorld, displaysRef, worldW, worldH, arLocked, sendRateSetting, draw]);
+    }, [getCanvasPt, canvasToWorld, displaysRef, worldW, worldH, arLocked, sendRateSetting, draw, forbiddenZones, onUpdateForbiddenZones, spawnPoints, onUpdateSpawnPoints, pendingWorldSizeRef]);
 
     const handleMouseUp = useCallback(() => {
         isPanningRef.current = false;
@@ -643,19 +701,29 @@ export function ViewportCanvas({
         snapGuides.current = {};
 
         if (dragRef.current) {
-            if (dragRef.current.handle.startsWith("fz_")) {
-                if (pendingZonesRef.current) {
-                    onUpdateForbiddenZones(pendingZonesRef.current.map(z => ({
-                        ...z,
-                        // マイナス幅などの正規化
-                        x: Math.round(z.width < 0 ? z.x + z.width : z.x),
-                        y: Math.round(z.height < 0 ? z.y + z.height : z.y),
-                        width: Math.round(Math.abs(z.width)),
-                        height: Math.round(Math.abs(z.height))
-                    })).filter(z => z.width >= 5 && z.height >= 5)); // あまりに小さいのは消す
-                    pendingZonesRef.current = null;
+            if (dragRef.current.handle === "world_br") {
+                if (pendingWorldSizeRef.current) {
+                    setWorldSize(Math.round(pendingWorldSizeRef.current.w), Math.round(pendingWorldSizeRef.current.h));
                 }
-            } else if (dragRef.current.handle !== "world_br") {
+                pendingWorldSizeRef.current = null;
+            } else if (dragRef.current.handle.startsWith("fz_") || dragRef.current.handle.startsWith("sp_")) {
+                // Already updated via state continuously
+                // Normalize forbidden zones after drag ends
+                if (dragRef.current.handle.startsWith("fz_")) {
+                    onUpdateForbiddenZones(forbiddenZones.map(z => {
+                        if (z.id === dragRef.current?.uuid) {
+                            return {
+                                ...z,
+                                x: Math.round(z.width < 0 ? z.x + z.width : z.x),
+                                y: Math.round(z.height < 0 ? z.y + z.height : z.y),
+                                width: Math.round(Math.abs(z.width)),
+                                height: Math.round(Math.abs(z.height))
+                            };
+                        }
+                        return z;
+                    }).filter(z => z.width >= 5 && z.height >= 5)); // Filter out too small zones
+                }
+            } else {
                 const dObj = displaysRef.current.find(d => d.uuid === dragRef.current!.uuid);
                 if (dObj && dObj.viewport) {
                     onSaveViewport(dObj.uuid, dObj.viewport).then(() => {

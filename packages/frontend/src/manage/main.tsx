@@ -1,11 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish } from "@aquarium/shared";
+import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
 import "../styles/global.css";
 
 // コンポーネント群をimport
-import { Settings, Plus, MonitorOff } from "lucide-react";
 import { Sidebar } from "./components/Sidebar";
 import { ViewportCanvas } from "./components/ViewportCanvas";
 import { Toolbar } from "./components/Toolbar";
@@ -24,9 +23,11 @@ function ManageApp(): React.ReactElement {
     const [displays, setDisplays] = useState<DisplayClientInfo[]>([]);
     const [activeFish, setActiveFish] = useState<ActiveFish[]>([]);
     const [pendingFish, setPendingFish] = useState<PendingFish[]>([]);
-    // 背景画像URLと進入禁止エリア
+    // 背景画像URL、進入禁止エリア、放流ポイント、レイヤー管理
     const [bgUrl, setBgUrl] = useState<string>("");
     const [forbiddenZones, setForbiddenZones] = useState<{ id: string; x: number; y: number; width: number; height: number }[]>([]);
+    const [spawnPoints, setSpawnPoints] = useState<{ id: string; x: number; y: number }[]>([]);
+    const [layers, setLayers] = useState<AppLayerConfig[]>([]);
     const [connected, setConnected] = useState(false);
     const [alert, setAlert] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string | null>(null);
@@ -60,21 +61,25 @@ function ManageApp(): React.ReactElement {
                 setDisplays(msg.clients.filter((c) => c.clientType === "display"));
             } else if (msg.event === "state_push") {
                 setDisplays(msg.clients.filter((c) => c.clientType === "display"));
-                if (msg.worldW && msg.worldH) {
+                if (msg.worldW !== undefined && msg.worldH !== undefined) {
                     setWorldW(msg.worldW);
                     setWorldH(msg.worldH);
                 }
                 if (msg.bgUrl !== undefined) setBgUrl(msg.bgUrl);
                 if (msg.forbiddenZones !== undefined) setForbiddenZones(msg.forbiddenZones);
+                if (msg.spawnPoints !== undefined) setSpawnPoints(msg.spawnPoints);
+                if (msg.layers !== undefined) setLayers(msg.layers);
+            } else if (msg.event === "update_world_config") {
+                if (msg.bgUrl !== undefined) setBgUrl(msg.bgUrl);
+                if (msg.forbiddenZones !== undefined) setForbiddenZones(msg.forbiddenZones);
+                if (msg.spawnPoints !== undefined) setSpawnPoints(msg.spawnPoints);
+                if (msg.layers !== undefined) setLayers(msg.layers);
             } else if (msg.event === "fish_list") {
                 setActiveFish(msg.activeFish);
                 setPendingFish(msg.pendingFish);
             } else if (msg.event === "update_world_size") {
                 setWorldW(msg.width);
                 setWorldH(msg.height);
-            } else if (msg.event === "update_world_config") {
-                if (msg.bgUrl !== undefined) setBgUrl(msg.bgUrl);
-                if (msg.forbiddenZones !== undefined) setForbiddenZones(msg.forbiddenZones);
             }
         });
     }, []);
@@ -91,18 +96,20 @@ function ManageApp(): React.ReactElement {
                 worldH?: number;
                 bgUrl?: string;
                 forbiddenZones?: { id: string; x: number; y: number; width: number; height: number }[];
+                spawnPoints?: { id: string; x: number; y: number }[];
+                layers?: AppLayerConfig[];
             };
             setDisplays(data.clients.filter((c) => c.clientType === "display"));
             setActiveFish(data.activeFish);
             setPendingFish(data.pendingFish);
-            if (data.worldW && data.worldH) {
-                setWorldW(data.worldW);
-                setWorldH(data.worldH);
-            }
+            if (data.worldW) setWorldW(data.worldW);
+            if (data.worldH) setWorldH(data.worldH);
             if (data.bgUrl !== undefined) setBgUrl(data.bgUrl);
             if (data.forbiddenZones !== undefined) setForbiddenZones(data.forbiddenZones);
-        } catch (e) {
-            console.error("Polling error:", e);
+            if (data.spawnPoints !== undefined) setSpawnPoints(data.spawnPoints);
+            if (data.layers !== undefined) setLayers(data.layers);
+        } catch (err) {
+            console.error("Polling error:", err);
             setLastError("サーバーとの接続に問題があります。");
             setTimeout(() => setLastError(null), 5000);
         }
@@ -139,7 +146,7 @@ function ManageApp(): React.ReactElement {
         void poll();
     };
 
-    const addDemoFish = async (): Promise<void> => {
+    const addDemoFish = async (preset: "swimmer" | "looper" | "anchor" = "swimmer"): Promise<void> => {
         // デモ用の魚（絵文字）を投下
         const demos = ["🐟", "🐠", "🐡", "🐙", "🦑", "🦐", "🦈", "🐬", "🐋"];
         const emj = demos[Math.floor(Math.random() * demos.length)];
@@ -167,12 +174,21 @@ function ManageApp(): React.ReactElement {
                     method: "POST",
                     body: formData
                 });
-                const data = await res.json() as { fish: { id: string } };
-                // 放流APIを叩く
+                const data = await res.json() as { fish: { id: string; imageUrl: string } };
+                // 放流APIを叩く (FishConfig 形式)
                 await fetch("/api/release", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ pendingId: data.fish.id })
+                    body: JSON.stringify({
+                        id: data.fish.id,
+                        type: preset,
+                        textureUrl: data.fish.imageUrl,
+                        userParams: {
+                            scale: 1.0,
+                            speed: preset === "looper" ? 2.0 : 1.0,
+                            rotationOffset: 0
+                        }
+                    })
                 });
                 showAlert(`デモ魚 ${emj} を追加しました`);
                 void poll();
@@ -207,7 +223,8 @@ function ManageApp(): React.ReactElement {
     const layoutTabState = {
         displays, activeFish, pendingFish, sendRateSetting, setSendRateSetting,
         worldW, setWorldW, worldH, setWorldH,
-        bgUrl, setBgUrl, forbiddenZones, setForbiddenZones,
+        bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints,
+        layers, setLayers,
         selectedDisplay, setSelectedDisplay, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports,
@@ -280,6 +297,10 @@ interface LayoutTabProps {
         setBgUrl: React.Dispatch<React.SetStateAction<string>>;
         forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
         setForbiddenZones: React.Dispatch<React.SetStateAction<{ id: string; x: number; y: number; width: number; height: number }[]>>;
+        spawnPoints: { id: string; x: number; y: number }[];
+        setSpawnPoints: React.Dispatch<React.SetStateAction<{ id: string; x: number; y: number }[]>>;
+        layers: AppLayerConfig[];
+        setLayers: React.Dispatch<React.SetStateAction<AppLayerConfig[]>>;
         selectedDisplay: string | null;
         setSelectedDisplay: React.Dispatch<React.SetStateAction<string | null>>;
         arLocked: boolean;
@@ -302,7 +323,7 @@ interface LayoutTabProps {
 // ====== タブ 1: レイアウト管理 ======
 function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPattern, onUpdateWorldSize }: LayoutTabProps) {
     const { displays, sendRateSetting, setSendRateSetting, worldW, setWorldW, worldH, setWorldH,
-        bgUrl, setBgUrl, forbiddenZones, setForbiddenZones,
+        bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints, layers, setLayers,
         selectedDisplay, setSelectedDisplay, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports } = state;
@@ -311,7 +332,7 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
         setBgUrl(url);
         if (connected) {
             // @ts-ignore
-            ws.send({ event: "update_world_config", bgUrl: url, forbiddenZones });
+            ws.send({ event: "update_world_config", bgUrl: url, forbiddenZones, spawnPoints, layers });
         }
     };
 
@@ -319,7 +340,23 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
         setForbiddenZones(zones);
         if (connected) {
             // @ts-ignore
-            ws.send({ event: "update_world_config", bgUrl, forbiddenZones: zones });
+            ws.send({ event: "update_world_config", bgUrl, forbiddenZones: zones, spawnPoints, layers });
+        }
+    };
+
+    const onUpdateSpawnPoints = (points: { id: string; x: number; y: number }[]) => {
+        setSpawnPoints(points);
+        if (connected) {
+            // @ts-ignore
+            ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints: points, layers });
+        }
+    };
+
+    const onUpdateLayers = (newLayers: AppLayerConfig[]) => {
+        setLayers(newLayers);
+        if (connected) {
+            // @ts-ignore
+            ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints, layers: newLayers });
         }
     };
 
@@ -342,6 +379,10 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     onUpdateBgUrl={onUpdateBgUrl}
                     forbiddenZones={forbiddenZones}
                     onUpdateForbiddenZones={onUpdateForbiddenZones}
+                    spawnPoints={spawnPoints}
+                    onUpdateSpawnPoints={onUpdateSpawnPoints}
+                    layers={layers}
+                    onUpdateLayers={onUpdateLayers}
                 />
                 {/* ---------- Left: Viewport Canvas ---------- */}
                 <ViewportCanvas
@@ -365,6 +406,8 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     sendRateSetting={sendRateSetting}
                     forbiddenZones={forbiddenZones}
                     onUpdateForbiddenZones={onUpdateForbiddenZones}
+                    spawnPoints={spawnPoints}
+                    onUpdateSpawnPoints={onUpdateSpawnPoints}
                 />
             </div>
 

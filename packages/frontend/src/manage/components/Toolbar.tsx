@@ -2,7 +2,10 @@ import React from "react";
 import type { DisplayClientInfo, ActiveFish, PendingFish, TestPattern } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { MonitorPlay, Layers, Paintbrush, Locate, Square, CheckSquare, Maximize, PlusCircle } from "lucide-react";
+import {
+    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import { MonitorPlay, Layers, Paintbrush, Locate, Square, CheckSquare, Maximize, PlusCircle, ChevronDown, Fish } from "lucide-react";
 import { ws } from "../main";
 
 interface ToolbarProps {
@@ -12,7 +15,7 @@ interface ToolbarProps {
     connected: boolean;
     tab: "layout" | "fish" | "pending";
     setTab: (t: "layout" | "fish" | "pending") => void;
-    onAddDemoFish: () => void;
+    onAddDemoFish: (preset: "swimmer" | "looper" | "anchor") => void;
 }
 
 export function Toolbar({
@@ -54,9 +57,24 @@ export function Toolbar({
             <div className="flex items-center gap-6">
 
                 <div className="flex items-center gap-4 text-sm text-slate-600">
-                    <Button variant="outline" size="sm" onClick={onAddDemoFish} className="gap-1 text-slate-600 border-slate-200 bg-slate-50 hover:bg-slate-100">
-                        <PlusCircle className="w-4 h-4 text-sky-500" /> Demo Fish
-                    </Button>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-1 text-slate-600 border-slate-200 bg-slate-50 hover:bg-slate-100">
+                                <PlusCircle className="w-4 h-4 text-sky-500" /> デモ魚を追加 <ChevronDown className="w-3 h-3 ml-1 opacity-50" />
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem onClick={() => onAddDemoFish("swimmer")}>
+                                <Fish className="w-4 h-4 mr-2 text-sky-500" /> 群れ (Boids)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onAddDemoFish("looper")}>
+                                <Fish className="w-4 h-4 mr-2 text-amber-500" /> 周遊 (Looper)
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onAddDemoFish("anchor")}>
+                                <Locate className="w-4 h-4 mr-2 text-rose-500" /> 固定 (Anchor)
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
 
                 <div className="flex items-center gap-4">

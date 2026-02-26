@@ -2,7 +2,11 @@ import type { ServerWebSocket } from "bun";
 import type { WsClientMessage, WsServerMessage, TestPattern, DisplayClientInfo, ClientConfig, WorldObject } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
 import { foodItems } from "./physics/boundaries";
-import { registerClientViewport, unregisterClient, setWorldSize, getWorld, updateForbiddenZones } from "./world";
+import { registerClientViewport, unregisterClient, setWorldSize, getWorld,
+  updateForbiddenZones,
+  updateSpawnPoints,
+  updateLayers,
+} from "./world";
 import { getAllActiveFish, getPendingQueue } from "./fish-manager";
 import { v4 as uuidv4 } from "uuid";
 
@@ -154,6 +158,8 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
           worldH: w.height,
           bgUrl: currentBgUrl,
           forbiddenZones: w.forbiddenZones,
+          spawnPoints: w.spawnPoints,
+          layers: w.layers,
         });
       }
       // 初回接続: シーンを送信
@@ -164,8 +170,10 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       pushClientListToManagers();
       break;
     }
-    case "heartbeat":
-      ws.data.lastHeartbeat = Date.now();
+    case "update_viewport":
+      updateDisplayViewport(ws.data.uuid, msg.clientInfo.viewport);
+      // Viewport（Display側）が動いたことを管理画面へ即時反映する
+      pushStateToManagers();
       break;
 
     case "spawn_food":
@@ -200,13 +208,18 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       // 管理画面から背景や禁止エリアが更新されたら全体へ通知
       currentBgUrl = msg.bgUrl;
       updateForbiddenZones(msg.forbiddenZones);
+      updateSpawnPoints(msg.spawnPoints);
+      if (msg.layers) updateLayers(msg.layers);
+
       broadcastToAll({
         event: "update_world_config",
         bgUrl: currentBgUrl,
         forbiddenZones: msg.forbiddenZones,
+        spawnPoints: msg.spawnPoints,
+        layers: msg.layers,
       });
       // 管理画面のstate_pushもトリガー
-      pushClientListToManagers();
+      pushStateToManagers();
       break;
     }
   }
@@ -301,6 +314,8 @@ export function pushStateToManagers(): void {
     worldH: w.height,
     bgUrl: currentBgUrl,
     forbiddenZones: w.forbiddenZones,
+    spawnPoints: w.spawnPoints,
+    layers: w.layers,
   };
   const data = JSON.stringify(msg);
   for (const ws of sockets) {

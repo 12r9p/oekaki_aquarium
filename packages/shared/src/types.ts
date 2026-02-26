@@ -85,7 +85,7 @@ export interface ClientConfig {
 }
 
 // -------------------------------------------------------
-// ところてんレイヤーの定義
+// ところてんレイヤーの定義 (パララックス魚用)
 // -------------------------------------------------------
 export interface LayerConfig {
   id: number;
@@ -99,6 +99,21 @@ export interface LayerConfig {
   speedFactor: number;
   /** Z-Index（大きいほど手前） */
   zIndex: number;
+}
+
+// -------------------------------------------------------
+// アプリ全体のレイヤー管理定義 (背景画像や配置オブジェクト)
+// -------------------------------------------------------
+export type AppLayerType = "image" | "fish" | "foreground";
+
+export interface AppLayerConfig {
+  id: string;        // UUID
+  name: string;      // 表示名
+  type: AppLayerType;
+  url?: string;      // 画像の場合のURL
+  zIndex: number;    // Z-Index（大きいほど手前）
+  visible: boolean;  // 表示・非表示
+  opacity: number;   // 不透明度 (0.0 ~ 1.0)
 }
 
 // -------------------------------------------------------
@@ -151,17 +166,19 @@ export type WsClientMessage =
   | { event: "pointer_move"; x: number; y: number }
   // -------------------------
   // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[] };
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[] };
 
 export type WsServerMessage =
-  | { 
-      event: "config"; 
-      viewport: ClientConfig["viewport"]; 
-      debug: ClientConfig["debug"]; 
-      worldW: number; 
-      worldH: number; 
-      bgUrl: string; 
+  | {
+      event: "config";
+      viewport: ClientConfig["viewport"];
+      debug: ClientConfig["debug"];
+      worldW: number;
+      worldH: number;
+      bgUrl: string;
       forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
+      spawnPoints: { id: string; x: number; y: number }[];
+      layers?: AppLayerConfig[];
     }
   | { event: "reload" }
   | { event: "fish_added"; fish: PendingFish }
@@ -170,18 +187,20 @@ export type WsServerMessage =
   /** 60fps フレームデータ（display クライアント専用） */
   | ({ event: "frame" } & UdpPacket)
   /** 管理画面向け状態スナップショット */
-  | { 
-      event: "state_push"; 
-      clients: DisplayClientInfo[]; 
-      activeFish: ActiveFish[]; 
-      pendingFish: PendingFish[]; 
-      worldW: number; 
-      worldH: number;
-      bgUrl: string;
-      forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
+  | {
+      event: "state_push";
+      clients: DisplayClientInfo[];
+      activeFish: ActiveFish[];
+      pendingFish: PendingFish[];
+      worldW?: number;
+      worldH?: number;
+      bgUrl?: string;
+      forbiddenZones?: { id: string; x: number; y: number; width: number; height: number }[];
+      spawnPoints?: { id: string; x: number; y: number }[];
+      layers?: AppLayerConfig[];
     }
   /** WebSocketによる背景 / 禁止エリア のブロードキャスト更新通知 */
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[] }
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[] }
   /** display クライアントへテストパターン表示指示 */
   | { event: "test_pattern"; pattern: TestPattern; targetUuid?: string }
   /** display クライアントの Viewport を更新する */

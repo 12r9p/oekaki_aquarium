@@ -1,4 +1,4 @@
-import type { ClientConfig } from "@aquarium/shared";
+import type { ClientConfig, AppLayerConfig } from "@aquarium/shared";
 import { DEFAULT_WORLD } from "@aquarium/shared";
 
 // ============================================================
@@ -12,6 +12,10 @@ export interface WorldConfig {
   validZones: ValidZone[];
   /** ユーザーが指定した進入禁止エリア (赤枠) */
   forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
+  /** 放流ポイント（初期配置位置） */
+  spawnPoints: { id: string; x: number; y: number }[];
+  /** アプリケーション全体の統合レイヤー管理 */
+  layers: AppLayerConfig[];
 }
 
 export interface ValidZone {
@@ -30,6 +34,8 @@ const world: WorldConfig = {
   height: DEFAULT_WORLD.height,
   validZones: [],
   forbiddenZones: [],
+  spawnPoints: [],
+  layers: [],
 };
 
 /**
@@ -61,6 +67,14 @@ export function setWorldSize(width: number, height: number): void {
 
 export function updateForbiddenZones(zones: { id: string; x: number; y: number; width: number; height: number }[]): void {
   world.forbiddenZones = zones;
+}
+
+export function updateSpawnPoints(points: { id: string; x: number; y: number }[]): void {
+  world.spawnPoints = points;
+}
+
+export function updateLayers(layers: AppLayerConfig[]): void {
+  world.layers = layers;
 }
 
 /** クライアントが切断したときに ValidZone を削除する */

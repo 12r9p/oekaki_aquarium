@@ -21,6 +21,11 @@ let testGraphics: Graphics | null = null;
 let sceneContainer: Container | null = null;
 let currentScene: WorldObject[] = [];
 
+// レイヤー管理用
+export const fishGlobalContainer = new Container();
+fishGlobalContainer.sortableChildren = true;
+const imageLayerSprites = new Map<string, Sprite>();
+
 // Lerp 関数
 function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
 function lerpAngle(a: number, b: number, t: number): number {
@@ -28,6 +33,11 @@ function lerpAngle(a: number, b: number, t: number): number {
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
+}
+
+export function initRenderer(app: Application) {
+  // fishコンテナをstageに追加
+  app.stage.addChild(fishGlobalContainer);
 }
 
 export function buildPlaceholder(app: Application): Texture {
@@ -78,6 +88,68 @@ export function renderSceneObjects(app: Application, objects: WorldObject[]): vo
     }
   }
   currentScene = objects;
+}
+
+export function updateLayersView(app: Application): void {
+  const layers = STATE.layers || [];
+  
+  // 魚レイヤーのプロパティを fishGlobalContainer に反映 (最初に見つかったfishレイヤーを適用)
+  const fishLayer = layers.find(l => l.type === "fish");
+  if (fishLayer) {
+    fishGlobalContainer.zIndex = fishLayer.zIndex;
+    fishGlobalContainer.alpha = fishLayer.opacity;
+    fishGlobalContainer.visible = fishLayer.visible;
+  } else {
+    // 魚レイヤーが存在しない場合のデフォルト
+    fishGlobalContainer.zIndex = 50;
+    fishGlobalContainer.alpha = 1;
+    fishGlobalContainer.visible = true;
+  }
+
+  // 画像レイヤーの更新・追加
+  const currentImageLayerIds = new Set<string>();
+  
+  for (const layer of layers) {
+    if (layer.type !== "image") continue;
+    currentImageLayerIds.add(layer.id);
+
+    let sprite = imageLayerSprites.get(layer.id);
+    if (!sprite) {
+      sprite = new Sprite();
+      sprite.anchor.set(0);
+      app.stage.addChild(sprite);
+      imageLayerSprites.set(layer.id, sprite);
+    }
+    
+    sprite.zIndex = layer.zIndex;
+    sprite.alpha = layer.opacity;
+    sprite.visible = layer.visible;
+    // ワールド座標からViewport座標へ変換してフルスクリーン描画（背景等の想定）
+    const sx = (0 - STATE.VP.x) * STATE.scaleX;
+    const sy = (0 - STATE.VP.y) * STATE.scaleY;
+    sprite.x = sx;
+    sprite.y = sy;
+    sprite.width = STATE.WORLD_W * STATE.scaleX;
+    sprite.height = STATE.WORLD_H * STATE.scaleY;
+
+    // テクスチャロード（URLが変更・新規の場合）
+    if (layer.url && sprite.texture.label !== layer.url) {
+      void Assets.load<Texture>(layer.url).then(tex => {
+        if (sprite && !sprite.destroyed) {
+          sprite.texture = tex;
+          sprite.texture.label = layer.url;
+        }
+      });
+    }
+  }
+
+  // 削除された画像レイヤーのクリーンアップ
+  for (const [id, sprite] of imageLayerSprites.entries()) {
+    if (!currentImageLayerIds.has(id)) {
+      sprite.destroy();
+      imageLayerSprites.delete(id);
+    }
+  }
 }
 
 export function drawTestPattern(app: Application, pattern: TestPattern): void {
@@ -340,6 +412,7 @@ export function applyViewport(app: Application, silent = false): void {
   }
   
   if (currentScene.length > 0) renderSceneObjects(app, currentScene);
+  updateLayersView(app);
 }
 
 export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd: UdpFishData, sx: number, sy: number, appliedScale: number): void {
@@ -351,8 +424,8 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
   sprite.rotation = fd.r;
   sprite.scale.set(appliedScale);
   sprite.alpha = fd.o;
-  sprite.zIndex = fd.z;
-  app.stage.addChild(sprite);
+  sprite.zIndex = fd.z; // fishContainer内部でのソート用
+  fishGlobalContainer.addChild(sprite); // stageではなく専用コンテナへ
   fishMap.set(fd.i, { sprite, targetX:sx, targetY:sy, targetRotation:fd.r, targetScale:appliedScale, targetAlpha:fd.o, targetZIndex:fd.z });
 }
 
