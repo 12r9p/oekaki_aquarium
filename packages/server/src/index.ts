@@ -11,6 +11,10 @@ import {
   getDisplayClientInfoList,
   updateDisplayViewport,
   sendTestPattern,
+  getScene,
+  addSceneObject,
+  updateSceneObject,
+  deleteSceneObject,
 } from "./ws-handler";
 
 import { scanRoute } from "./routes/scan";
@@ -31,8 +35,10 @@ import { getPendingQueue } from "./fish-manager";
 // ============================================================
 
 const PUBLIC_IMAGES_DIR = join(import.meta.dir, "..", "public", "images");
+const SCENE_IMAGES_DIR = join(PUBLIC_IMAGES_DIR, "scene");
 const APP_DIR = join(import.meta.dir, "..", "public", "app");
 mkdirSync(PUBLIC_IMAGES_DIR, { recursive: true });
+mkdirSync(SCENE_IMAGES_DIR, { recursive: true });
 
 const app = new Hono();
 app.use("*", cors({ origin: "*" }));
@@ -59,7 +65,8 @@ app.delete("/api/fish/:id", (c) => {
 
 // Viewport 設定（display クライアントのViewportをサーバー側に保持しつつ更新）
 app.put("/api/clients/:uuid/viewport", async (c) => {
-  const uuid = c.req.param("uuid");
+  // クライアント側で encodeURIComponent されているため、ここでデコードして元のUUIDに戻す
+  const uuid = decodeURIComponent(c.req.param("uuid"));
   const vp = await c.req.json();
   const ok = updateDisplayViewport(uuid, vp);
   return c.json({ success: ok });
@@ -70,6 +77,44 @@ app.post("/api/clients/test-pattern", async (c) => {
   const { pattern, targetUuid } = await c.req.json() as { pattern: string; targetUuid?: string };
   sendTestPattern(pattern as Parameters<typeof sendTestPattern>[0], targetUuid);
   return c.json({ success: true });
+});
+
+// ---- シーンオブジェクト CRUD ----
+app.get("/api/scene", (c) => c.json(getScene()));
+
+app.post("/api/scene", async (c) => {
+  const obj = await c.req.json();
+  addSceneObject(obj);
+  return c.json({ success: true });
+});
+
+app.put("/api/scene/:id", async (c) => {
+  const id = decodeURIComponent(c.req.param("id"));
+  const patch = await c.req.json();
+  const ok = updateSceneObject(id, patch);
+  return c.json({ success: ok });
+});
+
+app.delete("/api/scene/:id", (c) => {
+  const id = decodeURIComponent(c.req.param("id"));
+  const ok = deleteSceneObject(id);
+  return c.json({ success: ok });
+});
+
+// ---- 画像アップロード（シーン用） ----
+app.post("/api/upload-image", async (c) => {
+  const formData = await c.req.formData();
+  const file = formData.get("file");
+  if (!file || typeof file === "string") return c.json({ error: "no file" }, 400);
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "jpg";
+  const allowedExts = ["jpg", "jpeg", "png", "gif", "webp", "svg"];
+  if (!allowedExts.includes(ext)) return c.json({ error: "unsupported type" }, 400);
+  const id = crypto.randomUUID();
+  const filename = `${id}.${ext}`;
+  const path = join(SCENE_IMAGES_DIR, filename);
+  await Bun.write(path, await file.arrayBuffer());
+  const url = `/images/scene/${filename}`;
+  return c.json({ success: true, url, id });
 });
 
 // 管理画面用: 状態スナップショット
@@ -90,6 +135,7 @@ startHeartbeatWatcher();
 // ---- Bun サーバー（HTTP + WS 統合） ------------------------
 const server = Bun.serve({
   port: PORTS.HTTP,
+  hostname: "0.0.0.0",
 
   // WebSocket ハンドラー（Bun ネイティブ）
   websocket: wsHandlers,
@@ -99,7 +145,17 @@ const server = Bun.serve({
 
     // WS アップグレード
     if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
-      const ok = server.upgrade(req);
+      const ok = server.upgrade(req, {
+        data: {
+          uuid: "",
+          clientType: "",
+          lastHeartbeat: Date.now(),
+          screenW: 0,
+          screenH: 0,
+          viewport: null,
+          testPattern: "off"
+        }
+      });
       return ok ? undefined : new Response("WS upgrade failed", { status: 500 });
     }
 
@@ -153,8 +209,8 @@ const server = Bun.serve({
   },
 });
 
-console.log(`[Server] Listening on http://localhost:${PORTS.HTTP}`);
-console.log(`[Server] WebSocket on ws://localhost:${PORTS.HTTP}/ws`);
+console.log(`[Server] Listening on http://0.0.0.0:${PORTS.HTTP}`);
+console.log(`[Server] WebSocket on ws://0.0.0.0:${PORTS.HTTP}/ws`);
 console.log(`[Server] Pages:`);
 console.log(`    /display    → Pixi.js レンダラー`);
 console.log(`    /controller → iPad コントローラー`);

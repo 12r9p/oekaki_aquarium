@@ -51,8 +51,8 @@ export function registerClientViewport(config: ClientConfig): void {
   }
 
   // 外接矩形でworld全体サイズを再計算
-  let maxX = DEFAULT_WORLD.width;
-  let maxY = DEFAULT_WORLD.height;
+  let maxX: number = DEFAULT_WORLD.width;
+  let maxY: number = DEFAULT_WORLD.height;
   for (const z of world.validZones) {
     maxX = Math.max(maxX, z.x + z.width);
     maxY = Math.max(maxY, z.y + z.height);

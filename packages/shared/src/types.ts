@@ -142,7 +142,11 @@ export interface UdpEvent {
 export type WsClientMessage =
   | { event: "register"; uuid: string; hardware: { w: number; h: number } }
   | { event: "heartbeat"; fps: number }
-  | { event: "spawn_food"; x: number; y: number };
+  | { event: "spawn_food"; x: number; y: number }
+  /** 管理画面がドラッグ中にリアルタイムでdisplayへViewportを仮送信する */
+  | { event: "viewport_preview"; displayUuid: string; viewport: ClientConfig["viewport"] }
+  /** 管理画面でマウスホバー中の座標（ワールド座標）を送信する */
+  | { event: "pointer_move"; x: number; y: number };
 
 export type WsServerMessage =
   | { event: "config"; viewport: ClientConfig["viewport"]; debug: ClientConfig["debug"] }
@@ -159,10 +163,16 @@ export type WsServerMessage =
   /** display クライアントの Viewport を更新する */
   | { event: "update_viewport"; targetUuid: string; viewport: ClientConfig["viewport"] }
   /** 接続クライアント一覧を管理画面に push する */
-  | { event: "client_list"; clients: DisplayClientInfo[] };
+  | { event: "client_list"; clients: DisplayClientInfo[] }
+  /** ワールドシーンオブジェクト一覧を全クライアントに push する */
+  | { event: "scene_update"; objects: WorldObject[] }
+  /** 管理画面がドラッグ中にdisplayへリアルタイムプレビューを送る（targetUuidのdisplayのみに送信される） */
+  | { event: "viewport_preview"; viewport: ClientConfig["viewport"] }
+  /** 管理画面からのマウスポインタ位置をディスプレイへ伝える */
+  | { event: "pointer_move"; x: number; y: number };
 
 /** テストパターンの種類 */
-export type TestPattern = "off" | "grid" | "colorbars" | "white" | "black" | "crosshair" | "worldmap";
+export type TestPattern = "off" | "grid" | "colorbars" | "white" | "black" | "crosshair" | "worldmap" | "calibration";
 
 /** 管理画面に公開するディスプレイクライアント情報 */
 export interface DisplayClientInfo {
@@ -171,9 +181,47 @@ export interface DisplayClientInfo {
   lastSeen: number;
   viewport: ClientConfig["viewport"] | null;
   testPattern: TestPattern;
-  /** 物理解像度（アスペクト比固定リサイズに使用） */
+  /** ブラウザ表示領域（ARロック計算に使用） */
   screenW: number;
-  screenH: number;}
+  screenH: number;
+}
+
+// -------------------------------------------------------
+// ワールドシーンオブジェクト
+// 管理画面から配置した画像・図形・テキストをDisplayに表示する
+// -------------------------------------------------------
+export interface WorldObject {
+  id: string;
+  type: "image" | "rect" | "ellipse" | "text";
+  /** ワールド座標系でのX位置 */
+  x: number;
+  /** ワールド座標系でのY位置 */
+  y: number;
+  /** ワールド座標系での幅 */
+  width: number;
+  /** ワールド座標系での高さ */
+  height: number;
+  /** Z順序（大きいほど手前） */
+  zIndex: number;
+  /** 透明度 0.0〜1.0 */
+  opacity: number;
+  /** 回転角度（度数法） */
+  rotation: number;
+  /** 管理画面での表示ラベル */
+  label?: string;
+  // type="image" 用
+  imageUrl?: string;     // サーバーの静的URL: /images/scene/xxx.jpg
+  imageFit?: "fill" | "contain" | "cover";
+  // type="rect" / "ellipse" 用
+  fillColor?: string;    // "#rrggbb" or "transparent"
+  strokeColor?: string;
+  strokeWidth?: number;
+  // type="text" 用
+  text?: string;
+  fontSize?: number;
+  textColor?: string;
+  fontWeight?: "normal" | "bold";
+}
 
 // -------------------------------------------------------
 // 汎用型

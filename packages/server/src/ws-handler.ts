@@ -1,5 +1,5 @@
 import type { ServerWebSocket } from "bun";
-import type { WsClientMessage, WsServerMessage, TestPattern, DisplayClientInfo, ClientConfig } from "@aquarium/shared";
+import type { WsClientMessage, WsServerMessage, TestPattern, DisplayClientInfo, ClientConfig, WorldObject } from "@aquarium/shared";
 import { foodItems } from "./physics/boundaries";
 import { PHYSICS } from "@aquarium/shared";
 import { v4 as uuidv4 } from "uuid";
@@ -26,6 +26,51 @@ const sockets = new Set<ServerWebSocket<ClientData>>();
  * サーバー再起動でリセットされる（永続化が必要な場合はファイルに書き出す）。
  */
 const viewportStore = new Map<string, NonNullable<ClientConfig["viewport"]>>();
+
+/**
+ * シーンオブジェクトのストア。
+ * WorldObject[] をサーバーIn-memoryで管理。
+ * ブロードキャスト時は全displayとmanageに送信。
+ */
+let sceneObjects: WorldObject[] = [];
+
+export function getScene(): WorldObject[] { return sceneObjects; }
+
+export function addSceneObject(obj: WorldObject): void {
+  sceneObjects.push(obj);
+  broadcastSceneUpdate();
+}
+
+export function updateSceneObject(id: string, patch: Partial<WorldObject>): boolean {
+  const idx = sceneObjects.findIndex(o => o.id === id);
+  if (idx === -1) return false;
+  sceneObjects[idx] = { ...sceneObjects[idx]!, ...patch, id };
+  broadcastSceneUpdate();
+  return true;
+}
+
+export function deleteSceneObject(id: string): boolean {
+  const before = sceneObjects.length;
+  sceneObjects = sceneObjects.filter(o => o.id !== id);
+  if (sceneObjects.length !== before) { broadcastSceneUpdate(); return true; }
+  return false;
+}
+
+export function replaceScene(objects: WorldObject[]): void {
+  sceneObjects = objects;
+  broadcastSceneUpdate();
+}
+
+/** シーン更新をdisplay+manageにブロードキャスト */
+function broadcastSceneUpdate(): void {
+  const msg: WsServerMessage = { event: "scene_update", objects: sceneObjects };
+  const data = JSON.stringify(msg);
+  for (const ws of sockets) {
+    if (ws.data.clientType === "display" || ws.data.clientType === "manage") {
+      ws.send(data);
+    }
+  }
+}
 
 // ---- ハンドラー -------------------------------------------------
 
@@ -97,6 +142,10 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
           debug: { showGrid: false, showId: false },
         });
       }
+      // 初回接続: シーンを送信
+      if (ws.data.clientType === "display" || ws.data.clientType === "manage") {
+        sendTo(ws, { event: "scene_update", objects: sceneObjects });
+      }
       // 管理画面に接続クライアントリストを push
       pushClientListToManagers();
       break;
@@ -112,6 +161,19 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
         expiresAt: Date.now() + PHYSICS.FOOD_LIFETIME_MS,
       });
       break;
+
+    case "viewport_preview": {
+      // 管理画面からのドラッグ中リアルタイムプレビュー: 対象displayのみに転送
+      const target = [...sockets].find(s => s.data.uuid === msg.displayUuid);
+      if (target) sendTo(target, { event: "viewport_preview", viewport: msg.viewport });
+      break;
+    }
+
+    case "pointer_move": {
+      // 管理画面からのマウスポインター位置を全てのディスプレイに転送
+      broadcastToDisplays({ event: "pointer_move", x: msg.x, y: msg.y });
+      break;
+    }
   }
 }
 

@@ -42,7 +42,9 @@ class WsClient {
       this.send({
         event: "register",
         uuid: `${this.clientType}-${SESSION_UUID}`,
-        hardware: { w: window.screen.width, h: window.screen.height },
+        // screen.width/height は物理解像度（HiDPIで実際と異なる場合がある）。
+        // ブラウザの表示領域(innerWidth/Height)をAR算出に使いたいためこちらを送る。
+        hardware: { w: window.innerWidth, h: window.innerHeight },
       });
       // 10秒ごとにハートビートを送信（タイムアウト30秒に対して余裕を持たせる）
       this.startHeartbeat();
