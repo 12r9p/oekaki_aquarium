@@ -143,6 +143,8 @@ export interface UdpFishData {
   o: number;
   /** Z-Index */
   z: number;
+  /** テクスチャ URL (任意) */
+  u?: string;
 }
 
 export interface UdpEvent {

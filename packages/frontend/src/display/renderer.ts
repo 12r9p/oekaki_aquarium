@@ -416,8 +416,17 @@ export function applyViewport(app: Application, silent = false): void {
 }
 
 export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd: UdpFishData, sx: number, sy: number, appliedScale: number): void {
-  const cachedUrl = textureUrlCache.get(fd.i);
-  const texture = cachedUrl ? (Assets.cache.get<Texture>(cachedUrl) ?? buildPlaceholder(app)) : buildPlaceholder(app);
+  let texture: Texture;
+  if (fd.u) {
+    // URLが含まれている場合はキャッシュ登録＆読み込み(無ければ即時にプレースホルダで凌ぎ、あとでロードされることを期待する)
+    textureUrlCache.set(fd.i, fd.u);
+    texture = Assets.cache.get<Texture>(fd.u) ?? buildPlaceholder(app);
+    if (!Assets.cache.has(fd.u)) void Assets.load<Texture>(fd.u);
+  } else {
+    const cachedUrl = textureUrlCache.get(fd.i);
+    texture = cachedUrl ? (Assets.cache.get<Texture>(cachedUrl) ?? buildPlaceholder(app)) : buildPlaceholder(app);
+  }
+  
   const sprite = new Sprite(texture);
   sprite.anchor.set(0.5);
   sprite.x = sx; sprite.y = sy;
