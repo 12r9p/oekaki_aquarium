@@ -10,10 +10,17 @@ import path from "node:path";
 export default defineConfig({
   plugins: [react()],
 
+  resolve: {
+    alias: {
+      "@": path.resolve(__dirname, "./src"),
+    },
+  },
+
   build: {
     rollupOptions: {
       input: {
         // サーバーのパスに対応させる
+        index:      path.resolve(__dirname, "index.html"),
         display:    path.resolve(__dirname, "display.html"),
         controller: path.resolve(__dirname, "controller.html"),
         guest:      path.resolve(__dirname, "guest.html"),

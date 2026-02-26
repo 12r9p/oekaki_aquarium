@@ -18,25 +18,29 @@ interface ViewportCanvasProps {
     onSaveViewport: (uuid: string, vp: NonNullable<DisplayClientInfo["viewport"]>) => Promise<void>;
     arLocked: boolean;
     sendRateSetting: number;
+    setWorldSize: (w: number, h: number) => void;
+    forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
+    onUpdateForbiddenZones: (zones: { id: string; x: number; y: number; width: number; height: number }[]) => void;
 }
 
-// ハンドルの種類（8点＋ボディ移動）
-type HandleType = "move" | "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l";
+// ハンドルの種類（8点＋ボディ移動＋Worldリサイズ用）
+type HandleType = "move" | "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "world_br" | "fz_move" | "fz_tl" | "fz_t" | "fz_tr" | "fz_r" | "fz_br" | "fz_b" | "fz_bl" | "fz_l" | "fz_new";
 interface Camera { panX: number; panY: number; zoom: number; }
 interface DragState {
     handle: HandleType;
-    uuid: string;
+    uuid: string; // display uuid または fz id
     startMouseX: number; startMouseY: number;
-    startVp: { x: number; y: number; width: number; height: number; scale: number };
+    startRect: { x: number; y: number; width: number; height: number; scale?: number };
 }
 
 const HANDLE_R = 6;
 const COLORS = ["#4ecdc4", "#ff6b6b", "#f7dc6f", "#82e0aa", "#bb8fce", "#f0b27a"];
 
-function getHandles(vp: NonNullable<DisplayClientInfo["viewport"]>): Record<HandleType, { x: number; y: number }> {
+function getHandles(vp: { x: number; y: number; width: number; height: number; }): any {
     const { x, y, width: w, height: h } = vp;
     return {
         move: { x: x + w / 2, y: y + h / 2 },
+        // ... (省略)
         tl: { x, y }, t: { x: x + w / 2, y }, tr: { x: x + w, y },
         r: { x: x + w, y: y + h / 2 }, br: { x: x + w, y: y + h },
         b: { x: x + w / 2, y: y + h }, bl: { x, y: y + h },
@@ -48,7 +52,7 @@ export function ViewportCanvas({
     worldW, worldH, displaysSt, displaysRef, pendingViewports,
     selected, setSelected, hoveredRef, setHoveredUI,
     undoStackRef, redoStackRef, snapshotViewports, onSaveViewport,
-    arLocked, sendRateSetting
+    arLocked, sendRateSetting, setWorldSize, forbiddenZones, onUpdateForbiddenZones
 }: ViewportCanvasProps): React.ReactElement {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -64,6 +68,7 @@ export function ViewportCanvas({
     const previewThrottleRef = useRef<number>(0);
     const pointerThrottleRef = useRef<number>(0);
     const snapGuides = useRef<{ x?: number; y?: number }>({});
+    const pendingZonesRef = useRef<typeof forbiddenZones | null>(null);
 
     const canvasSize = useCallback(() => {
         const c = canvasRef.current;
@@ -88,11 +93,11 @@ export function ViewportCanvas({
 
         ctx.clearRect(0, 0, CW, CH);
 
-        // 背景チェッカーボード
-        ctx.fillStyle = "#080c14";
+        // 背景チェッカーボード (Canvas領域全体の背景)
+        ctx.fillStyle = "#f8fafc"; // slate-50
         ctx.fillRect(0, 0, CW, CH);
         const CHECKER = 24;
-        ctx.fillStyle = "rgba(255,255,255,0.015)";
+        ctx.fillStyle = "rgba(0, 0, 0, 0.03)";
         for (let cx2 = 0; cx2 < CW; cx2 += CHECKER * 2) {
             for (let cy2 = 0; cy2 < CH; cy2 += CHECKER * 2) {
                 ctx.fillRect(cx2, cy2, CHECKER, CHECKER);
@@ -104,14 +109,25 @@ export function ViewportCanvas({
         const tl = worldToCanvas(0, 0);
         const br = worldToCanvas(worldW, worldH);
         const ww = br.x - tl.x, wh = br.y - tl.y;
-        ctx.shadowColor = "rgba(100,150,255,0.15)";
-        ctx.shadowBlur = 20;
-        ctx.fillStyle = "#0b1020";
+        ctx.shadowColor = "rgba(0, 0, 0, 0.05)";
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = "#ffffff";
         ctx.fillRect(tl.x, tl.y, ww, wh);
         ctx.shadowBlur = 0;
-        ctx.strokeStyle = "rgba(80,120,220,0.4)";
-        ctx.lineWidth = 1.5;
+        ctx.strokeStyle = "#e2e8f0"; // slate-200
+        ctx.lineWidth = 1;
         ctx.strokeRect(tl.x + 0.5, tl.y + 0.5, ww - 1, wh - 1);
+
+        // ---キャンバスリサイズ用のハンドル（World Size）---
+        ctx.fillStyle = "#f59e0b"; // amber-500
+        ctx.strokeStyle = "#fff";
+        ctx.lineWidth = 1.5;
+        const R = 8;
+        ctx.beginPath();
+        ctx.arc(br.x, br.y, R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // ---キャンバスリサイズ用のハンドルここまで---
 
         // グリッド
         const GRID = 100, MAJ = 500;
@@ -119,7 +135,7 @@ export function ViewportCanvas({
         const wy0 = Math.floor(-cam.panY / cam.zoom / GRID) * GRID;
 
         ctx.lineWidth = 0.5;
-        ctx.strokeStyle = "rgba(255,255,255,0.04)";
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
         for (let x = wx0; x < wx0 + CW / cam.zoom + GRID * 2; x += GRID) {
             if (x < 0 || x > worldW) continue;
             const px = worldToCanvas(x, 0).x;
@@ -131,8 +147,8 @@ export function ViewportCanvas({
             ctx.beginPath(); ctx.moveTo(tl.x, py); ctx.lineTo(br.x, py); ctx.stroke();
         }
         // メジャーグリッド
-        ctx.lineWidth = 0.5;
-        ctx.strokeStyle = "rgba(80,120,200,0.12)";
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
         for (let x = 0; x <= worldW; x += MAJ) {
             const px = worldToCanvas(x, 0).x;
             ctx.beginPath(); ctx.moveTo(px, tl.y); ctx.lineTo(px, br.y); ctx.stroke();
@@ -144,23 +160,23 @@ export function ViewportCanvas({
 
         // ルーラー
         const RULER = 20;
-        ctx.fillStyle = "rgba(10,16,30,0.85)";
+        ctx.fillStyle = "rgba(241, 245, 249, 0.9)"; // slate-100
         ctx.fillRect(0, 0, CW, RULER);
         ctx.fillRect(0, 0, RULER, CH);
-        ctx.strokeStyle = "rgba(100,150,255,0.25)";
-        ctx.lineWidth = 0.5;
+        ctx.strokeStyle = "#cbd5e1"; // slate-300
+        ctx.lineWidth = 1;
         ctx.beginPath(); ctx.moveTo(0, RULER); ctx.lineTo(CW, RULER); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(RULER, 0); ctx.lineTo(RULER, CH); ctx.stroke();
 
-        ctx.fillStyle = "rgba(200,220,255,0.5)";
+        ctx.fillStyle = "#64748b"; // slate-500
         ctx.font = `${Math.max(8, 7 * cam.zoom)}px monospace`;
         ctx.textBaseline = "top";
         for (let x = 0; x <= worldW; x += MAJ) {
             const px = worldToCanvas(x, 0).x;
             if (px < RULER || px > CW) continue;
             ctx.fillText(String(x), px + 2, 3);
-            ctx.strokeStyle = "rgba(100,150,255,0.3)";
-            ctx.lineWidth = 0.5;
+            ctx.strokeStyle = "#94a3b8"; // slate-400
+            ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(px, RULER - 4); ctx.lineTo(px, RULER); ctx.stroke();
         }
         for (let y = 0; y <= worldH; y += MAJ) {
@@ -171,8 +187,8 @@ export function ViewportCanvas({
             ctx.rotate(-Math.PI / 2);
             ctx.fillText(String(y), 0, 0);
             ctx.restore();
-            ctx.strokeStyle = "rgba(100,150,255,0.3)";
-            ctx.lineWidth = 0.5;
+            ctx.strokeStyle = "#94a3b8";
+            ctx.lineWidth = 1;
             ctx.beginPath(); ctx.moveTo(RULER - 4, py); ctx.lineTo(RULER, py); ctx.stroke();
         }
 
@@ -200,11 +216,11 @@ export function ViewportCanvas({
             ctx.fillRect(p.x, p.y, dw, dh);
             ctx.shadowBlur = 0;
 
-            ctx.strokeStyle = isSel ? col : isHov ? col + "aa" : col + "66";
+            ctx.strokeStyle = isSel ? col : isHov ? col + "aa" : col + "88";
             ctx.lineWidth = isSel ? 2 : 1.5;
             ctx.strokeRect(p.x, p.y, dw, dh);
 
-            ctx.fillStyle = isSel ? col : col + "aa";
+            ctx.fillStyle = isSel ? "#0f172a" : "#334155";
             ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px sans-serif`;
             ctx.textBaseline = "bottom";
             ctx.fillText(`ID: ${d.uuid.split(":")[1] || d.uuid}`, p.x + 4, p.y + dh - 4);
@@ -218,7 +234,8 @@ export function ViewportCanvas({
                 ctx.strokeStyle = col;
                 ctx.lineWidth = 1.5;
                 const pts = getHandles(vp);
-                (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as HandleType[]).forEach((ht) => {
+                type VpHandleType = Exclude<HandleType, "world_br" | "move">;
+                (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as VpHandleType[]).forEach((ht) => {
                     const cp = worldToCanvas(pts[ht].x, pts[ht].y);
                     ctx.beginPath(); ctx.arc(cp.x, cp.y, HANDLE_R, 0, Math.PI * 2);
                     ctx.fill(); ctx.stroke();
@@ -243,6 +260,58 @@ export function ViewportCanvas({
             }
             ctx.stroke();
             ctx.setLineDash([]);
+        }
+
+        // 進入禁止エリア描画
+        const zones = pendingZonesRef.current || forbiddenZones;
+        zones.forEach(z => {
+            const p = worldToCanvas(z.x, z.y);
+            const p2 = worldToCanvas(z.x + z.width, z.y + z.height);
+            const dw = p2.x - p.x, dh = p2.y - p.y;
+            const isSel = dragRef.current?.uuid === z.id;
+
+            ctx.fillStyle = "rgba(220, 38, 38, 0.15)"; // red-600
+            ctx.fillRect(p.x, p.y, dw, dh);
+
+            ctx.strokeStyle = "rgba(220, 38, 38, 0.8)";
+            ctx.lineWidth = isSel ? 2 : 1;
+            ctx.strokeRect(p.x, p.y, dw, dh);
+
+            ctx.fillStyle = "rgba(153, 27, 27, 0.8)";
+            ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px sans-serif`;
+            ctx.textBaseline = "bottom";
+            ctx.fillText("FORBIDDEN", p.x + 4, p.y + dh - 4);
+
+            if (isSel) {
+                ctx.fillStyle = "#fff";
+                ctx.strokeStyle = "rgba(220, 38, 38, 1)";
+                ctx.lineWidth = 1.5;
+                const pts = getHandles(z as any);
+                (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as Exclude<HandleType, "world_br" | "move" | `fz_${string}`>[]).forEach((ht) => {
+                    const cp = worldToCanvas(pts[ht].x, pts[ht].y);
+                    ctx.beginPath(); ctx.arc(cp.x, cp.y, HANDLE_R, 0, Math.PI * 2);
+                    ctx.fill(); ctx.stroke();
+                });
+            }
+        });
+
+        // --- 魚のリアルタイム位置ポインタ描画 ---
+        const frame = (window as any).__lastFrame;
+        if (frame && frame.f) {
+            frame.f.forEach((f: any) => {
+                const pt = worldToCanvas(f.x, f.y);
+                // レイヤーごとの色分け (適当なカラーパレット)
+                const layerColors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
+                const zIndexGroup = Math.floor(f.z / 10) % layerColors.length;
+                ctx.fillStyle = layerColors[zIndexGroup];
+                ctx.beginPath();
+                ctx.arc(pt.x, pt.y, 4, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#475569";
+                ctx.font = "8px monospace";
+                ctx.fillText(f.i, pt.x + 5, pt.y - 5);
+            });
         }
     }, [selected, worldW, worldH, canvasSize, worldToCanvas]);
 
@@ -279,6 +348,16 @@ export function ViewportCanvas({
         rafRef.current = requestAnimationFrame(draw);
     }, [displaysSt, draw]);
 
+    // 魚のリアルタイム情報受信時の再描画トリガー
+    useEffect(() => {
+        const onFrame = () => {
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(draw);
+        };
+        window.addEventListener("aquarium_frame", onFrame);
+        return () => window.removeEventListener("aquarium_frame", onFrame);
+    }, [draw]);
+
     // マウスイベント処理
     const getCanvasPt = useCallback((evtX: number, evtY: number) => {
         const rect = canvasRef.current!.getBoundingClientRect();
@@ -286,17 +365,75 @@ export function ViewportCanvas({
     }, []);
 
     const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
-        if (e.button === 1 || spaceRef.current || e.button === 2) {
+        if (e.button === 1 || spaceRef.current) {
             isPanningRef.current = true;
             const { mx, my } = getCanvasPt(e.clientX, e.clientY);
             panStartRef.current = { mx, my, px: camRef.current.panX, py: camRef.current.panY };
             canvasRef.current!.style.cursor = "grabbing";
             return;
         }
-        if (e.button !== 0) return;
 
         const { mx, my } = getCanvasPt(e.clientX, e.clientY);
         const wPt = canvasToWorld(mx, my);
+
+        // 新規追加 (右クリドラッグでForbiddenZone)
+        if (e.button === 2) {
+            const newId = `fz_${Date.now()}`;
+            const newZone = { id: newId, x: wPt.x, y: wPt.y, width: 0, height: 0 };
+            pendingZonesRef.current = [...forbiddenZones, newZone];
+            dragRef.current = {
+                handle: "fz_new", uuid: newId, startMouseX: mx, startMouseY: my,
+                startRect: { ...newZone }
+            };
+            return;
+        }
+
+        if (e.button !== 0) return;
+
+        // まず World Resizer かどうか判定
+        const z = camRef.current.zoom;
+        const R_WORLD = 12 / z; // 当たり判定少し大きめ
+        if (Math.abs(wPt.x - worldW) <= R_WORLD && Math.abs(wPt.y - worldH) <= R_WORLD) {
+            undoStackRef.current.push(snapshotViewports());
+            redoStackRef.current.length = 0;
+            dragRef.current = {
+                handle: "world_br", uuid: "world", startMouseX: mx, startMouseY: my,
+                startRect: { x: 0, y: 0, width: worldW, height: worldH, scale: 1 }
+            };
+            return;
+        }
+
+        // 既存の禁止エリア（アクティブ判定があればそちらを優先で触らせたいが、今回は普通に後ろから判定）
+        for (let i = forbiddenZones.length - 1; i >= 0; i--) {
+            const fz = forbiddenZones[i];
+            const pts = getHandles(fz as any);
+            const HANDLE_R_W = HANDLE_R / z;
+
+            // selectedでなくても触れるようにするか？とりあえず今回はどこでも触ったら選択
+            const isSel = dragRef.current?.uuid === fz.id;
+
+            if (Math.abs(wPt.x - pts.br.x) < HANDLE_R_W && Math.abs(wPt.y - pts.br.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_br", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+            if (Math.abs(wPt.x - pts.tr.x) < HANDLE_R_W && Math.abs(wPt.y - pts.tr.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_tr", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+            if (Math.abs(wPt.x - pts.bl.x) < HANDLE_R_W && Math.abs(wPt.y - pts.bl.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_bl", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+            if (Math.abs(wPt.x - pts.tl.x) < HANDLE_R_W && Math.abs(wPt.y - pts.tl.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_tl", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+            if (Math.abs(wPt.x - pts.r.x) < HANDLE_R_W && Math.abs(wPt.y - pts.r.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_r", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+            if (Math.abs(wPt.x - pts.l.x) < HANDLE_R_W && Math.abs(wPt.y - pts.l.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_l", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+            if (Math.abs(wPt.x - pts.b.x) < HANDLE_R_W && Math.abs(wPt.y - pts.b.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_b", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+            if (Math.abs(wPt.x - pts.t.x) < HANDLE_R_W && Math.abs(wPt.y - pts.t.y) < HANDLE_R_W) { dragRef.current = { handle: "fz_t", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } }; return; }
+
+            // FZ本体のドラッグ
+            if (wPt.x >= fz.x && wPt.x <= fz.x + fz.width && wPt.y >= fz.y && wPt.y <= fz.y + fz.height) {
+                // Delete: Option / Alt click
+                if (e.altKey) {
+                    onUpdateForbiddenZones(forbiddenZones.filter(z => z.id !== fz.id));
+                    return;
+                }
+
+                dragRef.current = { handle: "fz_move", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } };
+                setSelected(null);
+                return;
+            }
+        }
 
         if (selected) {
             const t = displaysRef.current.find(d => d.uuid === selected);
@@ -306,9 +443,9 @@ export function ViewportCanvas({
                 const RW = HANDLE_R / z + 2;
                 let hitHandle: HandleType | null = null;
 
-                for (const [k, v] of Object.entries(pts)) {
+                for (const [k, v] of Object.entries(pts as any)) {
                     if (k === "move") continue;
-                    if (Math.abs(wPt.x - v.x) <= RW && Math.abs(wPt.y - v.y) <= RW) { hitHandle = k as HandleType; break; }
+                    if (Math.abs(wPt.x - (v as any).x) <= RW && Math.abs(wPt.y - (v as any).y) <= RW) { hitHandle = k as HandleType; break; }
                 }
                 if (!hitHandle) {
                     const vp = t.viewport;
@@ -320,7 +457,7 @@ export function ViewportCanvas({
                     redoStackRef.current.length = 0;
                     dragRef.current = {
                         handle: hitHandle, uuid: selected, startMouseX: mx, startMouseY: my,
-                        startVp: { ...t.viewport }
+                        startRect: { ...t.viewport! }
                     };
                     return;
                 }
@@ -345,7 +482,7 @@ export function ViewportCanvas({
             redoStackRef.current.length = 0;
             dragRef.current = {
                 handle: "move", uuid: hitBody, startMouseX: mx, startMouseY: my,
-                startVp: { ...t.viewport! }
+                startRect: { ...t.viewport! }
             };
         } else {
             setSelected(null);
@@ -385,18 +522,49 @@ export function ViewportCanvas({
             return;
         }
 
-        // --- ここからフレームドラッグ・リサイズ ---
+        // --- ここからワールド / フレームドラッグ・リサイズ ---
         const drag = dragRef.current;
         const z = camRef.current.zoom;
         const dx = (mx - drag.startMouseX) / z;
         const dy = (my - drag.startMouseY) / z;
+
+        if (drag.handle.startsWith("fz_")) {
+            // ForbiddenZoneの操作
+            let zones = pendingZonesRef.current || forbiddenZones;
+            const target = zones.find(z => z.id === drag.uuid);
+            if (!target) return;
+
+            let nx = drag.startRect.x, ny = drag.startRect.y, nw = drag.startRect.width, nh = drag.startRect.height;
+            const h = drag.handle.replace("fz_", "");
+
+            if (h === "new") {
+                nw = dx; nh = dy;
+                if (nw < 0) { nx += nw; nw = Math.abs(nw); }
+                if (nh < 0) { ny += nh; nh = Math.abs(nh); }
+            } else if (h === "move") {
+                nx += dx; ny += dy;
+            } else {
+                if (h.includes("l")) { nx += dx; nw -= dx; }
+                if (h.includes("r")) { nw += dx; }
+                if (h.includes("t")) { ny += dy; nh -= dy; }
+                if (h.includes("b")) { nh += dy; }
+            }
+            if (nw < 20 && h !== "new") { if (h.includes("l")) nx -= (20 - nw); nw = 20; }
+            if (nh < 20 && h !== "new") { if (h.includes("t")) ny -= (20 - nh); nh = 20; }
+
+            pendingZonesRef.current = zones.map(z => z.id === target.id ? { ...z, x: nx, y: ny, width: nw, height: nh } : z);
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(draw);
+            return;
+        }
+
         const dObj = displaysRef.current.find(d => d.uuid === drag.uuid);
         if (!dObj || !dObj.viewport) return;
         const vp = dObj.viewport;
 
-        // ... （ドラッグロジック: startVp をもとに dx/dy を加算・減算する処理）...
+        // ... （ドラッグロジック: startRect をもとに dx/dy を加算・減算する処理）...
         // 今回は既存のコードそのまま移植
-        let nx = drag.startVp.x, ny = drag.startVp.y, nw = drag.startVp.width, nh = drag.startVp.height;
+        let nx = drag.startRect.x, ny = drag.startRect.y, nw = drag.startRect.width, nh = drag.startRect.height;
 
         if (drag.handle === "move") {
             nx += dx; ny += dy;
@@ -406,7 +574,7 @@ export function ViewportCanvas({
             if (drag.handle.includes("t")) { ny += dy; nh -= dy; }
             if (drag.handle.includes("b")) { nh += dy; }
             if (arLocked) {
-                const AR = drag.startVp.width / drag.startVp.height;
+                const AR = drag.startRect.width / drag.startRect.height;
                 if (drag.handle.includes("r") || drag.handle.includes("l")) nh = nw / AR;
                 else if (drag.handle.includes("t") || drag.handle.includes("b")) nw = nh * AR;
             }
@@ -453,8 +621,8 @@ export function ViewportCanvas({
         vp.x = nx; vp.y = ny; vp.width = nw; vp.height = nh;
 
         // Scaleの再計算（横幅から逆算・表示機器の情報は変わらない前提）
-        vp.scale = nx / drag.startVp.width * drag.startVp.scale; // 適当な再計算ではなく、元のARから。ここは元通り
-        vp.scale = vp.width / (drag.startVp.width / drag.startVp.scale);
+        vp.scale = nx / drag.startRect.width * (drag.startRect.scale || 1); // 適当な再計算ではなく、元のARから。ここは元通り
+        vp.scale = vp.width / (drag.startRect.width / (drag.startRect.scale || 1));
 
         // リストへの差分適用
         pendingViewports.current.set(drag.uuid, { ...vp });
@@ -475,17 +643,31 @@ export function ViewportCanvas({
         snapGuides.current = {};
 
         if (dragRef.current) {
-            const dObj = displaysRef.current.find(d => d.uuid === dragRef.current!.uuid);
-            if (dObj && dObj.viewport) {
-                onSaveViewport(dObj.uuid, dObj.viewport).then(() => {
-                    pendingViewports.current.delete(dObj.uuid);
-                });
+            if (dragRef.current.handle.startsWith("fz_")) {
+                if (pendingZonesRef.current) {
+                    onUpdateForbiddenZones(pendingZonesRef.current.map(z => ({
+                        ...z,
+                        // マイナス幅などの正規化
+                        x: Math.round(z.width < 0 ? z.x + z.width : z.x),
+                        y: Math.round(z.height < 0 ? z.y + z.height : z.y),
+                        width: Math.round(Math.abs(z.width)),
+                        height: Math.round(Math.abs(z.height))
+                    })).filter(z => z.width >= 5 && z.height >= 5)); // あまりに小さいのは消す
+                    pendingZonesRef.current = null;
+                }
+            } else if (dragRef.current.handle !== "world_br") {
+                const dObj = displaysRef.current.find(d => d.uuid === dragRef.current!.uuid);
+                if (dObj && dObj.viewport) {
+                    onSaveViewport(dObj.uuid, dObj.viewport).then(() => {
+                        pendingViewports.current.delete(dObj.uuid);
+                    });
+                }
             }
             dragRef.current = null;
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             rafRef.current = requestAnimationFrame(draw);
         }
-    }, [displaysRef, onSaveViewport, draw]);
+    }, [displaysRef, onSaveViewport, draw, onUpdateForbiddenZones]);
 
     const handleWheel = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
         e.preventDefault();
@@ -506,8 +688,30 @@ export function ViewportCanvas({
     }, [canvasToWorld, draw]);
 
     const handleKeyDown = useCallback((e: KeyboardEvent) => {
-        if (e.code === "Space") { spaceRef.current = true; if (canvasRef.current) canvasRef.current.style.cursor = "grab"; e.preventDefault(); }
-    }, []);
+        if (e.code === "Space") { spaceRef.current = true; if (canvasRef.current) canvasRef.current.style.cursor = "grab"; e.preventDefault(); return; }
+
+        // 矢印キーでの1px微調整機能
+        if (selected && (e.code === "ArrowUp" || e.code === "ArrowDown" || e.code === "ArrowLeft" || e.code === "ArrowRight")) {
+            e.preventDefault();
+            const dObj = displaysRef.current.find(d => d.uuid === selected);
+            if (!dObj || !dObj.viewport) return;
+            const vp = { ...dObj.viewport };
+            const speed = e.shiftKey ? 10 : 1; // Shift押下時は10px
+            if (e.code === "ArrowUp") vp.y -= speed;
+            if (e.code === "ArrowDown") vp.y += speed;
+            if (e.code === "ArrowLeft") vp.x -= speed;
+            if (e.code === "ArrowRight") vp.x += speed;
+
+            undoStackRef.current.push(snapshotViewports());
+            redoStackRef.current.length = 0;
+
+            // update state directly and save
+            dObj.viewport = vp;
+            onSaveViewport(selected, vp);
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(draw);
+        }
+    }, [selected, displaysRef, snapshotViewports, onSaveViewport, draw]);
     const handleKeyUp = useCallback((e: KeyboardEvent) => {
         if (e.code === "Space") { spaceRef.current = false; if (canvasRef.current && !isPanningRef.current) canvasRef.current.style.cursor = "default"; }
     }, []);
@@ -519,7 +723,7 @@ export function ViewportCanvas({
     }, [handleKeyDown, handleKeyUp]);
 
     return (
-        <div className="manage-canvas-wrapper" ref={wrapperRef} onWheel={handleWheel}>
+        <div className="flex-1 relative cursor-crosshair overflow-hidden touch-none" ref={wrapperRef} onWheel={handleWheel}>
             <canvas
                 ref={canvasRef}
                 onPointerDown={handleMouseDown}
@@ -527,7 +731,7 @@ export function ViewportCanvas({
                 onPointerUp={handleMouseUp}
                 onPointerLeave={handleMouseUp}
                 onContextMenu={e => e.preventDefault()}
-                style={{ width: "100%", height: "100%", display: "block", touchAction: "none" }}
+                style={{ width: "100%", height: "100%", display: "block" }}
             />
         </div>
     );

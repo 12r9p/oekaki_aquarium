@@ -10,6 +10,8 @@ export interface WorldConfig {
   height: number;
   /** 接続済みクライアントが定義する「泳げるエリア」の一覧 */
   validZones: ValidZone[];
+  /** ユーザーが指定した進入禁止エリア (赤枠) */
+  forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
 }
 
 export interface ValidZone {
@@ -27,6 +29,7 @@ const world: WorldConfig = {
   width: DEFAULT_WORLD.width,
   height: DEFAULT_WORLD.height,
   validZones: [],
+  forbiddenZones: [],
 };
 
 /**
@@ -49,16 +52,15 @@ export function registerClientViewport(config: ClientConfig): void {
   } else {
     world.validZones.push(zone);
   }
+}
 
-  // 外接矩形でworld全体サイズを再計算
-  let maxX: number = DEFAULT_WORLD.width;
-  let maxY: number = DEFAULT_WORLD.height;
-  for (const z of world.validZones) {
-    maxX = Math.max(maxX, z.x + z.width);
-    maxY = Math.max(maxY, z.y + z.height);
-  }
-  world.width = maxX;
-  world.height = maxY;
+export function setWorldSize(width: number, height: number): void {
+  world.width = width;
+  world.height = height;
+}
+
+export function updateForbiddenZones(zones: { id: string; x: number; y: number; width: number; height: number }[]): void {
+  world.forbiddenZones = zones;
 }
 
 /** クライアントが切断したときに ValidZone を削除する */

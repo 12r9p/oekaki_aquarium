@@ -1,5 +1,5 @@
 import { createWsClient } from "../shared/useWs";
-import { STATE, DISPLAY_ID, updateStateVP } from "./state";
+import { STATE, DISPLAY_ID, updateStateVP, updateWorldSize } from "./state";
 import { 
   applyViewport, 
   drawTestPattern, 
@@ -23,9 +23,24 @@ export const ws = createWsClient(`display:${DISPLAY_ID}`);
 export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) {
   ws.onMessage((msg: WsServerMessage) => {
     // Viewport設定・更新
-    if (msg.event === "config" || msg.event === "update_viewport") {
+    if (msg.event === "config") {
+      updateStateVP(msg.viewport);
+      updateWorldSize(msg.worldW, msg.worldH);
+      applyViewport(app);
+      if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
+      return;
+    }
+    
+    if (msg.event === "update_viewport") {
       updateStateVP(msg.viewport);
       applyViewport(app);
+      return;
+    }
+
+    // World size更新
+    if (msg.event === "update_world_size") {
+      updateWorldSize(msg.width, msg.height);
+      if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
       return;
     }
 

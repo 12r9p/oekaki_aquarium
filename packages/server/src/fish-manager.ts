@@ -47,6 +47,14 @@ export function unlockPending(fishId: string): void {
   if (fish) fish.lockedBy = undefined;
 }
 
+/** 待機リストからの削除（拒否用） */
+export function removePendingFish(fishId: string): boolean {
+  const idx = pendingQueue.findIndex(f => f.id === fishId);
+  if (idx < 0) return false;
+  pendingQueue.splice(idx, 1);
+  return true;
+}
+
 // -------------------------------------------------------
 // ActivePool 操作
 // -------------------------------------------------------
@@ -100,6 +108,20 @@ export function setPinned(
   if (!fish) return false;
   fish.isPinned = isPinned;
   fish.pinnedLayerId = layerId;
+  return true;
+}
+
+/** 魚のプロパティを更新する */
+export function updateFishParams(
+  fishId: string,
+  updates: Partial<{ scale: number; speed: number; isPinned: boolean; pinnedLayerId: number }>
+): boolean {
+  const fish = activePool.get(fishId);
+  if (!fish) return false;
+  if (updates.scale !== undefined) fish.userParams.scale = updates.scale;
+  if (updates.speed !== undefined) fish.userParams.speed = updates.speed;
+  if (updates.isPinned !== undefined) fish.isPinned = updates.isPinned;
+  if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
   return true;
 }
 

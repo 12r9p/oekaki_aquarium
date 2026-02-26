@@ -46,3 +46,8 @@ export function updateStateVP(newVp: NonNullable<ClientConfig["viewport"]>) {
   STATE.scaleX = window.innerWidth / STATE.VP.width;
   STATE.scaleY = window.innerHeight / STATE.VP.height;
 }
+
+export function updateWorldSize(w: number, h: number) {
+  STATE.WORLD_W = w;
+  STATE.WORLD_H = h;
+}

@@ -1,11 +1,20 @@
 import type { ServerWebSocket } from "bun";
 import type { WsClientMessage, WsServerMessage, TestPattern, DisplayClientInfo, ClientConfig, WorldObject } from "@aquarium/shared";
-import { foodItems } from "./physics/boundaries";
 import { PHYSICS } from "@aquarium/shared";
+import { foodItems } from "./physics/boundaries";
+import { registerClientViewport, unregisterClient, setWorldSize, getWorld, updateForbiddenZones } from "./world";
+import { getAllActiveFish, getPendingQueue } from "./fish-manager";
 import { v4 as uuidv4 } from "uuid";
 
 // ============================================================
 // ws-handler.ts（Bun ネイティブ WebSocket 版）
+// ============================================================
+// グローバルな水槽背景状態（再起動でリセット）
+// ============================================================
+let currentBgUrl = "";
+
+// ============================================================
+// Store / State
 // ============================================================
 
 export interface ClientData {
@@ -136,10 +145,15 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
         };
         ws.data.viewport = vp;
         if (!savedVp) viewportStore.set(msg.uuid, vp); // 初回接続は保存
+        const w = getWorld();
         sendTo(ws, {
           event: "config",
           viewport: vp,
           debug: { showGrid: false, showId: false },
+          worldW: w.width,
+          worldH: w.height,
+          bgUrl: currentBgUrl,
+          forbiddenZones: w.forbiddenZones,
         });
       }
       // 初回接続: シーンを送信
@@ -172,6 +186,27 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
     case "pointer_move": {
       // 管理画面からのマウスポインター位置を全てのディスプレイに転送
       broadcastToDisplays({ event: "pointer_move", x: msg.x, y: msg.y });
+      break;
+    }
+    // @ts-ignore
+    case "update_world_size": {
+      // 既存のイベント互換用（使わない方針だが残しておく）
+      setWorldSize((msg as any).width, (msg as any).height);
+      pushClientListToManagers();
+      break;
+    }
+
+    case "update_world_config": {
+      // 管理画面から背景や禁止エリアが更新されたら全体へ通知
+      currentBgUrl = msg.bgUrl;
+      updateForbiddenZones(msg.forbiddenZones);
+      broadcastToAll({
+        event: "update_world_config",
+        bgUrl: currentBgUrl,
+        forbiddenZones: msg.forbiddenZones,
+      });
+      // 管理画面のstate_pushもトリガー
+      pushClientListToManagers();
       break;
     }
   }
@@ -248,14 +283,34 @@ export function sendTestPattern(pattern: TestPattern, targetUuid?: string): void
   pushClientListToManagers();
 }
 
-/** 接続クライアント情報を管理画面にプッシュ */
-export function pushClientListToManagers(): void {
+// --- 状態のブロードキャスト -----------------------------------------
+
+/** [ServerLoop] 全manageクライアントへ同期状態(state_push)を送る */
+export function pushStateToManagers(): void {
   const list = getDisplayClientInfoList();
-  const msg: WsServerMessage = { event: "client_list", clients: list };
+  const fish = getAllActiveFish();
+  const pending = getPendingQueue();
+  const w = getWorld();
+
+  const msg: WsServerMessage = {
+    event: "state_push",
+    clients: list,
+    activeFish: fish,
+    pendingFish: pending,
+    worldW: w.width,
+    worldH: w.height,
+    bgUrl: currentBgUrl,
+    forbiddenZones: w.forbiddenZones,
+  };
   const data = JSON.stringify(msg);
   for (const ws of sockets) {
     if (ws.data.clientType === "manage") ws.send(data);
   }
+}
+
+/** [Server => Manage] クライアントリストの再送 */
+export function pushClientListToManagers(): void {
+  pushStateToManagers();
 }
 
 /** クライアント情報リスト取得（APIエンドポイント用） */

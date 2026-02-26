@@ -26,43 +26,40 @@ export function applyBoundaries(fish: ActiveFish): void {
   const vel = fish.physics.vel;
   const speed = PHYSICS.BOIDS_MAX_SPEED * fish.physics.speedMultiplier;
 
-  // --- 1. Void からの押し戻し ---
-  if (!isInValidZone(pos.x, pos.y) && world.validZones.length > 0) {
-    const center = nearestValidZoneCenter(pos.x, pos.y);
-    const dx = center.x - pos.x;
-    const dy = center.y - pos.y;
-    const dist = Math.hypot(dx, dy);
-    if (dist > 0) {
-      vel.x += (dx / dist) * PHYSICS.WALL_FORCE * 2;
-      vel.y += (dy / dist) * PHYSICS.WALL_FORCE * 2;
-    }
-    return; // Void 内では壁反発以外の計算をスキップ
+  // --- 1. Void / 画面外 からの押し戻し ---
+  // 修正: まず水槽全体 (world.width x world.height) の境界で壁反発を行う
+  if (pos.x < PHYSICS.WALL_MARGIN) {
+    vel.x += PHYSICS.WALL_FORCE;
+  }
+  if (pos.x > world.width - PHYSICS.WALL_MARGIN) {
+    vel.x -= PHYSICS.WALL_FORCE;
+  }
+  if (pos.y < PHYSICS.WALL_MARGIN) {
+    vel.y += PHYSICS.WALL_FORCE;
+  }
+  if (pos.y > world.height - PHYSICS.WALL_MARGIN) {
+    vel.y -= PHYSICS.WALL_FORCE;
   }
 
-  // --- 2. 各 ValidZone の壁反発 ---
-  for (const zone of world.validZones) {
+  // --- 2. 進入禁止エリア (Forbidden Zones) での壁反発 ---
+  for (const fz of world.forbiddenZones) {
+    // 禁止エリアのマージン分拡張したBoundingBox内にいるか
     if (
-      pos.x < zone.x || pos.x > zone.x + zone.width ||
-      pos.y < zone.y || pos.y > zone.y + zone.height
-    ) continue;
+      pos.x > fz.x - PHYSICS.WALL_MARGIN && pos.x < fz.x + fz.width + PHYSICS.WALL_MARGIN &&
+      pos.y > fz.y - PHYSICS.WALL_MARGIN && pos.y < fz.y + fz.height + PHYSICS.WALL_MARGIN
+    ) {
+      // どの壁に近いかで反発方向を決める
+      const distL = Math.abs(pos.x - fz.x);
+      const distR = Math.abs(pos.x - (fz.x + fz.width));
+      const distT = Math.abs(pos.y - fz.y);
+      const distB = Math.abs(pos.y - (fz.y + fz.height));
+      const minDist = Math.min(distL, distR, distT, distB);
 
-    // 左壁
-    if (pos.x - zone.x < PHYSICS.WALL_MARGIN) {
-      vel.x += PHYSICS.WALL_FORCE;
+      if (minDist === distL) vel.x -= PHYSICS.WALL_FORCE * 1.5; // 左壁：左へ押し戻す
+      else if (minDist === distR) vel.x += PHYSICS.WALL_FORCE * 1.5; // 右壁：右へ押し戻す
+      else if (minDist === distT) vel.y -= PHYSICS.WALL_FORCE * 1.5; // 上壁：上へ押し戻す
+      else vel.y += PHYSICS.WALL_FORCE * 1.5; // 下壁：下へ押し戻す
     }
-    // 右壁
-    if (zone.x + zone.width - pos.x < PHYSICS.WALL_MARGIN) {
-      vel.x -= PHYSICS.WALL_FORCE;
-    }
-    // 上壁
-    if (pos.y - zone.y < PHYSICS.WALL_MARGIN) {
-      vel.y += PHYSICS.WALL_FORCE;
-    }
-    // 下壁（床）
-    if (zone.floorY - pos.y < PHYSICS.WALL_MARGIN) {
-      vel.y -= PHYSICS.WALL_FORCE;
-    }
-    break;
   }
 
   // 速度クランプ

@@ -11,6 +11,7 @@ import {
   getDisplayClientInfoList,
   updateDisplayViewport,
   sendTestPattern,
+  pushClientListToManagers,
   getScene,
   addSceneObject,
   updateSceneObject,
@@ -21,8 +22,9 @@ import { scanRoute } from "./routes/scan";
 import { pendingRoute, lockRoute, unlockRoute } from "./routes/pending";
 import { releaseRoute } from "./routes/release";
 import { pinRoute } from "./routes/pin";
-import { getAllActiveFish, removeFish } from "./fish-manager";
+import { getAllActiveFish, removeFish, updateFishParams, removePendingFish } from "./fish-manager";
 import { getPendingQueue } from "./fish-manager";
+import { getWorld } from "./world";
 
 // ============================================================
 // サーバーエントリーポイント（Bun 単一ポート統合版）
@@ -60,6 +62,23 @@ app.delete("/api/fish/all", (c) => {
 });
 app.delete("/api/fish/:id", (c) => {
   const ok = removeFish(c.req.param("id"));
+  pushClientListToManagers(); // 管理画面へ通知
+  return c.json({ success: ok });
+});
+
+// 魚のプロパティ更新
+app.put("/api/fish/:id", async (c) => {
+  const id = c.req.param("id");
+  const updates = await c.req.json();
+  const ok = updateFishParams(id, updates);
+  if (ok) pushClientListToManagers();
+  return c.json({ success: ok });
+});
+
+// 待機中（Pending）魚の削除
+app.delete("/api/pending/:id", (c) => {
+  const ok = removePendingFish(c.req.param("id"));
+  if (ok) pushClientListToManagers();
   return c.json({ success: ok });
 });
 
@@ -118,13 +137,16 @@ app.post("/api/upload-image", async (c) => {
 });
 
 // 管理画面用: 状態スナップショット
-app.get("/api/state", (c) =>
-  c.json({
+app.get("/api/state", (c) => {
+  const w = getWorld();
+  return c.json({
     clients:     getDisplayClientInfoList(),
     activeFish:  getAllActiveFish(),
     pendingFish: getPendingQueue(),
-  })
-);
+    worldW:      w.width,
+    worldH:      w.height,
+  });
+});
 
 app.get("/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
 
@@ -172,6 +194,7 @@ const server = Bun.serve({
     // MPA ルーティング（ビルド済みの場合）
     // パス → HTML ファイルにマッピング
     const mpaRoutes: Record<string, string> = {
+      "/":           "index.html",
       "/display":    "display.html",
       "/controller": "controller.html",
       "/guest":      "guest.html",
@@ -199,11 +222,6 @@ const server = Bun.serve({
     // ビルド済み assets（JS/CSS/images）の配信
     const assetFile = Bun.file(join(APP_DIR, url.pathname));
     if (await assetFile.exists()) return new Response(assetFile);
-
-    // ルートへのリダイレクト
-    if (url.pathname === "/") {
-      return new Response(null, { status: 302, headers: { Location: "/manage" } });
-    }
 
     return app.fetch(req);
   },

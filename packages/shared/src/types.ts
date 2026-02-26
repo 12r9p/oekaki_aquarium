@@ -148,10 +148,21 @@ export type WsClientMessage =
   /** 管理画面からの永続Viewport更新 / Display側のドラッグ確定時 */
   | { event: "update_viewport"; clientInfo: ClientConfig }
   /** 管理画面でマウスホバー中の座標（ワールド座標）を送信する */
-  | { event: "pointer_move"; x: number; y: number };
+  | { event: "pointer_move"; x: number; y: number }
+  // -------------------------
+  // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[] };
 
 export type WsServerMessage =
-  | { event: "config"; viewport: ClientConfig["viewport"]; debug: ClientConfig["debug"] }
+  | { 
+      event: "config"; 
+      viewport: ClientConfig["viewport"]; 
+      debug: ClientConfig["debug"]; 
+      worldW: number; 
+      worldH: number; 
+      bgUrl: string; 
+      forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
+    }
   | { event: "reload" }
   | { event: "fish_added"; fish: PendingFish }
   | { event: "fish_locked"; fishId: string; lockedBy: string }
@@ -159,19 +170,34 @@ export type WsServerMessage =
   /** 60fps フレームデータ（display クライアント専用） */
   | ({ event: "frame" } & UdpPacket)
   /** 管理画面向け状態スナップショット */
-  | { event: "state_push"; clients: unknown[]; activeFish: ActiveFish[]; pendingFish: PendingFish[] }
+  | { 
+      event: "state_push"; 
+      clients: DisplayClientInfo[]; 
+      activeFish: ActiveFish[]; 
+      pendingFish: PendingFish[]; 
+      worldW: number; 
+      worldH: number;
+      bgUrl: string;
+      forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
+    }
+  /** WebSocketによる背景 / 禁止エリア のブロードキャスト更新通知 */
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[] }
   /** display クライアントへテストパターン表示指示 */
   | { event: "test_pattern"; pattern: TestPattern; targetUuid?: string }
   /** display クライアントの Viewport を更新する */
   | { event: "update_viewport"; targetUuid: string; viewport: ClientConfig["viewport"] }
   /** 接続クライアント一覧を管理画面に push する */
   | { event: "client_list"; clients: DisplayClientInfo[] }
+  /** 管理画面へ水槽内の魚一覧をpushする */
+  | { event: "fish_list"; activeFish: ActiveFish[]; pendingFish: PendingFish[] }
   /** ワールドシーンオブジェクト一覧を全クライアントに push する */
   | { event: "scene_update"; objects: WorldObject[] }
   /** 管理画面がドラッグ中にdisplayへリアルタイムプレビューを送る（targetUuidのdisplayのみに送信される） */
   | { event: "viewport_preview"; viewport: ClientConfig["viewport"] }
   /** 管理画面からのマウスポインタ位置をディスプレイへ伝える */
-  | { event: "pointer_move"; x: number; y: number };
+  | { event: "pointer_move"; x: number; y: number }
+  /** 全クライアント向けWorld サイズ更新 */
+  | { event: "update_world_size"; width: number; height: number };
 
 /** テストパターンの種類 */
 export type TestPattern = "off" | "grid" | "colorbars" | "white" | "black" | "crosshair" | "worldmap" | "calibration";
