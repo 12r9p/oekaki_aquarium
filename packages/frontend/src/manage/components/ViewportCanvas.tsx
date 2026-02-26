@@ -1,5 +1,5 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import type { DisplayClientInfo } from "@aquarium/shared";
+import type { DisplayClientInfo, AppLayerConfig } from "@aquarium/shared";
 import { ws } from "../main";
 
 interface ViewportCanvasProps {
@@ -23,6 +23,7 @@ interface ViewportCanvasProps {
     onUpdateForbiddenZones: (zones: { id: string; x: number; y: number; width: number; height: number }[]) => void;
     spawnPoints: { id: string; x: number; y: number }[];
     onUpdateSpawnPoints: (points: { id: string; x: number; y: number }[]) => void;
+    layers: AppLayerConfig[];
 }
 
 // ハンドルの種類（8点＋ボディ移動＋Worldリサイズ用）
@@ -55,7 +56,7 @@ export function ViewportCanvas({
     selected, setSelected, hoveredRef, setHoveredUI,
     undoStackRef, redoStackRef, snapshotViewports, onSaveViewport,
     arLocked, sendRateSetting, setWorldSize, forbiddenZones, onUpdateForbiddenZones,
-    spawnPoints, onUpdateSpawnPoints
+    spawnPoints, onUpdateSpawnPoints, layers
 }: ViewportCanvasProps): React.ReactElement {
 
     const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -72,6 +73,12 @@ export function ViewportCanvas({
     const pointerThrottleRef = useRef<number>(0);
     const snapGuides = useRef<{ x?: number; y?: number }>({});
     const pendingWorldSizeRef = useRef<{ w: number, h: number } | null>(null);
+
+    // キャンバス内オブジェクトのローカル選択状態 (FZやSPなど)
+    const [selectedLocalId, setSelectedLocalId] = useState<string | null>(null);
+
+    // ImageLayerのローカル画像キャッシュ
+    const imgCache = useRef<Map<string, HTMLImageElement>>(new Map());
 
     const canvasSize = useCallback(() => {
         const c = canvasRef.current;
@@ -107,6 +114,35 @@ export function ViewportCanvas({
                 ctx.fillRect(cx2 + CHECKER, cy2 + CHECKER, CHECKER, CHECKER);
             }
         }
+
+        // 画像レイヤーのプレビュー描画 (背景等)
+        layers.forEach(layer => {
+            if (layer.type === "image" && layer.url) {
+                let img = imgCache.current.get(layer.url);
+                if (!img) {
+                    img = new Image();
+                    img.crossOrigin = "anonymous";
+                    img.src = layer.url;
+                    img.onload = () => { if (rafRef.current) requestAnimationFrame(draw); };
+                    imgCache.current.set(layer.url, img);
+                }
+                if (img.complete && img.naturalWidth > 0) {
+                    ctx.save();
+                    const wDraw = pendingWorldSizeRef.current?.w ?? worldW;
+                    const hDraw = pendingWorldSizeRef.current?.h ?? worldH;
+                    const tl = worldToCanvas(0, 0);
+                    const br = worldToCanvas(wDraw, hDraw);
+                    const ww = br.x - tl.x, wh = br.y - tl.y;
+
+                    ctx.globalAlpha = 0.3; // プレビューなので半透明
+                    ctx.beginPath();
+                    ctx.rect(tl.x, tl.y, ww, wh);
+                    ctx.clip(); // ワールド枠内のみに描画
+                    ctx.drawImage(img, tl.x, tl.y, ww, wh);
+                    ctx.restore();
+                }
+            }
+        });
 
         // ワールド矩形
         const wDraw = pendingWorldSizeRef.current?.w ?? worldW;
@@ -272,7 +308,7 @@ export function ViewportCanvas({
             const p = worldToCanvas(z.x, z.y);
             const p2 = worldToCanvas(z.x + z.width, z.y + z.height);
             const dw = p2.x - p.x, dh = p2.y - p.y;
-            const isSel = dragRef.current?.uuid === z.id;
+            const isSel = dragRef.current?.uuid === z.id || selectedLocalId === z.id;
 
             ctx.fillStyle = "rgba(220, 38, 38, 0.15)"; // red-600
             ctx.fillRect(p.x, p.y, dw, dh);
@@ -302,7 +338,7 @@ export function ViewportCanvas({
         // 放流ポイント描画
         spawnPoints.forEach(sp => {
             const p = worldToCanvas(sp.x, sp.y);
-            const isSel = dragRef.current?.uuid === sp.id;
+            const isSel = dragRef.current?.uuid === sp.id || selectedLocalId === sp.id;
 
             ctx.fillStyle = isSel ? "#0284c7" : "#38bdf8"; // sky-600 vs sky-400
             ctx.beginPath();
@@ -339,7 +375,7 @@ export function ViewportCanvas({
                 ctx.fillText(f.i, pt.x + 8, pt.y);
             });
         }
-    }, [selected, worldW, worldH, canvasSize, worldToCanvas, forbiddenZones, spawnPoints, pendingWorldSizeRef]);
+    }, [selected, selectedLocalId, worldW, worldH, canvasSize, worldToCanvas, forbiddenZones, spawnPoints, pendingWorldSizeRef, layers]);
 
     drawRef.current = draw;
 
@@ -384,6 +420,26 @@ export function ViewportCanvas({
         return () => window.removeEventListener("aquarium_frame", onFrame);
     }, [draw]);
 
+    // Delete / Backspace キーボード操作
+    useEffect(() => {
+        const onKeyDown = (e: KeyboardEvent) => {
+            if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
+            if (e.key === "Backspace" || e.key === "Delete") {
+                if (selectedLocalId) {
+                    if (forbiddenZones.find(z => z.id === selectedLocalId)) {
+                        onUpdateForbiddenZones(forbiddenZones.filter(z => z.id !== selectedLocalId));
+                        setSelectedLocalId(null);
+                    } else if (spawnPoints.find(p => p.id === selectedLocalId)) {
+                        onUpdateSpawnPoints(spawnPoints.filter(p => p.id !== selectedLocalId));
+                        setSelectedLocalId(null);
+                    }
+                }
+            }
+        };
+        window.addEventListener("keydown", onKeyDown);
+        return () => window.removeEventListener("keydown", onKeyDown);
+    }, [selectedLocalId, forbiddenZones, spawnPoints, onUpdateForbiddenZones, onUpdateSpawnPoints]);
+
     // マウスイベント処理
     const getCanvasPt = useCallback((evtX: number, evtY: number) => {
         const rect = canvasRef.current!.getBoundingClientRect();
@@ -408,6 +464,7 @@ export function ViewportCanvas({
             onUpdateForbiddenZones([...forbiddenZones, newZone]);
             dragRef.current = { handle: "fz_br", uuid: newZone.id, startMouseX: mx, startMouseY: my, startRect: { ...newZone } };
             setSelected(null);
+            setSelectedLocalId(newZone.id);
             return;
         }
 
@@ -457,6 +514,7 @@ export function ViewportCanvas({
 
                 dragRef.current = { handle: "fz_move", uuid: fz.id, startMouseX: mx, startMouseY: my, startRect: { ...fz } };
                 setSelected(null);
+                setSelectedLocalId(fz.id);
                 return;
             }
         }
@@ -472,6 +530,7 @@ export function ViewportCanvas({
                 }
                 dragRef.current = { handle: `sp_move` as HandleType, uuid: sp.id, startMouseX: mx, startMouseY: my, startRect: { ...sp, width: 0, height: 0, scale: 1 } };
                 setSelected(null);
+                setSelectedLocalId(sp.id);
                 return;
             }
         }
@@ -525,8 +584,10 @@ export function ViewportCanvas({
                 handle: "move", uuid: hitBody, startMouseX: mx, startMouseY: my,
                 startRect: { ...t.viewport! }
             };
+            setSelectedLocalId(null);
         } else {
             setSelected(null);
+            setSelectedLocalId(null);
         }
     }, [selected, displaysRef, getCanvasPt, canvasToWorld, snapshotViewports, setSelected, undoStackRef, redoStackRef, forbiddenZones, onUpdateForbiddenZones, spawnPoints, onUpdateSpawnPoints, worldW, worldH]);
 

@@ -408,6 +408,7 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     onUpdateForbiddenZones={onUpdateForbiddenZones}
                     spawnPoints={spawnPoints}
                     onUpdateSpawnPoints={onUpdateSpawnPoints}
+                    layers={layers}
                 />
             </div>
 

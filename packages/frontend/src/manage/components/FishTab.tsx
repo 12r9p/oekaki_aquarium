@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import type { ActiveFish } from "@aquarium/shared";
+import { LAYER_CONFIG } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Copy, Trash2, Pin } from "lucide-react";
@@ -34,8 +35,41 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     };
 
     return (
-        <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">水槽の魚一覧 ({activeFish.length}匹)</h2>
+        <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col gap-6">
+            <div className="flex items-center justify-between">
+                <h2 className="text-xl font-bold text-slate-800">水槽の魚一覧 ({activeFish.length}匹)</h2>
+            </div>
+
+            {/* --- レイヤー所属状況の視覚化 --- */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <h3 className="text-sm font-bold text-slate-700 mb-3">レイヤーの混雑状況 (自動押し出し)</h3>
+                <div className="flex flex-col gap-3">
+                    {LAYER_CONFIG.map((conf, idx) => {
+                        const count = activeFish.filter(f => !f.isPinned && f.layerIndex === idx).length;
+                        const max = conf.maxCount;
+                        const ratio = Math.min(count / max, 1);
+                        const isFull = count >= max;
+                        return (
+                            <div key={conf.id} className="flex items-center gap-3">
+                                <div className="w-16 text-[11px] font-bold text-slate-500 text-right mt-0.5">Lyr {conf.id}</div>
+                                <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200 outline outline-1 outline-white mt-1">
+                                    <div
+                                        className={`absolute top-0 left-0 h-full transition-all duration-300 ${isFull ? "bg-amber-400" : "bg-emerald-400"}`}
+                                        style={{ width: `${ratio * 100}%` }}
+                                    />
+                                </div>
+                                <div className={`w-12 text-xs font-mono text-right mt-0.5 ${isFull ? "text-amber-600 font-bold" : "text-slate-500"}`}>
+                                    {count}/{max}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+                <div className="mt-3 text-[10px] text-slate-400 leading-snug">
+                    ※最前面(Lyr0)がいっぱいになると、順次奥のレイヤーへ押し出されます。ピン留め(固定)された魚はこの自動計算グラフの「定員({LAYER_CONFIG.reduce((acc, c) => acc + c.maxCount, 0)}匹)」からは除外されます。
+                </div>
+            </div>
+
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <Table>
                     <TableHeader className="bg-slate-50">
