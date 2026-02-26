@@ -145,6 +145,8 @@ export type WsClientMessage =
   | { event: "spawn_food"; x: number; y: number }
   /** 管理画面がドラッグ中にリアルタイムでdisplayへViewportを仮送信する */
   | { event: "viewport_preview"; displayUuid: string; viewport: ClientConfig["viewport"] }
+  /** 管理画面からの永続Viewport更新 / Display側のドラッグ確定時 */
+  | { event: "update_viewport"; clientInfo: ClientConfig }
   /** 管理画面でマウスホバー中の座標（ワールド座標）を送信する */
   | { event: "pointer_move"; x: number; y: number };
 

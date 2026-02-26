@@ -1,0 +1,48 @@
+import type { ClientConfig } from "@aquarium/shared";
+
+// ============================================================
+// display/state.ts
+// Displayアプリ全体のグローバルステート管理
+// ============================================================
+
+const params = new URLSearchParams(location.search);
+
+function getDisplayId(): string {
+  const fromUrl = params.get("id");
+  if (fromUrl) {
+    localStorage.setItem("display-id", fromUrl);
+    return fromUrl;
+  }
+  const saved = localStorage.getItem("display-id");
+  if (saved) return saved;
+  const newId = `disp-${Math.random().toString(36).slice(2, 8)}`;
+  localStorage.setItem("display-id", newId);
+  return newId;
+}
+
+export const DISPLAY_ID = getDisplayId();
+
+export const STATE = {
+  // 初期Viewport (後方互換でURLパラメータも読む)
+  VP: {
+    x: parseInt(params.get("vx") ?? "0"),
+    y: parseInt(params.get("vy") ?? "0"),
+    width: parseInt(params.get("vw") ?? String(window.screen.width)),
+    height: parseInt(params.get("vh") ?? String(window.screen.height)),
+    scale: parseFloat(params.get("scale") ?? "1"),
+  } as NonNullable<ClientConfig["viewport"]>,
+
+  // 物理画面への動的スケール
+  scaleX: 1,
+  scaleY: 1,
+
+  // URLから取得するワールドサイズ (worldmap用)
+  WORLD_W: parseInt(params.get("worldW") ?? "4000"),
+  WORLD_H: parseInt(params.get("worldH") ?? "2000"),
+};
+
+export function updateStateVP(newVp: NonNullable<ClientConfig["viewport"]>) {
+  STATE.VP = { ...newVp };
+  STATE.scaleX = window.innerWidth / STATE.VP.width;
+  STATE.scaleY = window.innerHeight / STATE.VP.height;
+}
