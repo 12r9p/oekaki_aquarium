@@ -1,0 +1,24 @@
+{
+  "name": "@aquarium/server",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun run src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@aquarium/shared": "workspace:*",
+    "hono": "^4.4.0",
+    "ws": "^8.17.0",
+    "uuid": "^10.0.0",
+    "sharp": "^0.33.4"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.10",
+    "@types/uuid": "^10.0.0",
+    "@types/node": "^20.14.0",
+    "@types/bun": "latest",
+    "typescript": "^5.3.3"
+  }
+}

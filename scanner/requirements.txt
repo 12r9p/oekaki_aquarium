@@ -1,0 +1,4 @@
+rembg==2.0.56
+watchdog==4.0.1
+requests==2.32.3
+Pillow==10.4.0

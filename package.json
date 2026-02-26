@@ -1,0 +1,13 @@
+{
+  "name": "oekaki-aquarium",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "dev:server":   "bun run packages/server/src/index.ts",
+    "dev:frontend": "cd packages/frontend && bun run dev",
+    "dev":          "bun run dev:server & bun run dev:frontend",
+    "build":        "cd packages/frontend && bun run build",
+    "typecheck":    "bun run --filter '*' typecheck"
+  }
+}
