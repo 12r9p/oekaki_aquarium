@@ -58,6 +58,25 @@ async function main(): Promise<void> {
   
   // 描画ループ処理 (Pixi.js ticker でのLerpなど)
   setupRenderLoop(app, fishMap);
+
+  // Screen Wake Lock: スクリーンのスリープを防ぐ（Display専用ページでは常に有効に）
+  // visibilitychange 時に再取得することで、タブ切り替え後も維持する
+  if ("wakeLock" in navigator) {
+    let wakeLock: WakeLockSentinel | null = null;
+    const acquireWakeLock = async () => {
+      try {
+        wakeLock = await (navigator as Navigator & { wakeLock: { request: (type: string) => Promise<WakeLockSentinel> } }).wakeLock.request("screen");
+        console.log("[Display] Screen Wake Lock acquired");
+      } catch (e) {
+        console.warn("[Display] Wake Lock failed:", e);
+      }
+    };
+    await acquireWakeLock();
+    // タブが非アクティブ→アクティブに戻ったときに再取得する
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState === "visible") void acquireWakeLock();
+    });
+  }
 }
 
 // 起動

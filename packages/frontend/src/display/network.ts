@@ -1,5 +1,5 @@
 import { createWsClient } from "../shared/useWs";
-import { STATE, DISPLAY_ID, updateStateVP, updateWorldSize } from "./state";
+import { STATE, DISPLAY_ID, updateStateVP, updateWorldSize, updateLayers } from "./state";
 import { 
   applyViewport, 
   drawTestPattern, 
@@ -26,6 +26,15 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
     if (msg.event === "config") {
       updateStateVP(msg.viewport);
       updateWorldSize(msg.worldW, msg.worldH);
+      if (msg.layers) updateLayers(msg.layers);
+      applyViewport(app);
+      if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
+      return;
+    }
+    
+    // 背景・レイヤー・ワールド設定更新
+    if (msg.event === "update_world_config") {
+      if (msg.layers) updateLayers(msg.layers);
       applyViewport(app);
       if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
       return;
@@ -48,6 +57,8 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
     if (msg.event === "viewport_preview") {
       updateStateVP(msg.viewport);
       applyViewport(app, true);
+      // WorldMap表示中はViewport変更に合わせて即座に再描画する
+      if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
       return;
     }
 
@@ -115,6 +126,10 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
           e.targetX = screenX; e.targetY = screenY;
           e.targetRotation = fd.r; e.targetScale = fishScale;
           e.targetAlpha = fd.o; e.targetZIndex = fd.z;
+          // テクスチャが未適用（プレースホルダーのまま）の場合はURLを再適用
+          if (fd.u && e.sprite.texture.label !== fd.u) {
+            updateFishTexture(fd.i, fd.u, fishMap);
+          }
         }
       }
       for (const id of fishMap.keys()) {

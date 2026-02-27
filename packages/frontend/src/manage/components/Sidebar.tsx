@@ -12,9 +12,15 @@ import {
     AccordionTrigger,
 } from "@/components/ui/accordion";
 import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
     Monitor, MonitorPlay, Settings, Layers, Trash2, Eye, EyeOff, PlusCircle,
     ImageIcon, KeySquare, Upload, HelpCircle, Ban, Sparkles, AlertTriangle, Play, ChevronUp, ChevronDown, CheckCircle2,
-    LayoutTemplate, MonitorSmartphone, LocateFixed, Map as MapIcon, Target, Palette, LayoutGrid, MonitorOff, List
+    LayoutTemplate, MonitorSmartphone, LocateFixed, Map as MapIcon, Target, Palette, LayoutGrid, MonitorOff, List, Copy, ExternalLink, WifiOff
 } from "lucide-react";
 
 interface SidebarProps {
@@ -61,6 +67,7 @@ export function Sidebar({
         const reader = new FileReader();
         reader.onload = async (ev) => {
             const dataUrl = ev.target?.result as string;
+            if (!dataUrl) return;
             try {
                 const res = await fetch("/api/upload-image", {
                     method: "POST",
@@ -69,7 +76,13 @@ export function Sidebar({
                 });
                 const data = await res.json();
                 if (data.success && data.url) {
-                    onUpdateLayers(layers.map(l => l.id === layerId ? { ...l, url: data.url, name: file.name } : l));
+                    const img = new Image();
+                    img.onload = () => {
+                        const w = img.naturalWidth || 800;
+                        const h = img.naturalHeight || 600;
+                        onUpdateLayers(layers.map(l => l.id === layerId ? { ...l, url: data.url, name: file.name, x: 0, y: 0, width: w, height: h, aspectRatioLocked: true } : l));
+                    };
+                    img.src = dataUrl;
                 }
             } catch (err) {
                 console.error(err);
@@ -108,9 +121,9 @@ export function Sidebar({
                                 <AccordionItem
                                     key={d.uuid}
                                     value={d.uuid}
-                                    className={`border border-slate-200 rounded-lg overflow-hidden transition-all shadow-sm ${isSelected ? 'ring-2 ring-emerald-500 ring-offset-1' : 'hover:border-slate-300'}`}
+                                    className={`border rounded-lg overflow-hidden transition-all shadow-sm ${d.disconnectedAt ? 'border-rose-300 bg-rose-50' : (isSelected ? 'border-emerald-500 ring-2 ring-emerald-500 ring-offset-1' : 'border-slate-200 hover:border-slate-300')}`}
                                 >
-                                    <AccordionTrigger className={`px-4 py-3 hover:no-underline hover:bg-slate-50 ${isSelected ? 'bg-emerald-50/50' : 'bg-white'}`}>
+                                    <AccordionTrigger className={`px-4 py-3 hover:no-underline ${d.disconnectedAt ? 'hover:bg-rose-100 bg-rose-50' : (isSelected ? 'bg-emerald-50/50' : 'bg-white hover:bg-slate-50')}`}>
                                         <div className="flex flex-col items-start gap-1 w-full text-left">
                                             <div className="flex items-center gap-2 font-mono text-xs text-slate-700 font-semibold w-full pr-4 truncate">
                                                 <div className={`w-2 h-2 rounded-full flex-shrink-0 ${isConfigured ? 'bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]' : 'bg-amber-400 shadow-[0_0_6px_rgba(251,191,36,0.5)]'}`} />
@@ -135,12 +148,38 @@ export function Sidebar({
                                                     <span className="font-mono">{d.screenW}×{d.screenH}</span>
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-slate-400 mb-0.5 uppercase tracking-wide text-[10px]">Ping</span>
-                                                    <span className="font-mono text-emerald-600 flex items-center gap-1">
-                                                        <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" /> &lt;1ms
+                                                    <span className="font-semibold text-slate-400 mb-0.5 uppercase tracking-wide text-[10px]">Ping / Status</span>
+                                                    <span className={`font-mono flex items-center gap-1 ${d.disconnectedAt ? 'text-rose-500' : 'text-emerald-600'}`}>
+                                                        <div className={`w-1.5 h-1.5 rounded-full ${d.disconnectedAt ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
+                                                        {d.disconnectedAt ? "通信切断中" : (d.ping !== undefined ? `${Math.max(0, d.ping)}ms` : "<1ms")}
                                                     </span>
                                                 </div>
                                             </div>
+
+                                            {/* Viewport Editor */}
+                                            {vp && (
+                                                <div className="flex flex-col gap-2 p-2.5 rounded border border-slate-200 bg-white shadow-sm">
+                                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Viewport Manual Edit</div>
+                                                    <div className="grid grid-cols-4 gap-2">
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[9px] text-slate-500">X</span>
+                                                            <Input type="number" value={Math.round(vp.x)} onChange={e => onSaveViewport(d.uuid, { ...vp, x: Number(e.target.value) })} className="h-6 text-xs px-1.5 font-mono" />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[9px] text-slate-500">Y</span>
+                                                            <Input type="number" value={Math.round(vp.y)} onChange={e => onSaveViewport(d.uuid, { ...vp, y: Number(e.target.value) })} className="h-6 text-xs px-1.5 font-mono" />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[9px] text-slate-500">Width</span>
+                                                            <Input type="number" value={Math.round(vp.width)} onChange={e => onSaveViewport(d.uuid, { ...vp, width: Number(e.target.value) })} className="h-6 text-xs px-1.5 font-mono" />
+                                                        </div>
+                                                        <div className="flex flex-col gap-1">
+                                                            <span className="text-[9px] text-slate-500">Height</span>
+                                                            <Input type="number" value={Math.round(vp.height)} onChange={e => onSaveViewport(d.uuid, { ...vp, height: Number(e.target.value) })} className="h-6 text-xs px-1.5 font-mono" />
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
 
                                             {/* Individual Pattern Control */}
                                             <div>
@@ -167,13 +206,25 @@ export function Sidebar({
                     </Accordion>
 
                     <div className="mt-4 flex flex-col gap-2 border-t border-slate-100 pt-4">
-                        <Button
-                            variant="outline"
-                            className="w-full justify-start text-xs h-8 font-semibold text-slate-600"
-                            onClick={() => window.open("/display", "_blank")}
-                        >
-                            <Monitor className="w-4 h-4 mr-2" /> 仮想モニターを追加
-                        </Button>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" className="w-full justify-start text-xs h-8 font-semibold text-slate-600">
+                                    <Monitor className="w-4 h-4 mr-2" /> 仮想モニターを追加
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start" className="w-56">
+                                <DropdownMenuItem onClick={() => {
+                                    const url = `${window.location.origin}/display`;
+                                    navigator.clipboard.writeText(url);
+                                    alert(`コピーしました: ${url}`);
+                                }}>
+                                    <Copy className="w-4 h-4 mr-2" /> URLをクリップボードにコピー
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => window.open("/display", "_blank")}>
+                                    <ExternalLink className="w-4 h-4 mr-2" /> 新しいタブで開く
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                         <Button
                             variant="outline"
                             className="w-full justify-start text-xs h-8 font-semibold text-rose-600 border-rose-200 hover:bg-rose-50"
@@ -190,16 +241,17 @@ export function Sidebar({
                         </Button>
                         <Button
                             variant="outline"
-                            className="w-full justify-start text-xs h-8 font-semibold text-sky-600 border-sky-200 hover:bg-sky-50"
+                            disabled={spawnPoints.length >= 1}
+                            className="w-full justify-start text-xs h-8 font-semibold text-sky-600 border-sky-200 hover:bg-sky-50 disabled:bg-slate-50 disabled:text-slate-400 disabled:border-slate-200"
                             onClick={() => {
                                 const newId = "sp_" + Date.now();
-                                onUpdateSpawnPoints([...spawnPoints, {
+                                onUpdateSpawnPoints([{
                                     id: newId,
                                     x: worldW / 2, y: worldH / 2
                                 }]);
                             }}
                         >
-                            <Sparkles className="w-4 h-4 mr-2" /> 放流ポイントを追加
+                            <Sparkles className="w-4 h-4 mr-2" /> {spawnPoints.length >= 1 ? "放流ポイント (配置済み)" : "放流ポイントを追加"}
                         </Button>
                     </div>
                 </TabsContent>
@@ -326,6 +378,19 @@ export function Sidebar({
                                                         <input type="file" accept="image/png, image/jpeg, image/gif, image/webp" className="absolute inset-0 opacity-0 cursor-pointer" onChange={e => handleFileUpload(e, layer.id)} />
                                                     </Button>
                                                 </div>
+
+                                                <span className="text-slate-500 text-[10px] font-mono tracking-wider">ASPECT RATIO</span>
+                                                <div className="flex items-center gap-2 h-7" onClick={e => e.stopPropagation()}>
+                                                    <label className="flex items-center gap-1.5 cursor-pointer text-xs">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={layer.aspectRatioLocked || false}
+                                                            onChange={e => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, aspectRatioLocked: e.target.checked } : l))}
+                                                            className="form-checkbox h-3.5 w-3.5 text-sky-500 rounded-sm border-slate-300"
+                                                        />
+                                                        比率を固定してリサイズ
+                                                    </label>
+                                                </div>
                                             </>
                                         )}
                                     </div>
@@ -354,9 +419,7 @@ export function Sidebar({
                                 <Input id="world-height" type="number" min={100} value={worldH} onChange={e => onUpdateWorldSize(worldW, Number(e.target.value) || 100)} className="font-mono bg-white text-slate-800 h-8 focus:ring-1 focus:ring-sky-500" />
                             </div>
                         </div>
-                        <div className="flex flex-col gap-1.5 mt-2 p-3 bg-amber-50 text-amber-600 rounded text-xs border border-amber-200">
-                            <strong>※ 注意:</strong> 以前の単一 bgUrl 設定は「レイヤータブ」へ統合されました。背景画像の変更はレイヤータブにて「画像レイヤー」を追加して設定してください。
-                        </div>
+
                     </div>
 
                     {/* Sync Rate Setting */}

@@ -3,9 +3,40 @@
 // ============================================================
 
 // -------------------------------------------------------
-// 魚の挙動タイプ
+// PNG tEXt チャンクに埋め込む魚メタデータ
 // -------------------------------------------------------
-export type FishType = "swimmer" | "looper" | "anchor";
+export interface FishMeta {
+  /** フォーマットバージョン (将来互換性のため) */
+  version: number;
+  /** 作成者名 */
+  author: string;
+  /** 泳ぎ方タイプ */
+  type: FishType;
+  /** 速度倍率 (1.0 = 標準) */
+  speed: number;
+  /** 表示スケール (1.0 = 標準) */
+  scale: number;
+  /** レイヤー固定 ID (null = 固定なし) */
+  pinnedLayerId: number | null;
+  /** タグ */
+  tags: string[];
+  /** アーカイブ状態 */
+  isArchived?: boolean;
+}
+
+// -------------------------------------------------------
+// 魚の挙動タイプ (= 動きプリセット)
+// -------------------------------------------------------
+/** 現行も互换のために残す; swimmer=school, looper=tuna のエイリアス */
+export type FishType =
+  | "swimmer"    // @deprecated → school
+  | "looper"     // @deprecated → tuna
+  | "anchor"     // 床固定（海草・サンゴ等）
+  | "tuna"       // マグロ: 高速直線往復、絶対止まらない
+  | "school"     // イワシ群れ: Boids群れ（横バイアス・縦抑制）
+  | "squid"      // イカ: ホバリング＋Sin波パルス推進
+  | "jellyfish"  // クラゲ: 締め縮めパルス上下浮遊＋横流れ
+  | "shark";     // サメ: 大弧単独回遊
 
 // -------------------------------------------------------
 // 放流時に iPad から送られる設定データ
@@ -15,6 +46,10 @@ export interface FishConfig {
   type: FishType;
   /** サーバーの静的配信 URL: http://server/images/xxx.png */
   textureUrl: string;
+  /** 作成者名（PNGメタデータから自動取得） */
+  author?: string;
+  /** PNG tEXt チャンクから読み出したメタデータ（参考用） */
+  fishMeta?: FishMeta;
   userParams: {
     /** 表示スケール倍率（ユーザー指定の "大きさ"） */
     scale: number;
@@ -112,10 +147,15 @@ export interface AppLayerConfig {
   id: string;        // UUID
   name: string;      // 表示名
   type: AppLayerType;
-  url?: string;      // 画像の場合のURL
+  url?: string;      // image用
+  x?: number;        // 画像レイヤーのワールドX座標 (未指定時は 0)
+  y?: number;        // 画像レイヤーのワールドY座標 (未指定時は 0)
+  width?: number;    // 画像レイヤーの幅 (未指定時は WorldW)
+  height?: number;   // 画像レイヤーの高さ (未指定時は WorldH)
   zIndex: number;    // Z-Index（大きいほど手前）
   visible: boolean;  // 表示・非表示
   opacity: number;   // 不透明度 (0.0 ~ 1.0)
+  aspectRatioLocked?: boolean; // 画像レイヤーの縦横比を固定するか
 }
 
 // -------------------------------------------------------
@@ -137,7 +177,7 @@ export interface UdpFishData {
   x: number;
   /** グローバル Y 座標 */
   y: number;
-  /** 回転角（ラジアン） */
+  /** 回転角（ラジアン） — Y成分を抑制済みの連動角 */
   r: number;
   /** スケール（レイヤー補正済み） */
   s: number;
@@ -147,6 +187,8 @@ export interface UdpFishData {
   z: number;
   /** テクスチャ URL (任意) */
   u?: string;
+  /** X方向速度符号 — 負なら左向き、フロント側左右反転用 */
+  vx?: number;
 }
 
 export interface UdpEvent {
@@ -235,6 +277,10 @@ export interface DisplayClientInfo {
   /** ブラウザ表示領域（ARロック計算に使用） */
   screenW: number;
   screenH: number;
+  /** Ping値（直近のHeartbeatからの経過時間等） */
+  ping?: number;
+  /** 切断された時刻（ミリ秒）: 存在する場合は切断状態（猶予期間中） */
+  disconnectedAt?: number;
 }
 
 // -------------------------------------------------------

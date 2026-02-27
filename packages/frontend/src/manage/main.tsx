@@ -35,9 +35,10 @@ function ManageApp(): React.ReactElement {
     // 新規追加機能: 送信レート設定
     const [sendRateSetting, setSendRateSetting] = useState(33); // プレビュー送信等のレート(ms), 30fps程度;
 
-    // トーストメッセージ
     const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
     const toastIdCounter = useRef(0);
+    // 全魚削除の確認モード
+    const [confirmAllFishDelete, setConfirmAllFishDelete] = useState(false);
 
     const showAlert = (msg: string): void => {
         const id = toastIdCounter.current++;
@@ -80,9 +81,13 @@ function ManageApp(): React.ReactElement {
             } else if (msg.event === "update_world_size") {
                 setWorldW(msg.width);
                 setWorldH(msg.height);
+            } else if (msg.event === "frame") {
+                // ViewportCanvas のリアルタイム描画用に window に保持
+                (window as any).__lastFrame = msg;
             }
         });
     }, []);
+
 
     // 定期ポーリング（バックアップ）
     const poll = useCallback(async () => {
@@ -141,9 +146,10 @@ function ManageApp(): React.ReactElement {
     };
 
     const removeAllFish = async (): Promise<void> => {
-        if (!confirm("全ての魚を削除しますか？")) return;
+        setConfirmAllFishDelete(false);
         await fetch("/api/fish/all", { method: "DELETE" });
         void poll();
+        showAlert("全ての魚を削除しました");
     };
 
     const addDemoFish = async (preset: "swimmer" | "looper" | "anchor" = "swimmer"): Promise<void> => {
@@ -409,7 +415,16 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     spawnPoints={spawnPoints}
                     onUpdateSpawnPoints={onUpdateSpawnPoints}
                     layers={layers}
+                    onUpdateLayers={onUpdateLayers}
                     activeLayerId={activeLayerId}
+                    activeFish={state.activeFish}
+                    onMoveFish={async (fishId, x, y) => {
+                        await fetch(`/api/fish/${encodeURIComponent(fishId)}/position`, {
+                            method: "PUT",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ x, y }),
+                        });
+                    }}
                 />
             </div>
 

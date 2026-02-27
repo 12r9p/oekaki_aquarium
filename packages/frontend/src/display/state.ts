@@ -52,3 +52,7 @@ export function updateWorldSize(w: number, h: number) {
   STATE.WORLD_W = w;
   STATE.WORLD_H = h;
 }
+
+export function updateLayers(layers: AppLayerConfig[]) {
+  STATE.layers = [...layers];
+}

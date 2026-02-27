@@ -12,12 +12,21 @@ export async function releaseRoute(c: Context): Promise<Response> {
     return c.json({ error: "Invalid fish config" }, 400);
   }
 
-  // 放流時のスポーン位置: 最初の ValidZone の左端中央付近
+  // 放流時のスポーン位置: 設定された放流ポイントがあればそこを採用、無ければValidZoneの左端中央付近
   const world = getWorld();
-  const zone = world.validZones[0];
-  const spawnPos = zone
-    ? { x: zone.x + 100, y: zone.y + zone.height * 0.5 }
-    : { x: 200, y: 400 };
+  let spawnPos = { x: 200, y: 400 };
+
+  if (world.spawnPoints && world.spawnPoints.length > 0) {
+    const sp = world.spawnPoints[Math.floor(Math.random() * world.spawnPoints.length)];
+    // ばらつきを持たせるために少しランダムを加える
+    spawnPos = { 
+      x: sp.x + (Math.random() - 0.5) * 40, 
+      y: sp.y + (Math.random() - 0.5) * 40 
+    };
+  } else if (world.validZones.length > 0) {
+    const zone = world.validZones[0];
+    spawnPos = { x: zone.x + 100, y: zone.y + zone.height * 0.5 };
+  }
 
   const activeFish = releaseFish(config, spawnPos);
 

@@ -26,19 +26,24 @@ export function applyBoundaries(fish: ActiveFish): void {
   const vel = fish.physics.vel;
   const speed = PHYSICS.BOIDS_MAX_SPEED * fish.physics.speedMultiplier;
 
-  // --- 1. Void / 画面外 からの押し戻し ---
-  // 修正: まず水槽全体 (world.width x world.height) の境界で壁反発を行う
+  // --- 1. Void / 画面外 からの押し戻し (ハードクランプ + 速度反転方式) ---
+  // 力ベースだと高速時に外に出たままになるので、座標を強制修正する
+  const bounceDamp = 0.75;
   if (pos.x < PHYSICS.WALL_MARGIN) {
-    vel.x += PHYSICS.WALL_FORCE;
+    pos.x = PHYSICS.WALL_MARGIN;
+    if (vel.x < 0) vel.x *= -bounceDamp;
   }
   if (pos.x > world.width - PHYSICS.WALL_MARGIN) {
-    vel.x -= PHYSICS.WALL_FORCE;
+    pos.x = world.width - PHYSICS.WALL_MARGIN;
+    if (vel.x > 0) vel.x *= -bounceDamp;
   }
   if (pos.y < PHYSICS.WALL_MARGIN) {
-    vel.y += PHYSICS.WALL_FORCE;
+    pos.y = PHYSICS.WALL_MARGIN;
+    if (vel.y < 0) vel.y *= -bounceDamp;
   }
   if (pos.y > world.height - PHYSICS.WALL_MARGIN) {
-    vel.y -= PHYSICS.WALL_FORCE;
+    pos.y = world.height - PHYSICS.WALL_MARGIN;
+    if (vel.y > 0) vel.y *= -bounceDamp;
   }
 
   // --- 2. 進入禁止エリア (Forbidden Zones) での壁反発と衝突補正 ---

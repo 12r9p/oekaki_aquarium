@@ -47,15 +47,15 @@ export const LAYER_CONFIG: LayerConfig[] = [
 // 接続クライアントの Viewport を統合して動的に更新される
 // ============================================================
 export const DEFAULT_WORLD = {
-  width: 3840,
-  height: 1080,
+  width: 1080,
+  height: 1440,
 } as const;
 
 // ============================================================
 // 物理演算パラメータ
 // ============================================================
 export const PHYSICS = {
-  // Boids (Type A)
+  // Boids (school / swimmer 互換)
   BOIDS_MAX_SPEED: 3.0,
   BOIDS_MAX_FORCE: 0.15,
   BOIDS_SEPARATION_RADIUS: 80,
@@ -64,12 +64,36 @@ export const PHYSICS = {
   BOIDS_SEPARATION_WEIGHT: 1.5,
   BOIDS_ALIGNMENT_WEIGHT: 1.0,
   BOIDS_COHESION_WEIGHT: 1.0,
+  // schoolの縦速度抑制係数 (0〜1、小さいほど縦に動かない)
+  SCHOOL_VERTICAL_DAMPING: 0.7,
 
-  // 壁の跳ね返し強度
+  // Tuna (マグロ: 高速直線往復)
+  TUNA_SPEED: 5.5,        // 基本速度 (px/frame)
+  TUNA_VERTICAL_DRIFT: 0.008, // Y方向のごく緩やかなドリフト振幅
+
+  // Squid (イカ: ホバリング+パルス推進)
+  SQUID_CRUISE_SPEED: 0.8,    // 巡航速度
+  SQUID_PULSE_SPEED: 3.5,     // パルス射出速度
+  SQUID_PULSE_FRAMES: 12,     // パルス継続フレーム
+  SQUID_REST_FRAMES: 40,      // 休止フレーム
+  SQUID_HOVER_AMP: 60,        // 上下ホバリング振幅 (px)
+  SQUID_HOVER_PERIOD: 180,    // 上下ホバリング周期 (frames)
+
+  // Jellyfish (クラゲ: 縮め伸ばしパルス上下浮遊)
+  JELLYFISH_FLOAT_SPEED: 0.5, // X方向ドリフト速度
+  JELLYFISH_PULSE_AMP: 60,    // 上下パルス振幅 (px)
+  JELLYFISH_PULSE_PERIOD: 120,// 上下パルス周期 (frames)
+
+  // Shark (サメ: 大弧単独回遊)
+  SHARK_SPEED: 2.2,           // 速度
+  SHARK_TURN_RATE: 0.012,     // 毎フレームの旋回量 (rad)
+  SHARK_VERTICAL_DAMPING: 0.5, // 縦抑制（緩め）
+
+  // 壁の跳ね返し
   WALL_FORCE: 0.5,
   WALL_MARGIN: 100,
 
-  // エサの引力半径と強度
+  // エサの引力
   FOOD_RADIUS: 400,
   FOOD_FORCE: 2.0,
   FOOD_LIFETIME_MS: 5000,

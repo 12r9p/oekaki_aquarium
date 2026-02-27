@@ -5,6 +5,89 @@ import type { ActiveFish, FishConfig, PendingFish, Vector2, FishType } from "@aq
 // FishManager: 待機魚・活動魚の状態管理
 // ============================================================
 
+import { join } from "node:path";
+import { readFileSync, existsSync, unlinkSync, mkdirSync, readdirSync } from "node:fs";
+import { Buffer } from "node:buffer";
+import { writeFishMeta, readFishMeta, DEFAULT_FISH_META, type FishMeta } from "./png-metadata";
+import { getWorld } from "./world";
+import { resetTunaState } from "./physics/tuna";
+import { removeWanderState } from "./physics/wander";
+
+/** /data/fish/ ディレクトリ（プロジェクトルート基準） */
+export const DATA_FISH_DIR = join(import.meta.dir, "..", "..", "..", "data", "fish");
+/** public/images ディレクトリ */
+export const PUBLIC_IMAGES_DIR = join(import.meta.dir, "..", "public", "images");
+
+/** URLからローカルパスを解決する */
+function getLocalPathFromUrl(url: string): string | null {
+  if (url.startsWith("/images/")) return join(PUBLIC_IMAGES_DIR, url.replace("/images/", ""));
+  if (url.startsWith("/lib-images/")) return join(DATA_FISH_DIR, url.replace("/lib-images/", ""));
+  return null;
+}
+
+/** ActiveFishを永続化（PNG作成＋メタ書き込み） */
+function saveActiveFishToDisk(fish: ActiveFish) {
+  if (!existsSync(DATA_FISH_DIR)) mkdirSync(DATA_FISH_DIR, { recursive: true });
+  const srcPath = getLocalPathFromUrl(fish.textureUrl);
+  if (!srcPath || !existsSync(srcPath)) return;
+
+  const destPath = join(DATA_FISH_DIR, `${fish.id}.png`);
+  try {
+    let buf = readFileSync(srcPath) as Buffer;
+    const meta: FishMeta = {
+      version: 1,
+      author: fish.author || "anonymous",
+      type: fish.type,
+      speed: fish.userParams.speed,
+      scale: fish.userParams.scale,
+      pinnedLayerId: fish.pinnedLayerId ?? null,
+      tags: fish.fishMeta?.tags || [],
+      isArchived: fish.isArchived ?? false,
+    };
+    buf = writeFishMeta(buf, meta);
+    Bun.write(destPath, buf); 
+    // 永続化されたファイルのURLに差し替え
+    fish.textureUrl = `/lib-images/${fish.id}.png`;
+  } catch (e) {
+    console.error(`[FishManager] Failed to save fish ${fish.id} to disk:`, e);
+  }
+}
+
+/** 永続化されたメタデータ（PNG tEXt）のプロパティを更新 */
+function updateActiveFishOnDisk(fish: ActiveFish) {
+  const destPath = join(DATA_FISH_DIR, `${fish.id}.png`);
+  if (!existsSync(destPath)) return;
+  try {
+    let buf = readFileSync(destPath) as Buffer;
+    const meta: FishMeta = {
+      version: 1,
+      author: fish.author || "anonymous",
+      type: fish.type,
+      speed: fish.userParams.speed,
+      scale: fish.userParams.scale,
+      pinnedLayerId: fish.pinnedLayerId ?? null,
+      tags: fish.fishMeta?.tags || [],
+      isArchived: fish.isArchived ?? false,
+    };
+    buf = writeFishMeta(buf, meta);
+    Bun.write(destPath, buf);
+  } catch (e) {
+    console.error(`[FishManager] Failed to update fish ${fish.id} on disk:`, e);
+  }
+}
+
+/** 永続化ファイルを削除 */
+function removeActiveFishFromDisk(fishId: string) {
+  const destPath = join(DATA_FISH_DIR, `${fishId}.png`);
+  if (existsSync(destPath)) {
+    try {
+      unlinkSync(destPath);
+    } catch (e) {
+      console.error(`[FishManager] Failed to remove fish ${fishId} from disk:`, e);
+    }
+  }
+}
+
 /** 待機キュー（スキャン済み・未放流） */
 const pendingQueue: PendingFish[] = [];
 
@@ -56,8 +139,34 @@ export function removePendingFish(fishId: string): boolean {
 }
 
 // -------------------------------------------------------
-// ActivePool 操作
+// プリセット別 初期速度（放流直後の発散）
 // -------------------------------------------------------
+function initialVelForType(type: FishType): { x: number; y: number } {
+  const rnd = () => Math.random() - 0.5;
+  switch (type) {
+    case "tuna":
+      // 高速・ほぼ水平・左右どちらかにランダム
+      return { x: (Math.random() < 0.5 ? 1 : -1) * (4 + Math.random() * 2), y: rnd() * 0.3 };
+    case "school":
+    case "swimmer":
+      // Boids が引き継ぐので小さな水平乱数でよい
+      return { x: (Math.random() < 0.5 ? 1 : -1) * (1 + Math.random()), y: rnd() * 0.5 };
+    case "squid":
+      // 方向・速度ともにばらける
+      return { x: (Math.random() < 0.5 ? 1 : -1) * (0.5 + Math.random()), y: rnd() * 0.3 };
+    case "jellyfish":
+      // X はごくゆっくり、Y は位相ずれ
+      return { x: (Math.random() < 0.5 ? 1 : -1) * 0.5, y: rnd() * 1.5 };
+    case "shark":
+      // 弧が重ならないよう方向を十分ばらける
+      return { x: (Math.random() < 0.5 ? 1 : -1) * (1.5 + Math.random()), y: rnd() * 0.4 };
+    case "looper":
+      return { x: 0.4 + Math.random() * 0.4, y: rnd() * 0.4 };
+    case "anchor":
+    default:
+      return { x: 0, y: 0 };
+  }
+}
 
 /**
  * 待機リストから放流してアクティブプールへ移動する。
@@ -76,7 +185,7 @@ export function releaseFish(
     timestamp: Date.now(),
     physics: {
       pos: { ...spawnPos },
-      vel: { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 0.5 },
+      vel: initialVelForType(config.type),
       speedMultiplier: 1.0, // レイヤーマネージャが後から上書きする
     },
     layerIndex: 0,
@@ -85,6 +194,10 @@ export function releaseFish(
   };
 
   activePool.set(fish.id, fish);
+  
+  // 永続化処理（/data/fish に保存し魚のtextureUrlを差し替える）
+  saveActiveFishToDisk(fish);
+  
   return fish;
 }
 
@@ -108,6 +221,7 @@ export function setPinned(
   if (!fish) return false;
   fish.isPinned = isPinned;
   fish.pinnedLayerId = layerId;
+  updateActiveFishOnDisk(fish);
   return true;
 }
 
@@ -124,6 +238,8 @@ export function updateFishParams(
   if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
   if (updates.type !== undefined) fish.type = updates.type;
   if (updates.isArchived !== undefined) fish.isArchived = updates.isArchived;
+  
+  updateActiveFishOnDisk(fish);
   return true;
 }
 
@@ -146,10 +262,124 @@ export function duplicateFish(fishId: string): ActiveFish | undefined {
   };
 
   activePool.set(newFish.id, newFish);
+  saveActiveFishToDisk(newFish);
   return newFish;
 }
 
 /** 魚を削除 */
 export function removeFish(fishId: string): boolean {
+  removeActiveFishFromDisk(fishId);
   return activePool.delete(fishId);
 }
+
+/**
+ * アクティブな全魚をworld全体にグリッド均等配置で再散布する。
+ * worldサイズ変更後に偏りを解消するためのボタン操作で呼び出す。
+ */
+export function redistributeFish(): number {
+  const world = getWorld();
+  const fish = [...activePool.values()].filter(f => !f.isArchived);
+  const n = fish.length;
+  if (n === 0) return 0;
+
+  const ww = world.width;
+  const wh = world.height;
+  const margin = 120;
+  const cols = Math.ceil(Math.sqrt(n * (ww / wh))); // アスペクト比に合わせたグリッド
+  const rows = Math.max(1, Math.ceil(n / cols));
+  const cellW = (ww - margin * 2) / cols;
+  const cellH = (wh - margin * 2) / rows;
+
+  fish.forEach((f, idx) => {
+    const col = idx % cols;
+    const row = Math.floor(idx / cols);
+    const jitterX = (Math.random() - 0.5) * cellW * 0.5;
+    const jitterY = (Math.random() - 0.5) * cellH * 0.5;
+    f.physics.pos.x = Math.max(margin, Math.min(ww - margin, margin + (col + 0.5) * cellW + jitterX));
+    f.physics.pos.y = Math.max(margin, Math.min(wh - margin, margin + (row + 0.5) * cellH + jitterY));
+    // 速度もランダムリセット（固まらないように）
+    f.physics.vel.x = (Math.random() - 0.5) * 4;
+    f.physics.vel.y = (Math.random() - 0.5) * 2;
+  });
+  return n;
+}
+
+/**
+ * /data/fish/ にあるファイルを全て読み込み、
+ * 既存の activePool に存在しない魚のみ追加する。
+ * @param spawnPoints 世界の放流ポイント一覧（空の場合はフォールバック位置を使用）
+ */
+export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: number }> = []) {
+  if (!existsSync(DATA_FISH_DIR)) return;
+  try {
+    const files = readdirSync(DATA_FISH_DIR).filter(f => f.toLowerCase().endsWith(".png"));
+    let restoredCount = 0;
+    for (const file of files) {
+      const filePath = join(DATA_FISH_DIR, file);
+      const fishId = file.replace(".png", "");
+
+      // 既に泳いでいる魚はスキップ（再読み込み時の重複防止）
+      if (activePool.has(fishId)) continue;
+
+      try {
+        const buf = readFileSync(filePath) as Buffer;
+        const meta = readFishMeta(buf) ?? { ...DEFAULT_FISH_META };
+
+        // 初期位置: world全体にランダム散布（グリッド均等配置 + ジッター）
+        const totalFiles = files.length;
+        const cols = Math.ceil(Math.sqrt(totalFiles * 2));
+        const rows = Math.max(1, Math.ceil(totalFiles / cols));
+        const fileIdx = restoredCount;
+        const col = fileIdx % cols;
+        const row = Math.floor(fileIdx / cols);
+        const wld = getWorld();
+        const ww = wld.width;
+        const wh = wld.height;
+        const margin = 120;
+        const cellW = (ww - margin * 2) / cols;
+        const cellH = (wh - margin * 2) / rows;
+        const jitterX = (Math.random() - 0.5) * cellW * 0.6;
+        const jitterY = (Math.random() - 0.5) * cellH * 0.6;
+        const spawnX = margin + (col + 0.5) * cellW + jitterX;
+        const spawnY = margin + (row + 0.5) * cellH + jitterY;
+        const sp = {
+          x: Math.max(margin, Math.min(ww - margin, spawnX)),
+          y: Math.max(margin, Math.min(wh - margin, spawnY))
+        };
+
+        const fish: ActiveFish = {
+          id: fishId,
+          textureUrl: `/lib-images/${file}`,
+          timestamp: Date.now(),
+          type: meta.type,
+          author: meta.author,
+          fishMeta: meta,
+          userParams: {
+            scale: meta.scale,
+            speed: meta.speed,
+            rotationOffset: 0
+          },
+          physics: {
+            pos: { x: sp.x, y: sp.y },
+            vel: initialVelForType(meta.type),
+            speedMultiplier: 1.0,
+          },
+          layerIndex: 0,
+          targetScale: meta.scale,
+          targetOpacity: 1.0,
+          isPinned: meta.pinnedLayerId !== null && meta.pinnedLayerId !== undefined,
+          pinnedLayerId: meta.pinnedLayerId ?? undefined,
+          isArchived: meta.isArchived ?? false,
+        };
+        activePool.set(fish.id, fish);
+        restoredCount++;
+      } catch (e) {
+        console.error(`[FishManager] Failed to restore fish from ${file}:`, e);
+      }
+    }
+    console.log(`[FishManager] Restored ${restoredCount} fish from ${DATA_FISH_DIR}`);
+  } catch (err) {
+    console.error(`[FishManager] Failed to read ${DATA_FISH_DIR}:`, err);
+  }
+}
+

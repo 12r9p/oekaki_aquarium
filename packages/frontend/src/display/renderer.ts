@@ -124,13 +124,18 @@ export function updateLayersView(app: Application): void {
     sprite.zIndex = layer.zIndex;
     sprite.alpha = layer.opacity;
     sprite.visible = layer.visible;
-    // ワールド座標からViewport座標へ変換してフルスクリーン描画（背景等の想定）
-    const sx = (0 - STATE.VP.x) * STATE.scaleX;
-    const sy = (0 - STATE.VP.y) * STATE.scaleY;
+    // ワールド座標からViewport座標へ変換して指定範囲に描画
+    const imgX = layer.x ?? 0;
+    const imgY = layer.y ?? 0;
+    const imgW = layer.width ?? STATE.WORLD_W;
+    const imgH = layer.height ?? STATE.WORLD_H;
+
+    const sx = (imgX - STATE.VP.x) * STATE.scaleX;
+    const sy = (imgY - STATE.VP.y) * STATE.scaleY;
     sprite.x = sx;
     sprite.y = sy;
-    sprite.width = STATE.WORLD_W * STATE.scaleX;
-    sprite.height = STATE.WORLD_H * STATE.scaleY;
+    sprite.width = imgW * STATE.scaleX;
+    sprite.height = imgH * STATE.scaleY;
 
     // テクスチャロード（URLが変更・新規の場合）
     if (layer.url && sprite.texture.label !== layer.url) {
@@ -418,10 +423,19 @@ export function applyViewport(app: Application, silent = false): void {
 export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd: UdpFishData, sx: number, sy: number, appliedScale: number): void {
   let texture: Texture;
   if (fd.u) {
-    // URLが含まれている場合はキャッシュ登録＆読み込み(無ければ即時にプレースホルダで凌ぎ、あとでロードされることを期待する)
     textureUrlCache.set(fd.i, fd.u);
-    texture = Assets.cache.get<Texture>(fd.u) ?? buildPlaceholder(app);
-    if (!Assets.cache.has(fd.u)) void Assets.load<Texture>(fd.u);
+    if (Assets.cache.has(fd.u)) {
+      // キャッシュ済み → 即時使用
+      texture = Assets.cache.get<Texture>(fd.u)!;
+    } else {
+      // キャッシュなし → プレースホルダーで spawn し、ロード完了後に差し替え
+      texture = buildPlaceholder(app);
+      void Assets.load<Texture>(fd.u).then((tex) => {
+        // ロード完了時点でまだ存在する魚スプライトにテクスチャを適用
+        const entry = fishMap.get(fd.i);
+        if (entry) entry.sprite.texture = tex;
+      });
+    }
   } else {
     const cachedUrl = textureUrlCache.get(fd.i);
     texture = cachedUrl ? (Assets.cache.get<Texture>(cachedUrl) ?? buildPlaceholder(app)) : buildPlaceholder(app);
@@ -431,11 +445,13 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
   sprite.anchor.set(0.5);
   sprite.x = sx; sprite.y = sy;
   sprite.rotation = fd.r;
-  sprite.scale.set(appliedScale);
+  // vx < 0 のとき（左向き移動）は scaleX を反転して画像を左向きにする
+  const scaleSign = (fd.vx !== undefined && fd.vx < 0) ? -1 : 1;
+  sprite.scale.set(appliedScale * scaleSign, appliedScale);
   sprite.alpha = fd.o;
-  sprite.zIndex = fd.z; // fishContainer内部でのソート用
-  fishGlobalContainer.addChild(sprite); // stageではなく専用コンテナへ
-  fishMap.set(fd.i, { sprite, targetX:sx, targetY:sy, targetRotation:fd.r, targetScale:appliedScale, targetAlpha:fd.o, targetZIndex:fd.z });
+  sprite.zIndex = fd.z;
+  fishGlobalContainer.addChild(sprite);
+  fishMap.set(fd.i, { sprite, targetX:sx, targetY:sy, targetRotation:fd.r, targetScale:appliedScale * scaleSign, targetAlpha:fd.o, targetZIndex:fd.z });
 }
 
 export function destroyFish(fishMap: Map<string, FishEntry>, id: string): void {
@@ -460,7 +476,11 @@ export function setupRenderLoop(app: Application, fishMap: Map<string, FishEntry
       s.x        = lerp(s.x, e.targetX, 0.12);
       s.y        = lerp(s.y, e.targetY, 0.12);
       s.rotation = lerpAngle(s.rotation, e.targetRotation, 0.08);
-      s.scale.set(lerp(s.scale.x, e.targetScale, 0.05));
+      // targetScale は符号込み（負なら左向き反転）なので符号を保持したままLerp
+      const sign = e.targetScale < 0 ? -1 : 1;
+      const absTarget = Math.abs(e.targetScale);
+      const absScale  = Math.abs(s.scale.x);
+      s.scale.set(lerp(absScale, absTarget, 0.05) * sign, lerp(Math.abs(s.scale.y), absTarget, 0.05));
       s.alpha    = lerp(s.alpha, e.targetAlpha, 0.05);
       if (s.zIndex !== e.targetZIndex) s.zIndex = e.targetZIndex;
     }

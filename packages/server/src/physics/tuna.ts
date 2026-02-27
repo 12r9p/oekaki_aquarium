@@ -1,0 +1,71 @@
+import type { ActiveFish } from "@aquarium/shared";
+import { PHYSICS } from "@aquarium/shared";
+import { getWorld } from "../world";
+
+// ============================================================
+// tuna.ts — マグロ型: 高速直線往復
+//
+// 動作原理:
+//   - 一定の高速で横方向に移動し続ける
+//   - ワールド境界に近づいたら向きを反転する（スムーズなUターン）
+//   - Y方向はごく小さなサイン波ドリフトのみ
+// ============================================================
+
+const tunaState = new Map<string, {
+  dir: 1 | -1;     // 現在の進行方向（+1=右, -1=左）
+  frame: number;   // 全体フレームカウント
+  baseY: number;   // Y基準座標
+}>();
+
+export function applyTuna(fish: ActiveFish): void {
+  const world = getWorld();
+  const speed = PHYSICS.TUNA_SPEED * fish.physics.speedMultiplier;
+  const margin = PHYSICS.WALL_MARGIN + 50;
+
+  if (!tunaState.has(fish.id)) {
+    // 初回: 初期方向をランダムに決定
+    tunaState.set(fish.id, {
+      dir: Math.random() < 0.5 ? 1 : -1,
+      frame: Math.floor(Math.random() * 360), // フレームオフセット（全員一斉動作防止）
+      baseY: fish.physics.pos.y,
+    });
+  }
+  const state = tunaState.get(fish.id)!;
+  state.frame++;
+
+  // 壁に近づいたら向きを反転
+  if (fish.physics.pos.x >= world.width - margin && state.dir === 1) {
+    state.dir = -1;
+    state.baseY = fish.physics.pos.y; // Uターン時にY基準を更新
+  }
+  if (fish.physics.pos.x <= margin && state.dir === -1) {
+    state.dir = 1;
+    state.baseY = fish.physics.pos.y;
+  }
+
+  // X: 一定速度
+  fish.physics.vel.x = speed * state.dir;
+  fish.physics.pos.x += fish.physics.vel.x;
+
+  // Y: sin波でごくわずかにドリフト（ほぼ水平）
+  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 20;
+  const targetY = state.baseY + driftY;
+  const dy = (targetY - fish.physics.pos.y) * 0.05;
+  fish.physics.vel.y = dy;
+  fish.physics.pos.y += dy;
+}
+
+/**
+ * 魚の再配置後にbaseYを新位置に合わせてリセットする。
+ * これを呼ばないと再配置後も古いbaseYに向かって引き戻される。
+ */
+export function resetTunaState(fishId: string, newY: number): void {
+  const state = tunaState.get(fishId);
+  if (state) {
+    state.baseY = newY;
+    state.frame = Math.floor(Math.random() * 360); // フレームも乱数リセット
+  } else {
+    // stateがない場合は次のフレームで初期化されるが、baseYはpos.yから自然に取得される
+    // noop: applyTunaの初回初期化で新pos.yが使われる
+  }
+}

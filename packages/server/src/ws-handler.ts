@@ -17,6 +17,9 @@ import { v4 as uuidv4 } from "uuid";
 // ============================================================
 let currentBgUrl = "";
 
+/** 現在の背景画像URLを取得する */
+export function getCurrentBgUrl(): string { return currentBgUrl; }
+
 // ============================================================
 // Store / State
 // ============================================================
@@ -39,6 +42,9 @@ const sockets = new Set<ServerWebSocket<ClientData>>();
  * サーバー再起動でリセットされる（永続化が必要な場合はファイルに書き出す）。
  */
 const viewportStore = new Map<string, NonNullable<ClientConfig["viewport"]>>();
+
+/** 切断されたディスプレイの履歴を一定期間（猶予期間）保持するためのリスト */
+let disconnectedDisplays: DisplayClientInfo[] = [];
 
 /**
  * シーンオブジェクトのストア。
@@ -114,6 +120,23 @@ export const wsHandlers = {
 
   close(ws: ServerWebSocket<ClientData>): void {
     console.log(`[WS] Disconnected: ${ws.data.uuid} (${ws.data.clientType})`);
+    
+    // Displayクライアントが切断された場合、猶予リストへ追加する
+    if (ws.data.clientType === "display") {
+      // 既存の同名エントリがあれば削除
+      disconnectedDisplays = disconnectedDisplays.filter(d => d.uuid !== ws.data.uuid);
+      disconnectedDisplays.push({
+        uuid: ws.data.uuid,
+        clientType: ws.data.clientType,
+        lastSeen: ws.data.lastHeartbeat,
+        viewport: ws.data.viewport,
+        testPattern: ws.data.testPattern,
+        screenW: ws.data.screenW,
+        screenH: ws.data.screenH,
+        disconnectedAt: Date.now()
+      });
+    }
+    
     sockets.delete(ws);
     // 管理画面に更新をプッシュ
     pushClientListToManagers();
@@ -166,6 +189,11 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       if (ws.data.clientType === "display" || ws.data.clientType === "manage") {
         sendTo(ws, { event: "scene_update", objects: sceneObjects });
       }
+      // 復帰した場合は disconnectedDisplays から除外
+      if (ws.data.clientType === "display") {
+        disconnectedDisplays = disconnectedDisplays.filter(d => d.uuid !== ws.data.uuid);
+      }
+
       // 管理画面に接続クライアントリストを push
       pushClientListToManagers();
       break;
@@ -330,15 +358,25 @@ export function pushClientListToManagers(): void {
 
 /** クライアント情報リスト取得（APIエンドポイント用） */
 export function getDisplayClientInfoList(): DisplayClientInfo[] {
-  return [...sockets].map((ws): DisplayClientInfo => ({
-    uuid: ws.data.uuid,
-    clientType: ws.data.clientType,
-    lastSeen: ws.data.lastHeartbeat,
-    viewport: ws.data.viewport,
-    testPattern: ws.data.testPattern,
-    screenW: ws.data.screenW,
-    screenH: ws.data.screenH,
-  }));
+  // 有効期限切れ（10秒以上経過した）切断ディスプレイをクリーンアップ
+  const now = Date.now();
+  disconnectedDisplays = disconnectedDisplays.filter(d => d.disconnectedAt && (now - d.disconnectedAt < 10_000));
+
+  const active: DisplayClientInfo[] = [...sockets]
+    .filter(ws => ws.data.clientType === "display")
+    .map((ws): DisplayClientInfo => ({
+      uuid: ws.data.uuid,
+      clientType: ws.data.clientType,
+      lastSeen: ws.data.lastHeartbeat,
+      viewport: ws.data.viewport,
+      testPattern: ws.data.testPattern,
+      screenW: ws.data.screenW,
+      screenH: ws.data.screenH,
+      ping: now - ws.data.lastHeartbeat // 実際のpingではなく最終通信からの経過時間を指標とする
+    }));
+
+  // アクティブ + 切断猶予中 の両方を返す
+  return [...active, ...disconnectedDisplays];
 }
 
 /** ハートビートタイムアウトチェック（30秒） */

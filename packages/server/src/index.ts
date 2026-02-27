@@ -1,7 +1,8 @@
 import { Hono } from "hono";
+import { serve } from "bun";
 import { cors } from "hono/cors";
 import { join } from "node:path";
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { PORTS } from "@aquarium/shared";
 import { startGameLoop } from "./game-loop";
@@ -23,9 +24,23 @@ import { scanRoute } from "./routes/scan";
 import { pendingRoute, lockRoute, unlockRoute } from "./routes/pending";
 import { releaseRoute } from "./routes/release";
 import { pinRoute } from "./routes/pin";
-import { getAllActiveFish, removeFish, updateFishParams, removePendingFish, duplicateFish } from "./fish-manager";
-import { getPendingQueue } from "./fish-manager";
+import {
+  addToPending,
+  getAllActiveFish,
+  getActiveFish,
+  getPendingQueue,
+  releaseFish,
+  restoreActiveFishFromDisk,
+  removeFish,
+  updateFishParams,
+  removePendingFish,
+  duplicateFish,
+  redistributeFish,
+} from "./fish-manager";
 import { getWorld } from "./world";
+import { loadFishLibrary, getLibraryFileBuffer, DATA_FISH_DIR } from "./fish-library";
+import { readFishMeta } from "./png-metadata";
+import type { FishConfig, FishType } from "@aquarium/shared";
 
 // ============================================================
 // サーバーエントリーポイント（Bun 単一ポート統合版）
@@ -37,11 +52,12 @@ import { getWorld } from "./world";
 //   WS   /ws          → Bun ネイティブ WebSocket
 // ============================================================
 
-const PUBLIC_IMAGES_DIR = join(import.meta.dir, "..", "public", "images");
+const PUBLIC_IMAGES_DIR = join(import.meta.dir, "public", "images");
 const SCENE_IMAGES_DIR = join(PUBLIC_IMAGES_DIR, "scene");
 const APP_DIR = join(import.meta.dir, "..", "public", "app");
 mkdirSync(PUBLIC_IMAGES_DIR, { recursive: true });
 mkdirSync(SCENE_IMAGES_DIR, { recursive: true });
+mkdirSync(DATA_FISH_DIR, { recursive: true }); // /data/fish/ を初期化
 
 const app = new Hono();
 app.use("*", cors({ origin: "*" }));
@@ -88,6 +104,12 @@ app.post("/api/fish/:id/duplicate", (c) => {
     broadcastToAll({ event: "reload" });
   }
   return c.json({ success: !!newFish, fish: newFish });
+});
+
+// 魚をworld全体に均等再散布（worldサイズ変更後の偏り解消用）
+app.post("/api/fish/redistribute", (c) => {
+  const count = redistributeFish();
+  return c.json({ success: true, redistributed: count });
 });
 
 // 待機中（Pending）魚の削除
@@ -168,12 +190,101 @@ app.post("/api/upload-image", async (c) => {
 // ---- ギャラリー画像一覧取得 (public/images フォルダ内限定) ----
 app.get("/api/gallery", async (c) => {
   const glob = new Bun.Glob("*.{png,jpg,jpeg,gif,webp}");
-  const files = [];
+  const files: Array<{ url: string; meta?: import("./png-metadata").FishMeta }> = [];
   for await (const file of glob.scan(PUBLIC_IMAGES_DIR)) {
-    files.push(`/images/${file}`);
+    const url = `/images/${file}`;
+    let meta = undefined;
+    if (file.toLowerCase().endsWith(".png")) {
+      try {
+         const buf = readFileSync(join(PUBLIC_IMAGES_DIR, file)) as Buffer;
+         const parsedMeta = readFishMeta(buf);
+         if (parsedMeta) meta = parsedMeta;
+      } catch (e) {
+         // 無視
+      }
+    }
+    files.push({ url, meta });
   }
   return c.json({ images: files });
 });
+
+// ---- 魚ライブラリ: /data/fish/ から一覧取得 ----
+app.get("/api/library", (c) => {
+  const entries = loadFishLibrary();
+  return c.json({ library: entries });
+});
+
+// ---- 魚ライブラリ: /data/fish/ から再読み込み・再復元 ----
+app.post("/api/library/reload", (c) => {
+  const { spawnPoints } = getWorld();
+  restoreActiveFishFromDisk(spawnPoints);
+  const fish = getAllActiveFish();
+  broadcastToAll({
+    event: "state_push",
+    clients: getDisplayClientInfoList(),
+    activeFish: fish,
+    pendingFish: getPendingQueue(),
+  });
+  pushClientListToManagers();
+  console.log(`[Library] Reloaded: ${fish.length} fish now active`);
+  return c.json({ success: true, count: fish.length });
+});
+
+// ---- 魚ライブラリ: ファイルから直接放流 ----
+app.post("/api/library/:filename/release", async (c) => {
+  const filename = decodeURIComponent(c.req.param("filename"));
+  const buf = getLibraryFileBuffer(filename);
+  if (!buf) return c.json({ error: "File not found" }, 404);
+
+  const meta = readFishMeta(buf);
+  const imageUrl = `/lib-images/${encodeURIComponent(filename)}`;
+
+  // scan API と同様に pendingQueue に追加してから放流する
+  const pending = addToPending(imageUrl);
+
+  const w = getWorld();
+  const sp = w.spawnPoints.length > 0
+    ? w.spawnPoints[Math.floor(Math.random() * w.spawnPoints.length)]!
+    : (w.validZones[0] ? { x: w.validZones[0].x + 100, y: w.validZones[0].y + w.validZones[0].height * 0.5 } : { x: 200, y: 400 });
+
+  const config: FishConfig = {
+    id: pending.id,
+    type: (meta?.type ?? "swimmer") as FishType,
+    textureUrl: imageUrl,
+    author: meta?.author,
+    fishMeta: meta ?? undefined,
+    userParams: {
+      scale: meta?.scale ?? 1.0,
+      speed: meta?.speed ?? 1.0,
+      rotationOffset: 0,
+    },
+    isPinned: meta?.pinnedLayerId !== null && meta?.pinnedLayerId !== undefined,
+    pinnedLayerId: meta?.pinnedLayerId ?? undefined,
+  };
+
+  const activeFish = releaseFish(config, sp);
+  broadcastToAll({ event: "fish_released", fish: activeFish });
+  pushClientListToManagers();
+
+  console.log(`[Library] Released ${filename} as ${pending.id} (type: ${config.type})`);
+  return c.json({ success: true, fish: activeFish });
+});
+
+// ---- 魚の位置を強制移動する (D&Dによる管理画面からの操作) ----
+app.put("/api/fish/:id/position", async (c) => {
+  const id = c.req.param("id");
+  const { x, y } = await c.req.json<{ x: number; y: number }>();
+  const fish = getActiveFish(id);
+  if (!fish) return c.json({ error: "Fish not found" }, 404);
+  fish.physics.pos.x = x;
+  fish.physics.pos.y = y;
+  fish.physics.vel.x = 0;
+  fish.physics.vel.y = 0;
+  return c.json({ success: true });
+});
+
+// ws-handler から bgUrl と layers を取得できるようエクスポートを追加
+import { getCurrentBgUrl } from "./ws-handler";
 
 // 管理画面用: 状態スナップショット
 app.get("/api/state", (c) => {
@@ -184,6 +295,10 @@ app.get("/api/state", (c) => {
     pendingFish: getPendingQueue(),
     worldW:      w.width,
     worldH:      w.height,
+    bgUrl:       getCurrentBgUrl(),
+    forbiddenZones: w.forbiddenZones,
+    spawnPoints: w.spawnPoints,
+    layers:      w.layers,
   });
 });
 
@@ -220,12 +335,24 @@ const server = Bun.serve({
       return ok ? undefined : new Response("WS upgrade failed", { status: 500 });
     }
 
-    // 静的画像ファイル
+    // 静的画像ファイル (/public/images/)
     if (url.pathname.startsWith("/images/")) {
       const filename = url.pathname.slice("/images/".length);
       const file = Bun.file(join(PUBLIC_IMAGES_DIR, filename));
       if (await file.exists()) {
         return new Response(file, { headers: { "Access-Control-Allow-Origin": "*" } });
+      }
+      return new Response("Not Found", { status: 404 });
+    }
+
+    // ライブラリ画像ファイル (/data/fish/)
+    if (url.pathname.startsWith("/lib-images/")) {
+      const filename = decodeURIComponent(url.pathname.slice("/lib-images/".length));
+      const buf = getLibraryFileBuffer(filename);
+      if (buf) {
+        return new Response(buf, {
+          headers: { "Content-Type": "image/png", "Access-Control-Allow-Origin": "*" }
+        });
       }
       return new Response("Not Found", { status: 404 });
     }
@@ -265,6 +392,9 @@ const server = Bun.serve({
     return app.fetch(req);
   },
 });
+
+// サーバー起動時に /data/fish/ から泳いでいる魚を復元
+restoreActiveFishFromDisk(getWorld().spawnPoints);
 
 console.log(`[Server] Listening on http://0.0.0.0:${PORTS.HTTP}`);
 console.log(`[Server] WebSocket on ws://0.0.0.0:${PORTS.HTTP}/ws`);

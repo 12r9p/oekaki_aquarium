@@ -10,7 +10,7 @@ interface EditorProps {
 }
 
 export function Editor({ fish, onReleased, onCancel }: EditorProps): React.ReactElement {
-    const [fishType, setFishType] = useState<FishType>("swimmer");
+    const [fishType, setFishType] = useState<FishType>("school");
     const [scale, setScale] = useState(1.0);
     const [speed, setSpeed] = useState(1.0);
     const [rotationDeg, setRotationDeg] = useState(0);
@@ -82,10 +82,17 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
     }
 
     const typeLabels: Record<FishType, string> = {
-        swimmer: "🐟 自由に泳ぐ",
-        looper: "🪼 手書きでループ",
-        anchor: "🌿 床に固定",
+        tuna: "🐟 マグロ - 高速直線往復",
+        school: "🐠🐠 イワシ - 群れで回遊",
+        squid: "🦑 イカ - ふわふわパルス",
+        jellyfish: "🪼 クラゲ - 上下浮遊",
+        shark: "🦈 サメ - 大弧単独回遊",
+        anchor: "🌿 固定 - 床に固定",
+        swimmer: "🐟 自由に泳ぐ (旧)",
+        looper: "🔁 手書きループ (旧)",
     };
+    // コントローラーで表示するプリセット順（旧型は末尾に）
+    const presetOrder: FishType[] = ["tuna", "school", "squid", "jellyfish", "shark", "anchor"];
 
     return (
         <div className="editor">
@@ -113,7 +120,7 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
             <section className="editor-section">
                 <label className="editor-label">🎭 動きのタイプ</label>
                 <div className="editor-type-grid">
-                    {(["swimmer", "looper", "anchor"] as FishType[]).map((t) => (
+                    {presetOrder.map((t) => (
                         <button key={t} className={`editor-type-btn ${fishType === t ? "active" : ""}`}
                             onClick={() => setFishType(t)}>
                             {typeLabels[t]}
