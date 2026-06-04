@@ -248,6 +248,19 @@ export function updateFishParams(
   return true;
 }
 
+export function multiplyAllFishParams(scaleMultiplier: number, speedMultiplier: number): number {
+  const safeScaleMultiplier = Math.max(0.1, Math.min(scaleMultiplier, 3));
+  const safeSpeedMultiplier = Math.max(0.1, Math.min(speedMultiplier, 3));
+
+  for (const fish of activePool.values()) {
+    fish.userParams.scale = Math.max(0.1, Math.min(fish.userParams.scale * safeScaleMultiplier, 3));
+    fish.userParams.speed = Math.max(0, Math.min(fish.userParams.speed * safeSpeedMultiplier, 5));
+    updateActiveFishOnDisk(fish);
+  }
+  updateFishLayers(getAllActiveFish());
+  return activePool.size;
+}
+
 /** 魚を複製する */
 export function duplicateFish(fishId: string): ActiveFish | undefined {
   const src = activePool.get(fishId);

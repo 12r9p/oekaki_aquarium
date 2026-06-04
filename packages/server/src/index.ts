@@ -34,6 +34,7 @@ import {
   restoreActiveFishFromDisk,
   removeFish,
   updateFishParams,
+  multiplyAllFishParams,
   removePendingFish,
   duplicateFish,
   redistributeFish,
@@ -94,6 +95,15 @@ app.put("/api/fish/:id", async (c) => {
     broadcastToAll({ event: "reload" }); // 表示・非表示が切り替わるためリロード（またはWSパケットで除外）
   }
   return c.json({ success: ok });
+});
+
+app.post("/api/fish/bulk-multiply", async (c) => {
+  const body = await c.req.json<{ scaleMultiplier?: number; speedMultiplier?: number }>();
+  const scaleMultiplier = Number.isFinite(body.scaleMultiplier) ? body.scaleMultiplier! : 1;
+  const speedMultiplier = Number.isFinite(body.speedMultiplier) ? body.speedMultiplier! : 1;
+  const updated = multiplyAllFishParams(scaleMultiplier, speedMultiplier);
+  pushClientListToManagers();
+  return c.json({ success: true, updated });
 });
 
 // 魚の複製

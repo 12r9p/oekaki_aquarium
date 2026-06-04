@@ -3,7 +3,7 @@ import type { ActiveFish } from "@aquarium/shared";
 import { LAYER_CONFIG } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Copy, Trash2, Pin, Archive, CopyPlus, Loader2, RefreshCw, X, Settings2 } from "lucide-react";
+import { Copy, Trash2, Pin, Archive, CopyPlus, Loader2, RefreshCw, X, Settings2, Gauge } from "lucide-react";
 import {
     Table,
     TableBody,
@@ -31,6 +31,51 @@ interface LibraryEntry {
 interface FishTabProps {
     activeFish: ActiveFish[];
     onRefresh: () => void;
+}
+
+function BulkMultiplierSlider({
+    label,
+    value,
+    onChange,
+    accentClass,
+}: {
+    label: string;
+    value: number;
+    onChange: (value: number) => void;
+    accentClass: string;
+}) {
+    const setClampedValue = (next: number) => onChange(Math.max(0.1, Math.min(next, 3)));
+    return (
+        <div className="flex flex-col gap-2">
+            <div className="flex items-center justify-between">
+                <label className="text-xs font-semibold text-slate-600">{label}</label>
+                <div className="flex items-center gap-1">
+                    <span className="text-xs text-slate-400">×</span>
+                    <Input
+                        type="number"
+                        min="0.1"
+                        max="3"
+                        step="0.05"
+                        value={value}
+                        onChange={event => setClampedValue(Number(event.target.value) || 1)}
+                        className="h-7 w-20 text-right text-xs font-mono"
+                    />
+                </div>
+            </div>
+            <input
+                type="range"
+                min="0.1"
+                max="3"
+                step="0.05"
+                value={value}
+                onChange={event => setClampedValue(Number(event.target.value))}
+                className={`w-full ${accentClass}`}
+            />
+            <div className="flex justify-between text-[10px] text-slate-400">
+                <span>×0.1</span><span>×1.0</span><span>×3.0</span>
+            </div>
+        </div>
+    );
 }
 
 /** 魚コンフィグポップアップ */
@@ -306,6 +351,9 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
     const [isReloading, setIsReloading] = useState(false);
     const [selectedFish, setSelectedFish] = useState<ActiveFish | null>(null);
+    const [bulkScaleMultiplier, setBulkScaleMultiplier] = useState(1);
+    const [bulkSpeedMultiplier, setBulkSpeedMultiplier] = useState(1);
+    const [isApplyingBulk, setIsApplyingBulk] = useState(false);
     // 削除確認モード（true = 削除前に確認する）
     const [confirmMode, setConfirmMode] = useState(true);
 
@@ -384,6 +432,26 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
         onRefresh();
     };
 
+    const applyBulkMultipliers = async () => {
+        setIsApplyingBulk(true);
+        try {
+            const response = await fetch("/api/fish/bulk-multiply", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    scaleMultiplier: bulkScaleMultiplier,
+                    speedMultiplier: bulkSpeedMultiplier,
+                }),
+            });
+            if (!response.ok) return;
+            setBulkScaleMultiplier(1);
+            setBulkSpeedMultiplier(1);
+            onRefresh();
+        } finally {
+            setIsApplyingBulk(false);
+        }
+    };
+
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col gap-6">
             {/* ヘッダー */}
@@ -429,6 +497,39 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                         {isGalleryOpen ? "ギャラリーを閉じる" : "ギャラリーから追加"}
                     </Button>
                 </div>
+            </div>
+
+            {/* --- 全魚一括調整 --- */}
+            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
+                <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2">
+                        <Gauge className="w-4 h-4 text-sky-500" />
+                        <h3 className="text-sm font-bold text-slate-700">全魚の速度・スケールを一括調整</h3>
+                    </div>
+                    <Button
+                        onClick={applyBulkMultipliers}
+                        disabled={isApplyingBulk || activeFish.length === 0 || (bulkScaleMultiplier === 1 && bulkSpeedMultiplier === 1)}
+                        className="bg-sky-500 hover:bg-sky-600 text-white"
+                    >
+                        {isApplyingBulk && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
+                        {activeFish.length}匹に適用
+                    </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-6">
+                    <BulkMultiplierSlider
+                        label="スケール倍率"
+                        value={bulkScaleMultiplier}
+                        onChange={setBulkScaleMultiplier}
+                        accentClass="accent-sky-500"
+                    />
+                    <BulkMultiplierSlider
+                        label="速度倍率"
+                        value={bulkSpeedMultiplier}
+                        onChange={setBulkSpeedMultiplier}
+                        accentClass="accent-emerald-500"
+                    />
+                </div>
+                <p className="mt-3 text-[10px] text-slate-400">現在の各魚の個別設定値に倍率を掛けて保存します。適用後、倍率は1.00に戻ります。</p>
             </div>
 
             {/* --- ギャラリー表示エリア --- */}
