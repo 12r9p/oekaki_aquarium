@@ -64,7 +64,7 @@ export const PHYSICS = {
   BOIDS_ALIGNMENT_WEIGHT: 1.0,
   BOIDS_COHESION_WEIGHT: 1.0,
   // schoolの縦速度抑制係数 (0〜1、小さいほど縦に動かない)
-  SCHOOL_VERTICAL_DAMPING: 0.7,
+  SCHOOL_VERTICAL_DAMPING: 0.88,
 
   // Tuna (マグロ: 高速直線往復)
   TUNA_SPEED: 5.5,        // 基本速度 (px/frame)

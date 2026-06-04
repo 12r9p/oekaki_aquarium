@@ -1,8 +1,8 @@
 {
   "viewports": {
     "display:disp-6u3oud": {
-      "x": 518.5765978359583,
-      "y": -42.952645158993846,
+      "x": 383.9912347844877,
+      "y": 22.79950641186177,
       "width": 1021.9395150772159,
       "height": 1065.5394319535592,
       "scale": 0.9462402917381628
@@ -16,20 +16,6 @@
     "forbiddenZones": [],
     "spawnPoints": [],
     "layers": [
-      {
-        "id": "L_1780554026185",
-        "name": "8k Wallpaper Geometry.jpg",
-        "type": "image",
-        "zIndex": 101,
-        "visible": true,
-        "opacity": 1,
-        "url": "/images/scene/8e5af158-ab9b-47f7-8b0f-108380bd075d.jpg",
-        "x": 1154,
-        "y": 530,
-        "width": 269,
-        "height": 151,
-        "aspectRatioLocked": true
-      },
       {
         "id": "layer_system",
         "name": "System (モニター・壁)",

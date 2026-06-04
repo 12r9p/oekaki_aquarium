@@ -53,7 +53,7 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   }
   state.framesUntilChange--;
   if (state.framesUntilChange <= 0) {
-    state.targetY = world.height * (0.2 + Math.random() * 0.6);
+    state.targetY = world.height * (0.08 + Math.random() * 0.84);
     if (Math.random() < 0.25) state.cruiseDir *= -1;
     state.framesUntilChange = 300 + Math.floor(Math.random() * 500);
   }
@@ -123,7 +123,7 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
 
   // 小さな群れごとに水槽内を巡回する。全個体が中央へ密集するのを防ぐ。
   fx += state.cruiseDir * 0.025;
-  fy += Math.max(-0.04, Math.min(0.04, (state.targetY - fish.physics.pos.y) * 0.0005));
+  fy += Math.max(-0.09, Math.min(0.09, (state.targetY - fish.physics.pos.y) * 0.001));
 
   fish.physics.vel.x += fx;
   // Y方向速度を直接抑制してから加算

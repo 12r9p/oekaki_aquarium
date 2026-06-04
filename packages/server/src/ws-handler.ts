@@ -40,7 +40,6 @@ export interface ClientData {
 }
 
 const sockets = new Set<ServerWebSocket<ClientData>>();
-let identifyRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * displayIDごとにViewportを永続保存するMap。
@@ -175,7 +174,12 @@ export const wsHandlers = {
 };
 
 function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): void {
+  // heartbeat を含む正常な受信を生存確認として扱う。
+  ws.data.lastHeartbeat = Date.now();
   switch (msg.event) {
+    case "heartbeat":
+      break;
+
     case "register": {
       ws.data.uuid = msg.uuid;
       ws.data.screenW = msg.hardware.w;
@@ -249,7 +253,6 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       // 管理画面からのドラッグ中リアルタイムプレビュー: 対象displayのみに転送
       const target = [...sockets].find(s => s.data.uuid === msg.displayUuid);
       if (target) sendTo(target, { event: "viewport_preview", viewport: msg.viewport });
-      flashDisplayNumbers();
       break;
     }
 
@@ -293,25 +296,12 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
   }
 }
 
-function flashDisplayNumbers(): void {
-  const displays = [...sockets]
-    .filter(ws => ws.data.clientType === "display")
-    .sort((a, b) => a.data.uuid.localeCompare(b.data.uuid));
-  displays.forEach((ws, index) => sendTo(ws, { event: "test_pattern", pattern: "identify", displayNumber: index + 1 }));
-  if (identifyRestoreTimer) clearTimeout(identifyRestoreTimer);
-  identifyRestoreTimer = setTimeout(() => {
-    displays.forEach((ws, index) => sendTo(ws, {
-      event: "test_pattern",
-      pattern: ws.data.testPattern,
-      displayNumber: index + 1,
-    }));
-  }, 1200);
-}
-
 // ---- ユーティリティ -------------------------------------------
 
 function sendTo(ws: ServerWebSocket<ClientData>, msg: WsServerMessage): void {
   if (ws.readyState === WebSocket.OPEN) {
+    // スリープ復帰直後など、送信キューが詰まったクライアントへ古いフレームを積み続けない。
+    if (msg.event === "frame" && ws.getBufferedAmount() > 512_000) return;
     ws.send(JSON.stringify(msg));
   }
 }
@@ -332,10 +322,9 @@ export function broadcastToDisplays(msg: WsServerMessage): void {
 
 /** 描画フレームを display と管理画面のプレビューへ送る */
 export function broadcastToRenderClients(msg: WsServerMessage): void {
-  const data = JSON.stringify(msg);
   for (const ws of sockets) {
     if (ws.data.clientType === "display" || ws.data.clientType === "manage") {
-      ws.send(data);
+      sendTo(ws, msg);
     }
   }
 }
@@ -469,10 +458,11 @@ export function getDisplayClientInfoList(): DisplayClientInfo[] {
   return [...active, ...disconnectedDisplays].sort((a, b) => a.uuid.localeCompare(b.uuid));
 }
 
-/** ハートビートタイムアウトチェック（30秒） */
+/** ハートビートタイムアウトチェック */
 export function startHeartbeatWatcher(): void {
   setInterval(() => {
-    const timeout = 30_000;
+    // バックグラウンドタブではブラウザがタイマーを強く間引くため猶予を長めに取る。
+    const timeout = 120_000;
     const now = Date.now();
     for (const ws of sockets) {
       if (now - ws.data.lastHeartbeat > timeout) {

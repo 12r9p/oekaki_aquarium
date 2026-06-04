@@ -43,9 +43,10 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
 
     const uploadFiles = async (files: FileList | File[]) => {
         for (const file of Array.from(files)) {
-            if (file.type !== "image/png") continue;
+            if (!file.type.startsWith("image/")) continue;
             const form = new FormData();
             form.append("image", file);
+            form.append("autoProcess", "true");
             await fetch("/api/scan", { method: "POST", body: form });
         }
         await fetchPending();

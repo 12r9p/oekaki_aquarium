@@ -400,14 +400,19 @@ export function ViewportCanvas({
                 ctx.lineWidth = isSel ? 2 : 1.5;
                 ctx.strokeRect(p.x, p.y, dw, dh);
 
+                const displayNumber = String((obj.idx ?? 0) + 1);
                 ctx.fillStyle = isSel ? "#0f172a" : "#334155";
-                ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px sans-serif`;
-                ctx.textBaseline = "bottom";
-                ctx.fillText(`画面 ${(obj.idx ?? 0) + 1} / ID: ${d.uuid.split(":")[1] || d.uuid}`, p.x + 4, p.y + dh - 4);
+                ctx.font = `900 ${Math.max(24, Math.min(dw, dh) * 0.46)}px sans-serif`;
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                ctx.fillText(displayNumber, p.x + dw / 2, p.y + dh / 2);
 
                 const whText = `${Math.round(vp.width)}×${Math.round(vp.height)}`;
                 ctx.font = `${Math.max(9, 10 * cam.zoom)}px monospace`;
+                ctx.textAlign = "left";
+                ctx.textBaseline = "bottom";
                 ctx.fillText(whText, p.x + 4, p.y + dh - 18 * cam.zoom);
+                ctx.fillText(d.uuid.split(":")[1] || d.uuid, p.x + 4, p.y + dh - 4);
 
                 if (isSel) {
                     ctx.fillStyle = "#fff";
@@ -613,7 +618,7 @@ export function ViewportCanvas({
         const hitObjects: { type: "system_fz" | "system_sp" | "fish" | "image" | "display", zIndex: number, data: any, layerId?: string }[] = [];
 
         // 1. システム層 (Z-Index: 999 相当とする)
-        const canMoveSystem = !activeLayerId || activeLayerId === "layer_system";
+        const canMoveSystem = activeLayerId === "layer_system";
         if (canMoveSystem) {
             for (const fz of forbiddenZones) hitObjects.push({ type: "system_fz", zIndex: 999, data: fz, layerId: "layer_system" });
             for (const sp of spawnPoints) hitObjects.push({ type: "system_sp", zIndex: 999, data: sp, layerId: "layer_system" });
@@ -621,7 +626,7 @@ export function ViewportCanvas({
 
         // 2. ユーザーレイヤー (Z-Indexに基づく)
         for (const l of layers) {
-            const isActiveLayer = !activeLayerId || activeLayerId === l.id;
+            const isActiveLayer = activeLayerId === l.id;
             if (!isActiveLayer) continue;
 
             if (l.type === "image") {
@@ -729,7 +734,7 @@ export function ViewportCanvas({
             }
         }
 
-        const canMoveDisp = !activeLayerId || activeLayerId === "layer_system";
+        const canMoveDisp = !activeLayerId;
         if (canMoveDisp) {
             if (selected) {
                 const t = displaysRef.current.find(d => d.uuid === selected);
@@ -755,6 +760,7 @@ export function ViewportCanvas({
                             handle: hitHandle, uuid: selected, startMouseX: mx, startMouseY: my,
                             startRect: { ...t.viewport! }
                         };
+                        e.currentTarget.setPointerCapture(e.pointerId);
                         return;
                     }
                 }
@@ -780,6 +786,7 @@ export function ViewportCanvas({
                     handle: "move", uuid: hitBody, startMouseX: mx, startMouseY: my,
                     startRect: { ...t.viewport! }
                 };
+                e.currentTarget.setPointerCapture(e.pointerId);
                 setSelectedLocalId(null);
             } else {
                 setSelected(null);
@@ -1054,6 +1061,9 @@ export function ViewportCanvas({
                 }
             }
             dragRef.current = null;
+            if (e?.currentTarget.hasPointerCapture(e.pointerId)) {
+                e.currentTarget.releasePointerCapture(e.pointerId);
+            }
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             rafRef.current = requestAnimationFrame(draw);
         }

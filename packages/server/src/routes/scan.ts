@@ -56,7 +56,10 @@ export async function scanRoute(c: Context): Promise<Response> {
     }
     let fileData = Buffer.from(await file.arrayBuffer()) as Buffer;
     embeddedMeta = readFishMeta(fileData) ?? undefined;
-    if (!isPng(fileData)) fileData = await sharp(fileData).png().toBuffer();
+    const autoProcess = formData.get("autoProcess") === "true";
+    fileData = autoProcess
+      ? await normalizeControllerPhoto(fileData)
+      : (!isPng(fileData) ? await sharp(fileData).rotate().png().toBuffer() : fileData);
 
     // form data に meta フィールドがあれば埋め込む
     const metaRaw = formData.get("meta");
@@ -88,4 +91,36 @@ export async function scanRoute(c: Context): Promise<Response> {
 
 function isPng(data: Buffer): boolean {
   return data.length >= 8 && data.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+}
+
+/**
+ * Controller のカメラ画像向け前処理。
+ * 明るく低彩度な用紙背景だけを透過し、透明余白を切り抜いて長辺を揃える。
+ */
+async function normalizeControllerPhoto(data: Buffer): Promise<Buffer> {
+  const { data: pixels, info } = await sharp(data)
+    .rotate()
+    .ensureAlpha()
+    .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  for (let i = 0; i < pixels.length; i += 4) {
+    const r = pixels[i]!;
+    const g = pixels[i + 1]!;
+    const b = pixels[i + 2]!;
+    const brightness = (r + g + b) / 3;
+    const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+    if (brightness > 238 && saturation < 24) {
+      pixels[i + 3] = 0;
+    }
+  }
+
+  return sharp(pixels, {
+    raw: { width: info.width, height: info.height, channels: 4 },
+  })
+    .trim({ background: { r: 0, g: 0, b: 0, alpha: 0 } })
+    .resize({ width: 1024, height: 1024, fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer();
 }

@@ -375,7 +375,10 @@ const server = Bun.serve({
       const filename = url.pathname.slice("/images/".length);
       const file = Bun.file(join(PUBLIC_IMAGES_DIR, filename));
       if (await file.exists()) {
-        return new Response(file, { headers: { "Access-Control-Allow-Origin": "*" } });
+        return new Response(file, { headers: {
+          "Access-Control-Allow-Origin": "*",
+          "Cache-Control": "public, max-age=31536000, immutable",
+        } });
       }
       return new Response("Not Found", { status: 404 });
     }
@@ -386,7 +389,11 @@ const server = Bun.serve({
       const buf = getLibraryFileBuffer(filename);
       if (buf) {
         return new Response(buf, {
-          headers: { "Content-Type": "image/png", "Access-Control-Allow-Origin": "*" }
+          headers: {
+            "Content-Type": "image/png",
+            "Access-Control-Allow-Origin": "*",
+            "Cache-Control": "public, max-age=31536000, immutable",
+          }
         });
       }
       return new Response("Not Found", { status: 404 });

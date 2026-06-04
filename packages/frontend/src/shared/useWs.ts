@@ -23,6 +23,7 @@ class WsClient {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private clientType: string;
   private lastFps = 60;
+  private lastMessageAt = Date.now();
 
   constructor(clientType: string) {
     this.clientType = clientType;
@@ -65,6 +66,7 @@ class WsClient {
     };
 
     this.ws.onmessage = (ev) => {
+      this.lastMessageAt = Date.now();
       try {
         const msg = JSON.parse(ev.data as string) as WsServerMessage;
         for (const handler of this.handlers) handler(msg);
@@ -83,8 +85,16 @@ class WsClient {
   private startHeartbeat(): void {
     this.stopHeartbeat(); // 二重起動防止
     this.heartbeatTimer = setInterval(() => {
+      if (
+        document.visibilityState === "visible" &&
+        this.ws?.readyState === WebSocket.OPEN &&
+        Date.now() - this.lastMessageAt > 30_000
+      ) {
+        this.ws.close();
+        return;
+      }
       this.send({ event: "heartbeat", fps: this.lastFps });
-    }, 10_000); // 10秒ごと（サーバーのタイムアウト30秒より十分短い）
+    }, 10_000);
   }
 
   private stopHeartbeat(): void {

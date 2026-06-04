@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { PendingFish, WsServerMessage } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
 import { Gallery } from "./Gallery";
@@ -15,18 +15,28 @@ export default function App(): React.ReactElement {
     const [refreshKey, setRefreshKey] = useState(0);
 
     // サーバーから fish_added が届いたらギャラリーを自動更新
-    ws.onMessage((msg: WsServerMessage) => {
-        if (msg.event === "fish_added") {
-            setRefreshKey((k) => k + 1);
+    useEffect(() => ws.onMessage((msg: WsServerMessage) => {
+        if (msg.event === "fish_added") setRefreshKey((k) => k + 1);
+    }), []);
+
+    const cancelEditing = async (): Promise<void> => {
+        if (selectedFish) {
+            await fetch("/api/pending/unlock", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fishId: selectedFish.id }),
+            });
         }
-    });
+        setPage("gallery");
+        setSelectedFish(null);
+    };
 
     if (page === "editor" && selectedFish) {
         return (
             <Editor
                 fish={selectedFish}
                 onReleased={() => { setPage("gallery"); setSelectedFish(null); }}
-                onCancel={() => { setPage("gallery"); setSelectedFish(null); }}
+                onCancel={() => void cancelEditing()}
             />
         );
     }
