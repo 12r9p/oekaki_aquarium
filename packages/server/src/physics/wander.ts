@@ -1,5 +1,6 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { getWorld } from "../world";
+import { movementScale } from "./motion-profile";
 
 // ============================================================
 // wander.ts — 角度ドリフト方式 Wander（速度ベクトル空間で動作）
@@ -81,7 +82,7 @@ export function applyWander(fish: ActiveFish): void {
 
   // 回転後の速度ベクトルに小さな寄与として加算
   const newAngle = curAngle + turn;
-  const driftMag = DRIFT_SPEED;
+  const driftMag = DRIFT_SPEED * movementScale(fish);
   vel.x += Math.cos(newAngle) * driftMag;
   vel.y += Math.sin(newAngle) * driftMag;
   fish.physics.pos.y += Math.sin(newAngle) * driftMag * 0.8;

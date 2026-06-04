@@ -2,17 +2,8 @@ import { GAME_LOOP_MS, LAYER_CONFIG } from "@aquarium/shared";
 import type { UdpPacket } from "@aquarium/shared";
 import { getAllActiveFish } from "./fish-manager";
 import { updateFishLayers } from "./layer-manager";
-import { applyBoids } from "./physics/boids";
-import { applySchool } from "./physics/school";
-import { applyTuna } from "./physics/tuna";
-import { applySquid } from "./physics/squid";
-import { applyJellyfish } from "./physics/jellyfish";
-import { applyShark } from "./physics/shark";
-import { applyLooper } from "./physics/looper";
-import { applyAnchor } from "./physics/anchor";
-import { applyBoundaries, cleanExpiredFood } from "./physics/boundaries";
-import { applyWander } from "./physics/wander";
-import { getWorld } from "./world";
+import { cleanExpiredFood } from "./physics/boundaries";
+import { updateAquariumMotion } from "./physics/aquarium-motion";
 import { broadcastToRenderClients } from "./ws-handler";
 
 // ============================================================
@@ -35,8 +26,6 @@ export function stopGameLoop(): void {
 function tick(): void {
   frameCount++;
   const allFish = getAllActiveFish();
-  const world = getWorld();
-
   // レイヤー更新は10フレームに1回（重い処理なので間引く）
   if (frameCount % 10 === 0) {
     updateFishLayers(allFish);
@@ -47,50 +36,7 @@ function tick(): void {
   for (const fish of allFish) {
     if (fish.isArchived) continue; // アーカイブ中の魚はスキップ
 
-    switch (fish.type) {
-      // --- 新プリセット ---
-      case "tuna":
-        applyTuna(fish);
-        applyWander(fish);
-        applyBoundaries(fish);
-        break;
-      case "school":
-        applySchool(fish, allFish);
-        applyWander(fish);
-        applyBoundaries(fish);
-        break;
-      case "squid":
-        applySquid(fish);
-        applyWander(fish);
-        applyBoundaries(fish);
-        break;
-      case "jellyfish":
-        applyJellyfish(fish);
-        applyWander(fish);
-        applyBoundaries(fish);
-        break;
-      case "shark":
-        applyShark(fish);
-        applyWander(fish);
-        applyBoundaries(fish);
-        break;
-
-      // --- 旧プリセット（互换維持） ---
-      case "swimmer": // swimmer → school と同じ挙動
-        applySchool(fish, allFish);
-        applyWander(fish);
-        applyBoundaries(fish);
-        break;
-      case "looper":  // looper → 旧ループ挙動を維持
-        applyLooper(fish, world.width);
-        applyWander(fish);
-        applyBoundaries(fish);
-        break;
-      case "anchor":
-        // anchorは固定なので探索ドリフトは不要
-        applyAnchor(fish);
-        break;
-    }
+    updateAquariumMotion(fish, allFish);
   }
 
   // フレームパケットを組み立てて display クライアントにのみ送信

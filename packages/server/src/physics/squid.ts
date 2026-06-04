@@ -1,5 +1,7 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
+import { getWorld } from "../world";
+import { movementScale } from "./motion-profile";
 
 // ============================================================
 // squid.ts — イカ型: ホバリング + Sin波パルス推進
@@ -14,35 +16,41 @@ const squidState = new Map<string, {
   frame: number;    // サイクル内フレーム
   dir: 1 | -1;     // 現在の向き
   baseY: number;   // Y基準
+  phase: number;
 }>();
 
 const CYCLE = PHYSICS.SQUID_PULSE_FRAMES + PHYSICS.SQUID_REST_FRAMES;
 
 export function applySquid(fish: ActiveFish): void {
-  const world = { width: 8000, height: 4000 }; // worldは境界で制御するので大きめ
+  const world = getWorld();
 
   if (!squidState.has(fish.id)) {
     squidState.set(fish.id, {
       frame: Math.floor(Math.random() * CYCLE),
       dir: Math.random() < 0.5 ? 1 : -1,
       baseY: fish.physics.pos.y,
+      phase: Math.random() * Math.PI * 2,
     });
   }
   const state = squidState.get(fish.id)!;
   state.frame = (state.frame + 1) % CYCLE;
+  const margin = PHYSICS.WALL_MARGIN * 1.5;
+  if (fish.physics.pos.x > world.width - margin && state.dir === 1) state.dir = -1;
+  if (fish.physics.pos.x < margin && state.dir === -1) state.dir = 1;
+  state.baseY = Math.max(margin, Math.min(world.height - margin, state.baseY));
 
   // X方向: パルスか巡航か
   const isJetting = state.frame < PHYSICS.SQUID_PULSE_FRAMES;
   const targetVX = isJetting
-    ? PHYSICS.SQUID_PULSE_SPEED * state.dir * fish.physics.speedMultiplier
-    : PHYSICS.SQUID_CRUISE_SPEED * state.dir * fish.physics.speedMultiplier;
+    ? PHYSICS.SQUID_PULSE_SPEED * state.dir * movementScale(fish)
+    : PHYSICS.SQUID_CRUISE_SPEED * state.dir * movementScale(fish);
 
   // 速度を滑らかに補間
   fish.physics.vel.x += (targetVX - fish.physics.vel.x) * 0.2;
   fish.physics.pos.x += fish.physics.vel.x;
 
   // Y方向: sin波ホバリング
-  const t = (Date.now() / 1000) * (Math.PI * 2 / (PHYSICS.SQUID_HOVER_PERIOD / 60));
+  const t = state.phase + (Date.now() / 1000) * (Math.PI * 2 / (PHYSICS.SQUID_HOVER_PERIOD / 60));
   const targetY = state.baseY + Math.sin(t) * PHYSICS.SQUID_HOVER_AMP;
   const dy = (targetY - fish.physics.pos.y) * 0.04;
   fish.physics.vel.y = dy;

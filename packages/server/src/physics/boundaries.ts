@@ -1,6 +1,7 @@
 import type { ActiveFish, Vector2 } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
-import { getWorld, isInValidZone, nearestValidZoneCenter } from "../world";
+import { getWorld } from "../world";
+import { maxSpeedForFish } from "./motion-profile";
 
 // ============================================================
 // 境界判定 (Boundaries)
@@ -24,7 +25,7 @@ export function applyBoundaries(fish: ActiveFish): void {
   const world = getWorld();
   const pos = fish.physics.pos;
   const vel = fish.physics.vel;
-  const speed = PHYSICS.BOIDS_MAX_SPEED * fish.physics.speedMultiplier;
+  const speed = maxSpeedForFish(fish);
 
   // --- 1. Void / 画面外 からの押し戻し (ハードクランプ + 速度反転方式) ---
   // 力ベースだと高速時に外に出たままになるので、座標を強制修正する

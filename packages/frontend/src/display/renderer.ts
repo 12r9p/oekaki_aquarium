@@ -1,6 +1,7 @@
 import { Application, Sprite, Texture, Graphics, Assets, Container } from "pixi.js";
 import { STATE, DISPLAY_ID } from "./state";
 import type { TestPattern, WorldObject, UdpFishData } from "@aquarium/shared";
+import { getLoadedFishTexture, requestFishTexture } from "./fish-texture-loader";
 
 // ============================================================
 // display/renderer.ts
@@ -9,13 +10,15 @@ import type { TestPattern, WorldObject, UdpFishData } from "@aquarium/shared";
 
 export interface FishEntry {
   sprite: Sprite;
+  textureUrl?: string;
+  textureReady: boolean;
+  desiredScale: number;
+  facing: 1 | -1;
   targetX: number; targetY: number;
   targetRotation: number; targetScale: number;
   targetAlpha: number; targetZIndex: number;
 }
 
-const textureUrlCache = new Map<string, string>();
-const textureLoadInFlight = new Map<string, Promise<Texture>>();
 export let currentPattern: TestPattern = "off";
 
 let testGraphics: Graphics | null = null;
@@ -26,6 +29,7 @@ let currentScene: WorldObject[] = [];
 export const fishGlobalContainer = new Container();
 fishGlobalContainer.sortableChildren = true;
 const imageLayerSprites = new Map<string, Sprite>();
+const FISH_BASE_SIZE = 48;
 
 // Lerp 関数
 function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
@@ -36,27 +40,26 @@ function lerpAngle(a: number, b: number, t: number): number {
   return a + d * t;
 }
 
-function loadFishTexture(url: string): Promise<Texture> {
-  const loading = textureLoadInFlight.get(url);
-  if (loading) return loading;
+function normalizedFishScale(texture: Texture, desiredScale: number): number {
+  const sourceSize = Math.max(texture.width, texture.height, 1);
+  return desiredScale * (FISH_BASE_SIZE / sourceSize);
+}
 
-  const promise = Assets.load<Texture>(url)
-    .then((texture) => {
-      texture.label = url;
-      textureLoadInFlight.delete(url);
-      return texture;
-    })
-    .catch(async (error) => {
-      textureLoadInFlight.delete(url);
-      try {
-        await Assets.unload(url);
-      } catch {
-        // 未登録・未ロードのURLはそのまま次回フレームで再試行する。
-      }
-      throw error;
-    });
-  textureLoadInFlight.set(url, promise);
-  return promise;
+export function updateFishTargets(
+  entry: FishEntry,
+  fd: UdpFishData,
+  screenX: number,
+  screenY: number,
+  desiredScale: number,
+): void {
+  entry.desiredScale = desiredScale;
+  entry.facing = fd.vx !== undefined && fd.vx < 0 ? -1 : 1;
+  entry.targetX = screenX;
+  entry.targetY = screenY;
+  entry.targetRotation = fd.r;
+  entry.targetScale = normalizedFishScale(entry.sprite.texture, desiredScale) * entry.facing;
+  entry.targetAlpha = fd.o;
+  entry.targetZIndex = fd.z;
 }
 
 export function initRenderer(app: Application) {
@@ -66,7 +69,7 @@ export function initRenderer(app: Application) {
 
 export function buildPlaceholder(app: Application): Texture {
   const g = new Graphics();
-  g.circle(0, 0, 30).fill(0xff00ff);
+  g.circle(0, 0, 12).fill({ color: 0x4a90b8, alpha: 0.25 });
   return app.renderer.generateTexture(g);
 }
 
@@ -445,37 +448,34 @@ export function applyViewport(app: Application, silent = false): void {
 }
 
 export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd: UdpFishData, sx: number, sy: number, appliedScale: number): void {
-  let texture: Texture;
-  if (fd.u) {
-    textureUrlCache.set(fd.i, fd.u);
-    if (Assets.cache.has(fd.u)) {
-      // キャッシュ済み → 即時使用
-      texture = Assets.cache.get<Texture>(fd.u)!;
-    } else {
-      // キャッシュなし → プレースホルダーで spawn し、ロード完了後に差し替え
-      texture = buildPlaceholder(app);
-      void loadFishTexture(fd.u).then((tex) => {
-        // ロード完了時点でまだ存在する魚スプライトにテクスチャを適用
-        const entry = fishMap.get(fd.i);
-        if (entry) entry.sprite.texture = tex;
-      }).catch(() => undefined);
-    }
-  } else {
-    const cachedUrl = textureUrlCache.get(fd.i);
-    texture = cachedUrl ? (Assets.cache.get<Texture>(cachedUrl) ?? buildPlaceholder(app)) : buildPlaceholder(app);
-  }
+  const texture = fd.u ? getLoadedFishTexture(fd.u) ?? buildPlaceholder(app) : buildPlaceholder(app);
   
   const sprite = new Sprite(texture);
   sprite.anchor.set(0.5);
   sprite.x = sx; sprite.y = sy;
   sprite.rotation = fd.r;
   // vx < 0 のとき（左向き移動）は scaleX を反転して画像を左向きにする
-  const scaleSign = (fd.vx !== undefined && fd.vx < 0) ? -1 : 1;
-  sprite.scale.set(appliedScale * scaleSign, appliedScale);
+  const facing = (fd.vx !== undefined && fd.vx < 0) ? -1 : 1;
+  const initialScale = normalizedFishScale(texture, appliedScale);
+  sprite.scale.set(initialScale * facing, initialScale);
   sprite.alpha = fd.o;
   sprite.zIndex = fd.z;
   fishGlobalContainer.addChild(sprite);
-  fishMap.set(fd.i, { sprite, targetX:sx, targetY:sy, targetRotation:fd.r, targetScale:appliedScale * scaleSign, targetAlpha:fd.o, targetZIndex:fd.z });
+  const entry: FishEntry = {
+    sprite,
+    textureUrl: fd.u,
+    textureReady: Boolean(fd.u && getLoadedFishTexture(fd.u)),
+    desiredScale: appliedScale,
+    facing,
+    targetX: sx,
+    targetY: sy,
+    targetRotation: fd.r,
+    targetScale: initialScale * facing,
+    targetAlpha: fd.o,
+    targetZIndex: fd.z,
+  };
+  fishMap.set(fd.i, entry);
+  if (fd.u) updateFishTexture(fd.i, fd.u, fishMap);
 }
 
 export function destroyFish(fishMap: Map<string, FishEntry>, id: string): void {
@@ -486,13 +486,23 @@ export function destroyFish(fishMap: Map<string, FishEntry>, id: string): void {
 }
 
 export function updateFishTexture(id: string, textureUrl: string, fishMap: Map<string, FishEntry>) {
-  textureUrlCache.set(id, textureUrl);
   const entry = fishMap.get(id);
-  if (entry) {
-    void loadFishTexture(textureUrl)
-      .then((tex) => { entry.sprite.texture = tex; })
-      .catch(() => undefined);
+  if (!entry) return;
+  if (entry.textureUrl !== textureUrl) {
+    entry.textureUrl = textureUrl;
+    entry.textureReady = false;
   }
+  if (entry.textureReady) return;
+
+  void requestFishTexture(textureUrl)
+    .then((texture) => {
+      const current = fishMap.get(id);
+      if (!current || current.textureUrl !== textureUrl) return;
+      current.sprite.texture = texture;
+      current.textureReady = true;
+      current.targetScale = normalizedFishScale(texture, current.desiredScale) * current.facing;
+    })
+    .catch(() => undefined);
 }
 
 export function setupRenderLoop(app: Application, fishMap: Map<string, FishEntry>) {

@@ -1,6 +1,7 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
 import { getWorld } from "../world";
+import { movementScale } from "./motion-profile";
 
 // ============================================================
 // tuna.ts — マグロ型: 高速直線往復
@@ -15,11 +16,14 @@ const tunaState = new Map<string, {
   dir: 1 | -1;     // 現在の進行方向（+1=右, -1=左）
   frame: number;   // 全体フレームカウント
   baseY: number;   // Y基準座標
+  laneTargetY: number;
+  framesUntilLaneChange: number;
+  speedFactor: number;
 }>();
 
 export function applyTuna(fish: ActiveFish): void {
   const world = getWorld();
-  const speed = PHYSICS.TUNA_SPEED * fish.physics.speedMultiplier;
+  const speed = PHYSICS.TUNA_SPEED * movementScale(fish);
   const margin = PHYSICS.WALL_MARGIN + 50;
 
   if (!tunaState.has(fish.id)) {
@@ -28,10 +32,19 @@ export function applyTuna(fish: ActiveFish): void {
       dir: Math.random() < 0.5 ? 1 : -1,
       frame: Math.floor(Math.random() * 360), // フレームオフセット（全員一斉動作防止）
       baseY: fish.physics.pos.y,
+      laneTargetY: fish.physics.pos.y,
+      framesUntilLaneChange: 120 + Math.floor(Math.random() * 500),
+      speedFactor: 0.82 + Math.random() * 0.36,
     });
   }
   const state = tunaState.get(fish.id)!;
   state.frame++;
+  state.framesUntilLaneChange--;
+  if (state.framesUntilLaneChange <= 0) {
+    state.laneTargetY = world.height * (0.18 + Math.random() * 0.64);
+    state.framesUntilLaneChange = 360 + Math.floor(Math.random() * 720);
+  }
+  state.baseY += (state.laneTargetY - state.baseY) * 0.0015;
 
   // 壁および禁止エリアに近づいたら向きを反転
   let shouldTurnLeft = false;
@@ -69,7 +82,7 @@ export function applyTuna(fish: ActiveFish): void {
   }
 
   // X: 一定速度
-  fish.physics.vel.x = speed * state.dir;
+  fish.physics.vel.x = speed * state.speedFactor * state.dir;
   fish.physics.pos.x += fish.physics.vel.x;
 
   // Y: sin波でごくわずかにドリフト（ほぼ水平）
@@ -88,6 +101,7 @@ export function resetTunaState(fishId: string, newY: number): void {
   const state = tunaState.get(fishId);
   if (state) {
     state.baseY = newY;
+    state.laneTargetY = newY;
     state.frame = Math.floor(Math.random() * 360); // フレームも乱数リセット
   } else {
     // stateがない場合は次のフレームで初期化されるが、baseYはpos.yから自然に取得される

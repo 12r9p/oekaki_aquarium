@@ -8,6 +8,7 @@ import {
   spawnFish, 
   destroyFish, 
   updateFishTexture,
+  updateFishTargets,
   type FishEntry
 } from "./renderer";
 import type { WsServerMessage, UdpPacket } from "@aquarium/shared";
@@ -123,11 +124,8 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
           spawnFish(app, fishMap, fd, screenX, screenY, fishScale);
         } else {
           const e = fishMap.get(fd.i)!;
-          e.targetX = screenX; e.targetY = screenY;
-          e.targetRotation = fd.r; e.targetScale = fishScale;
-          e.targetAlpha = fd.o; e.targetZIndex = fd.z;
-          // テクスチャが未適用（プレースホルダーのまま）の場合はURLを再適用
-          if (fd.u && e.sprite.texture.label !== fd.u) {
+          updateFishTargets(e, fd, screenX, screenY, fishScale);
+          if (fd.u && (!e.textureReady || e.textureUrl !== fd.u)) {
             updateFishTexture(fd.i, fd.u, fishMap);
           }
         }

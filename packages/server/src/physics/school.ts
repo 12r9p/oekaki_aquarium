@@ -1,5 +1,7 @@
 import type { ActiveFish, Vector2 } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
+import { getWorld } from "../world";
+import { movementScale } from "./motion-profile";
 
 // ============================================================
 // school.ts — イワシ群れ型: 改良Boids（横バイアス・縦抑制）
@@ -27,9 +29,34 @@ function steer(desired: Vector2, current: Vector2): Vector2 {
   );
 }
 
+const schoolState = new Map<string, { group: number; targetY: number; cruiseDir: 1 | -1; framesUntilChange: number }>();
+
+function groupForFish(id: string): number {
+  let hash = 0;
+  for (let i = 0; i < id.length; i++) hash = (hash * 31 + id.charCodeAt(i)) >>> 0;
+  return hash % 8;
+}
+
 export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
-  const baseSpeed = PHYSICS.BOIDS_MAX_SPEED * fish.physics.speedMultiplier;
+  const world = getWorld();
+  const baseSpeed = PHYSICS.BOIDS_MAX_SPEED * movementScale(fish);
   const vdamp = PHYSICS.SCHOOL_VERTICAL_DAMPING;
+  let state = schoolState.get(fish.id);
+  if (!state) {
+    state = {
+      group: groupForFish(fish.id),
+      targetY: fish.physics.pos.y,
+      cruiseDir: fish.physics.vel.x < 0 ? -1 : 1,
+      framesUntilChange: 0,
+    };
+    schoolState.set(fish.id, state);
+  }
+  state.framesUntilChange--;
+  if (state.framesUntilChange <= 0) {
+    state.targetY = world.height * (0.2 + Math.random() * 0.6);
+    if (Math.random() < 0.25) state.cruiseDir *= -1;
+    state.framesUntilChange = 300 + Math.floor(Math.random() * 500);
+  }
 
   let sepX = 0, sepY = 0, sepCount = 0;
   let aliX = 0, aliY = 0, aliCount = 0;
@@ -39,7 +66,11 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   const schoolTypes = new Set(["school", "swimmer"]);
 
   for (const other of allFish) {
-    if (other.id === fish.id || !schoolTypes.has(other.type)) continue;
+    if (
+      other.id === fish.id ||
+      !schoolTypes.has(other.type) ||
+      groupForFish(other.id) !== state.group
+    ) continue;
     const dx = fish.physics.pos.x - other.physics.pos.x;
     const dy = fish.physics.pos.y - other.physics.pos.y;
     const dist = Math.hypot(dx, dy);
@@ -90,11 +121,9 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
     }
   }
 
-  // 群れが全くいなければ右方向へのバイアス力を加える
-  if (cohCount === 0 && aliCount === 0) {
-    const bias = fish.physics.vel.x >= 0 ? 1 : -1;
-    fx += bias * 0.05;
-  }
+  // 小さな群れごとに水槽内を巡回する。全個体が中央へ密集するのを防ぐ。
+  fx += state.cruiseDir * 0.025;
+  fy += Math.max(-0.04, Math.min(0.04, (state.targetY - fish.physics.pos.y) * 0.0005));
 
   fish.physics.vel.x += fx;
   // Y方向速度を直接抑制してから加算
