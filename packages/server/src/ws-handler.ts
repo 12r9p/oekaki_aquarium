@@ -275,6 +275,16 @@ export function broadcastToDisplays(msg: WsServerMessage): void {
   }
 }
 
+/** 描画フレームを display と管理画面のプレビューへ送る */
+export function broadcastToRenderClients(msg: WsServerMessage): void {
+  const data = JSON.stringify(msg);
+  for (const ws of sockets) {
+    if (ws.data.clientType === "display" || ws.data.clientType === "manage") {
+      ws.send(data);
+    }
+  }
+}
+
 /** 特定のdisplayクライアントに送る */
 export function sendToDisplay(targetUuid: string, msg: WsServerMessage): boolean {
   for (const ws of sockets) {

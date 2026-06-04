@@ -425,6 +425,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                     >
                         🌊 全魚を再配置
                     </Button>
+
                     <Button variant="outline" onClick={() => setIsGalleryOpen(!isGalleryOpen)} className="bg-white">
                         {isGalleryOpen ? "ギャラリーを閉じる" : "ギャラリーから追加"}
                     </Button>

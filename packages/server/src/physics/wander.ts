@@ -14,30 +14,25 @@ import { getWorld } from "../world";
 //   - worldサイズ変化の影響を受けない
 //
 //   アルゴリズム:
-//   1. 魚IDからシードを生成してフェーズオフセットを決定（個性付け）
-//   2. 毎フレーム sin/cos の時間関数で「希望角度」を更新
+//   1. 個体ごとに不規則な間隔で新しい「希望角度」を選ぶ
+//   2. 方向転換の速さも個体・区間ごとにランダム化する
 //   3. 現在速度の角度と希望角度の差分に比例した小さな力を加算
 //   4. 壁・禁止エリアに近いとき追加反発力を付与（境界べったり防止）
 // ============================================================
 
-// ジッター: 1フレームごとの最大角度変化量（クランプ前）
-const DRIFT_TURN_RATE = 0.035;  // 大きいほど素早く方向転換
-const DRIFT_SPEED     = 1.8;    // 速度ベクトルのスケール係数
+// 個体ごとに不規則な間隔で目標方向を選び、そこへ緩やかに旋回する。
+const MIN_TURN_RATE   = 0.008;
+const MAX_TURN_RATE   = 0.035;
+const DRIFT_SPEED     = 0.18;
+const MIN_HOLD_FRAMES = 90;
+const MAX_HOLD_FRAMES = 300;
 const WALL_REPULSE    = 180;    // 壁・禁止エリアの反発開始距離(px)
 const WALL_FORCE      = 0.35;   // 壁反発力
 
-// IDハッシュ (djb2) → 個体固有の位相オフセット
-function hashId(id: string): number {
-  let h = 5381;
-  for (let i = 0; i < id.length; i++) {
-    h = ((h << 5) + h + id.charCodeAt(i)) >>> 0;
-  }
-  return h;
-}
-
 interface WanderState {
-  phaseOffset: number;   // 個体固有の位相オフセット [0, 2π)
-  angleOffset: number;   // 2段目の位相（方向変化をネスト）
+  desiredAngle: number;
+  turnRate: number;
+  framesUntilTurn: number;
 }
 
 const wanderMap = new Map<string, WanderState>();
@@ -50,43 +45,46 @@ export function applyWander(fish: ActiveFish): void {
   const world = getWorld();
   const pos = fish.physics.pos;
   const vel = fish.physics.vel;
-  const now = Date.now() / 1000; // 秒単位
-
-  // 初回: IDハッシュから個体固有の位相を生成
+  // 初回と一定間隔ごとに、次の進行方向と旋回速度をランダムに選ぶ。
   let state = wanderMap.get(fish.id);
   if (!state) {
-    const h = hashId(fish.id);
-    const p1 = ((h & 0xffff) / 0xffff) * Math.PI * 2;          // [0, 2π)
-    const p2 = (((h >> 16) & 0xffff) / 0xffff) * Math.PI * 2;  // [0, 2π)
-    state = { phaseOffset: p1, angleOffset: p2 };
+    const initialAngle = Math.hypot(vel.x, vel.y) > 0.01
+      ? Math.atan2(vel.y, vel.x)
+      : Math.random() * Math.PI * 2;
+    state = {
+      desiredAngle: initialAngle,
+      turnRate: MIN_TURN_RATE,
+      framesUntilTurn: 0,
+    };
     wanderMap.set(fish.id, state);
   }
-
-  // 個体固有の速度でゆっくり変化する「希望進行角度」を計算
-  // sin の入れ子でカオス的な非周期変化を生成
-  const t1 = now * 0.13 + state.phaseOffset;
-  const t2 = now * 0.07 + state.angleOffset;
-  const desiredAngle = Math.sin(t1) * Math.PI + Math.sin(t2 + Math.sin(t1) * 1.3) * Math.PI * 0.8;
+  state.framesUntilTurn--;
+  if (state.framesUntilTurn <= 0) {
+    const currentAngle = Math.hypot(vel.x, vel.y) > 0.01
+      ? Math.atan2(vel.y, vel.x)
+      : state.desiredAngle;
+    state.desiredAngle = currentAngle + (Math.random() - 0.5) * Math.PI * 1.5;
+    state.turnRate = MIN_TURN_RATE + Math.random() * (MAX_TURN_RATE - MIN_TURN_RATE);
+    state.framesUntilTurn = Math.floor(MIN_HOLD_FRAMES + Math.random() * (MAX_HOLD_FRAMES - MIN_HOLD_FRAMES));
+  }
 
   // 現在の速度ベクトルの角度
   const curLen = Math.hypot(vel.x, vel.y);
-  const curAngle = curLen > 0.01 ? Math.atan2(vel.y, vel.x) : desiredAngle;
+  const curAngle = curLen > 0.01 ? Math.atan2(vel.y, vel.x) : state.desiredAngle;
 
-  // 角度差に比例した小さな回転力を加算（最大 DRIFT_TURN_RATE rad/frame）
-  let angleDiff = desiredAngle - curAngle;
+  // 角度差に比例した小さな回転力を加算
+  let angleDiff = state.desiredAngle - curAngle;
   // 角度差を [-π, π] に正規化
   while (angleDiff > Math.PI)  angleDiff -= Math.PI * 2;
   while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-  const turn = Math.max(-DRIFT_TURN_RATE, Math.min(DRIFT_TURN_RATE, angleDiff));
+  const turn = Math.max(-state.turnRate, Math.min(state.turnRate, angleDiff));
 
   // 回転後の速度ベクトルに小さな寄与として加算
   const newAngle = curAngle + turn;
   const driftMag = DRIFT_SPEED;
   vel.x += Math.cos(newAngle) * driftMag;
   vel.y += Math.sin(newAngle) * driftMag;
-  // pos.y を直接更新: school.ts が vel.y をdampingで毎フレーム減衰させるため、
-  // vel.yへの加算だけでは縦移動が打ち消される。直接位置を動かすことで確実に縦移動させる。
-  fish.physics.pos.y += Math.sin(newAngle) * driftMag * 1.2;
+  fish.physics.pos.y += Math.sin(newAngle) * driftMag * 0.8;
 
   // ---- 壁・禁止エリアへの追加反発 ----
   // boundaries.ts の跳ね返しを補完し、「張りつき」をさらに防ぐ

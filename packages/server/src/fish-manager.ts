@@ -6,7 +6,7 @@ import type { ActiveFish, FishConfig, PendingFish, Vector2, FishType } from "@aq
 // ============================================================
 
 import { join } from "node:path";
-import { readFileSync, existsSync, unlinkSync, mkdirSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, existsSync, unlinkSync, mkdirSync, readdirSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { writeFishMeta, readFishMeta, DEFAULT_FISH_META, type FishMeta } from "./png-metadata";
 import { getWorld } from "./world";
@@ -45,7 +45,8 @@ function saveActiveFishToDisk(fish: ActiveFish) {
       isArchived: fish.isArchived ?? false,
     };
     buf = writeFishMeta(buf, meta);
-    Bun.write(destPath, buf); 
+    // URLを公開する前に書き込みを完了させ、初回リクエストの404を防ぐ。
+    writeFileSync(destPath, buf);
     // 永続化されたファイルのURLに差し替え
     fish.textureUrl = `/lib-images/${fish.id}.png`;
   } catch (e) {
@@ -70,7 +71,7 @@ function updateActiveFishOnDisk(fish: ActiveFish) {
       isArchived: fish.isArchived ?? false,
     };
     buf = writeFishMeta(buf, meta);
-    Bun.write(destPath, buf);
+    writeFileSync(destPath, buf);
   } catch (e) {
     console.error(`[FishManager] Failed to update fish ${fish.id} on disk:`, e);
   }
@@ -300,6 +301,10 @@ export function redistributeFish(): number {
     // 速度もランダムリセット（固まらないように）
     f.physics.vel.x = (Math.random() - 0.5) * 4;
     f.physics.vel.y = (Math.random() - 0.5) * 2;
+
+    // 各物理モデルの内部stateをリセット（tunaの上戻り防止など）
+    resetTunaState(f.id, f.physics.pos.y);
+    removeWanderState(f.id);
   });
   return n;
 }
@@ -382,4 +387,3 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
     console.error(`[FishManager] Failed to read ${DATA_FISH_DIR}:`, err);
   }
 }
-

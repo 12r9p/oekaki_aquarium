@@ -84,6 +84,7 @@ function ManageApp(): React.ReactElement {
             } else if (msg.event === "frame") {
                 // ViewportCanvas のリアルタイム描画用に window に保持
                 (window as any).__lastFrame = msg;
+                window.dispatchEvent(new Event("aquarium_frame"));
             }
         });
     }, []);

@@ -33,12 +33,37 @@ export function applyTuna(fish: ActiveFish): void {
   const state = tunaState.get(fish.id)!;
   state.frame++;
 
-  // 壁に近づいたら向きを反転
-  if (fish.physics.pos.x >= world.width - margin && state.dir === 1) {
+  // 壁および禁止エリアに近づいたら向きを反転
+  let shouldTurnLeft = false;
+  let shouldTurnRight = false;
+
+  // 1. ワールド境界の判定
+  if (fish.physics.pos.x >= world.width - margin) shouldTurnLeft = true;
+  if (fish.physics.pos.x <= margin) shouldTurnRight = true;
+
+  // 2. 進入禁止エリアの判定
+  if (!shouldTurnLeft && !shouldTurnRight) {
+    for (const fz of world.forbiddenZones) {
+      // 魚の予想進行先に禁止エリアがあるかチェック
+      if (
+        fish.physics.pos.y > fz.y - margin &&
+        fish.physics.pos.y < fz.y + fz.height + margin
+      ) {
+        if (state.dir === 1 && fish.physics.pos.x >= fz.x - margin && fish.physics.pos.x < fz.x) {
+          shouldTurnLeft = true;
+        }
+        if (state.dir === -1 && fish.physics.pos.x <= fz.x + fz.width + margin && fish.physics.pos.x > fz.x + fz.width) {
+          shouldTurnRight = true;
+        }
+      }
+    }
+  }
+
+  if (shouldTurnLeft && state.dir === 1) {
     state.dir = -1;
     state.baseY = fish.physics.pos.y; // Uターン時にY基準を更新
   }
-  if (fish.physics.pos.x <= margin && state.dir === -1) {
+  if (shouldTurnRight && state.dir === -1) {
     state.dir = 1;
     state.baseY = fish.physics.pos.y;
   }

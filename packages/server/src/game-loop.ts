@@ -13,7 +13,7 @@ import { applyAnchor } from "./physics/anchor";
 import { applyBoundaries, cleanExpiredFood } from "./physics/boundaries";
 import { applyWander } from "./physics/wander";
 import { getWorld } from "./world";
-import { broadcastToDisplays } from "./ws-handler";
+import { broadcastToRenderClients } from "./ws-handler";
 
 // ============================================================
 // game-loop.ts
@@ -116,6 +116,6 @@ function tick(): void {
     e: [],
   };
 
-  // "frame" イベントとして display クライアントにのみ送信
-  broadcastToDisplays({ event: "frame", ...packet } as Parameters<typeof broadcastToDisplays>[0]);
+  // display と管理画面プレビューへフレームを送信
+  broadcastToRenderClients({ event: "frame", ...packet } as Parameters<typeof broadcastToRenderClients>[0]);
 }

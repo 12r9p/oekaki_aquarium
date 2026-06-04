@@ -15,6 +15,7 @@ export interface FishEntry {
 }
 
 const textureUrlCache = new Map<string, string>();
+const textureLoadInFlight = new Map<string, Promise<Texture>>();
 export let currentPattern: TestPattern = "off";
 
 let testGraphics: Graphics | null = null;
@@ -33,6 +34,29 @@ function lerpAngle(a: number, b: number, t: number): number {
   while (d > Math.PI) d -= Math.PI * 2;
   while (d < -Math.PI) d += Math.PI * 2;
   return a + d * t;
+}
+
+function loadFishTexture(url: string): Promise<Texture> {
+  const loading = textureLoadInFlight.get(url);
+  if (loading) return loading;
+
+  const promise = Assets.load<Texture>(url)
+    .then((texture) => {
+      texture.label = url;
+      textureLoadInFlight.delete(url);
+      return texture;
+    })
+    .catch(async (error) => {
+      textureLoadInFlight.delete(url);
+      try {
+        await Assets.unload(url);
+      } catch {
+        // 未登録・未ロードのURLはそのまま次回フレームで再試行する。
+      }
+      throw error;
+    });
+  textureLoadInFlight.set(url, promise);
+  return promise;
 }
 
 export function initRenderer(app: Application) {
@@ -430,11 +454,11 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
     } else {
       // キャッシュなし → プレースホルダーで spawn し、ロード完了後に差し替え
       texture = buildPlaceholder(app);
-      void Assets.load<Texture>(fd.u).then((tex) => {
+      void loadFishTexture(fd.u).then((tex) => {
         // ロード完了時点でまだ存在する魚スプライトにテクスチャを適用
         const entry = fishMap.get(fd.i);
         if (entry) entry.sprite.texture = tex;
-      });
+      }).catch(() => undefined);
     }
   } else {
     const cachedUrl = textureUrlCache.get(fd.i);
@@ -465,7 +489,9 @@ export function updateFishTexture(id: string, textureUrl: string, fishMap: Map<s
   textureUrlCache.set(id, textureUrl);
   const entry = fishMap.get(id);
   if (entry) {
-    void Assets.load<Texture>(textureUrl).then((tex) => { entry.sprite.texture = tex; });
+    void loadFishTexture(textureUrl)
+      .then((tex) => { entry.sprite.texture = tex; })
+      .catch(() => undefined);
   }
 }
 

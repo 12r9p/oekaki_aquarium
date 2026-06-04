@@ -38,6 +38,7 @@ export default defineConfig({
     proxy: {
       "/api":    { target: "http://localhost:3000", changeOrigin: true },
       "/images": { target: "http://localhost:3000", changeOrigin: true },
+      "/lib-images": { target: "http://localhost:3000", changeOrigin: true },
       "/ws": {
         target: "ws://localhost:3000",
         ws: true,

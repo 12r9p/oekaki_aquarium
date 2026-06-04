@@ -45,19 +45,23 @@ interface DragState {
 const HANDLE_R = 6;
 const COLORS = ["#10b981"]; // Emerald 500 (全て緑色で統一)
 
-/** 魚の画像キャッシュ (URL -> HTMLImageElement) */
-const fishImgCache = new Map<string, HTMLImageElement>();
+/** 魚の画像キャッシュ。失敗時は一定時間後に再試行する。 */
+const fishImgCache = new Map<string, { img: HTMLImageElement; loaded: boolean; retryAfter: number }>();
 function loadFishImg(url: string): HTMLImageElement | null {
     const cached = fishImgCache.get(url);
-    if (cached) return cached;
+    if (cached?.loaded) return cached.img;
+    if (cached && Date.now() < cached.retryAfter) return null;
+
     const img = new Image();
     img.crossOrigin = "anonymous";
+    fishImgCache.set(url, { img, loaded: false, retryAfter: Number.POSITIVE_INFINITY });
     img.onload = () => {
-        fishImgCache.set(url, img);
-        // 画像読み込み完了時にギャラリーへ再描画イベントを発火
+        fishImgCache.set(url, { img, loaded: true, retryAfter: 0 });
         window.dispatchEvent(new Event("aquarium_frame"));
     };
-    img.onerror = () => fishImgCache.set(url, new Image()); // 失敗時は空画像をキャッシュ
+    img.onerror = () => {
+        fishImgCache.set(url, { img, loaded: false, retryAfter: Date.now() + 2_000 });
+    };
     img.src = url;
     return null; // 読み込み中は null
 }
@@ -244,7 +248,11 @@ export function ViewportCanvas({
 
         // fish用準備
         const frameFish = (window as any).__lastFrame;
-        const fishTextureMap = new Map(activeFishRef.current.map(f => [f.id, f.textureUrl]));
+        const fishTextureMap = new Map<string, string>();
+        for (const fish of activeFishRef.current) {
+            fishTextureMap.set(fish.id, fish.textureUrl);
+            fishTextureMap.set(fish.id.slice(0, 8), fish.textureUrl);
+        }
 
         // ユーザーレイヤー (画像、魚)
         layers.forEach(layer => {
@@ -253,7 +261,9 @@ export function ViewportCanvas({
             } else if (layer.type === "fish") {
                 if (frameFish && frameFish.f) {
                     frameFish.f.forEach((f: any) => {
-                        drawObjects.push({ type: "fish", zIndex: layer.zIndex, layerId: layer.id, data: f });
+                        if (f.z === layer.zIndex) {
+                            drawObjects.push({ type: "fish", zIndex: layer.zIndex, layerId: layer.id, data: f });
+                        }
                     });
                 }
             }
@@ -320,8 +330,8 @@ export function ViewportCanvas({
                 const layerColors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
                 const colorIdx = (zIndexGroup + layerColors.length) % layerColors.length;
                 const isDragging = dragFishIdRef.current === f.i;
-                const textureUrl = fishTextureMap.get(f.i);
-                const sz = Math.max(12, 40 * cam.zoom) * (f.sc ?? 1.0);
+                const textureUrl = f.u ?? fishTextureMap.get(f.i);
+                const sz = Math.max(12, 80 * cam.zoom) * (f.s ?? 1.0);
 
                 if (textureUrl) {
                     const img = loadFishImg(textureUrl);

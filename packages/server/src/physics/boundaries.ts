@@ -63,24 +63,26 @@ export function applyBoundaries(fish: ActiveFish): void {
       const minDist = Math.min(distL, distR, distT, distB);
 
       // 強制的に位置をマージン外へクランプし、進行方向の速度を反転＆減衰させる
+      // 張り付き防止のため、最低限の反発速度（キック力）を保証する
       const bounceDamping = 0.8;
+      const minKick = 2.0;
 
       if (minDist === distL) {
         // 左壁：左へ押し戻す
         pos.x = fz.x - margin;
-        if (vel.x > 0) vel.x *= -bounceDamping;
+        if (vel.x > 0) vel.x = Math.min(-minKick, vel.x * -bounceDamping);
       } else if (minDist === distR) {
         // 右壁：右へ押し戻す
         pos.x = fz.x + fz.width + margin;
-        if (vel.x < 0) vel.x *= -bounceDamping;
+        if (vel.x < 0) vel.x = Math.max(minKick, vel.x * -bounceDamping);
       } else if (minDist === distT) {
         // 上壁：上へ押し戻す
         pos.y = fz.y - margin;
-        if (vel.y > 0) vel.y *= -bounceDamping;
+        if (vel.y > 0) vel.y = Math.min(-minKick, vel.y * -bounceDamping);
       } else {
         // 下壁：下へ押し戻す
         pos.y = fz.y + fz.height + margin;
-        if (vel.y < 0) vel.y *= -bounceDamping;
+        if (vel.y < 0) vel.y = Math.max(minKick, vel.y * -bounceDamping);
       }
     }
   }

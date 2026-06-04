@@ -4,9 +4,9 @@
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {
-    "dev:server":   "bun run packages/server/src/index.ts",
-    "dev:frontend": "cd packages/frontend && bun run dev",
-    "dev":          "bun run dev:server & bun run dev:frontend",
+    "dev:server":   "bun run --cwd packages/server dev",
+    "dev:frontend": "bun run --cwd packages/frontend dev",
+    "dev":          "bun run --filter '*' dev",
     "build":        "cd packages/frontend && bun run build",
     "typecheck":    "bun run --filter '*' typecheck"
   }
