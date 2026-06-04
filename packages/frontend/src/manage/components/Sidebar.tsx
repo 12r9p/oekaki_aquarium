@@ -156,10 +156,10 @@ export function Sidebar({
                                                     <span className="font-mono">{d.screenW}×{d.screenH}</span>
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-slate-400 mb-0.5 tracking-wide text-[10px]">最終通信</span>
+                                                    <span className="font-semibold text-slate-400 mb-0.5 tracking-wide text-[10px]">PING</span>
                                                     <span className={`font-mono flex items-center gap-1 ${d.disconnectedAt ? 'text-rose-500' : 'text-emerald-600'}`}>
                                                         <div className={`w-1.5 h-1.5 rounded-full ${d.disconnectedAt ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
-                                                        {d.disconnectedAt ? "通信切断中" : (d.ping !== undefined ? `${(Math.max(0, d.ping) / 1000).toFixed(1)}秒前` : "通信中")}
+                                                        {d.disconnectedAt ? "通信切断中" : (d.ping !== undefined ? `${Math.max(0, d.ping)}ms` : "計測中")}
                                                     </span>
                                                 </div>
                                             </div>

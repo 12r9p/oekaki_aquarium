@@ -10,18 +10,25 @@ export function SettingsPage({
     onAddDemoFish,
     onRemoveAllFish,
     onReloadImages,
+    startedAt,
 }: {
     sendRateSetting: number;
     setSendRateSetting: (value: number) => void;
     onAddDemoFish: () => void;
     onRemoveAllFish: () => Promise<void>;
     onReloadImages: () => Promise<void>;
+    startedAt: number;
 }) {
     const [confirmDelete, setConfirmDelete] = useState(false);
     return (
         <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
             <div className="mx-auto flex max-w-4xl flex-col gap-7">
                 <PageHeader title="設定" description="通常運用では変更しない項目を調整します。" />
+                <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                    <h2 className="font-bold text-slate-900">システム稼働時間</h2>
+                    <p className="mt-2 font-mono text-2xl font-bold text-sky-700">{formatUptime(Date.now() - startedAt)}</p>
+                    <p className="mt-1 text-xs text-slate-500">サーバー起動: {new Date(startedAt).toLocaleString("ja-JP")}</p>
+                </section>
 
                 <section className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
                     <div className="flex items-start gap-3">
@@ -83,4 +90,12 @@ export function SettingsPage({
             </div>
         </div>
     );
+}
+
+function formatUptime(ms: number): string {
+    const seconds = Math.max(0, Math.floor(ms / 1000));
+    const days = Math.floor(seconds / 86400);
+    const hours = Math.floor(seconds / 3600) % 24;
+    const minutes = Math.floor(seconds / 60) % 60;
+    return `${days}日 ${hours}時間 ${minutes}分`;
 }

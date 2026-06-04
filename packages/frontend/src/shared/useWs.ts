@@ -19,6 +19,7 @@ type MessageHandler = (msg: WsServerMessage) => void;
 class WsClient {
   private ws: WebSocket | null = null;
   private handlers = new Set<MessageHandler>();
+  private pendingMessages: WsServerMessage[] = [];
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private clientType: string;
@@ -69,7 +70,16 @@ class WsClient {
       this.lastMessageAt = Date.now();
       try {
         const msg = JSON.parse(ev.data as string) as WsServerMessage;
-        for (const handler of this.handlers) handler(msg);
+        if (msg.event === "ping_probe") {
+          this.send({ event: "ping_response", sentAt: msg.sentAt });
+          return;
+        }
+        if (this.handlers.size === 0) {
+          this.pendingMessages.push(msg);
+          if (this.pendingMessages.length > 50) this.pendingMessages.shift();
+        } else {
+          for (const handler of this.handlers) handler(msg);
+        }
       } catch {/* 壊れたパケットは無視 */}
     };
 
@@ -117,6 +127,7 @@ class WsClient {
 
   onMessage(handler: MessageHandler): () => void {
     this.handlers.add(handler);
+    for (const msg of this.pendingMessages.splice(0)) handler(msg);
     return () => this.handlers.delete(handler);
   }
 

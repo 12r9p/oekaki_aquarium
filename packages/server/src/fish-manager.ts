@@ -45,6 +45,9 @@ function saveActiveFishToDisk(fish: ActiveFish) {
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
       direction: fish.userParams.direction ?? "auto",
+      createdAt: fish.createdAt,
+      releasedAt: fish.releasedAt,
+      archivedAt: fish.archivedAt,
     };
     buf = writeFishMeta(buf, meta);
     // URLを公開する前に書き込みを完了させ、初回リクエストの404を防ぐ。
@@ -72,6 +75,9 @@ function updateActiveFishOnDisk(fish: ActiveFish) {
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
       direction: fish.userParams.direction ?? "auto",
+      createdAt: fish.createdAt,
+      releasedAt: fish.releasedAt,
+      archivedAt: fish.archivedAt,
     };
     buf = writeFishMeta(buf, meta);
     writeFileSync(destPath, buf);
@@ -183,11 +189,14 @@ export function releaseFish(
 ): ActiveFish {
   // 待機リストから除去
   const pendingIdx = pendingQueue.findIndex((f) => f.id === config.id);
+  const createdAt = pendingIdx >= 0 ? pendingQueue[pendingIdx]!.timestamp : config.fishMeta?.createdAt ?? Date.now();
   if (pendingIdx >= 0) pendingQueue.splice(pendingIdx, 1);
 
   const fish: ActiveFish = {
     ...config,
     timestamp: Date.now(),
+    createdAt,
+    releasedAt: Date.now(),
     physics: {
       pos: { ...spawnPos },
       vel: initialVelForType(config.type),
@@ -245,7 +254,10 @@ export function updateFishParams(
   if (updates.isPinned === false) fish.pinnedLayerId = undefined;
   if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
   if (updates.type !== undefined) fish.type = updates.type;
-  if (updates.isArchived !== undefined) fish.isArchived = updates.isArchived;
+  if (updates.isArchived !== undefined) {
+    fish.isArchived = updates.isArchived;
+    fish.archivedAt = updates.isArchived ? Date.now() : undefined;
+  }
   updateFishLayers(getAllActiveFish());
   
   updateActiveFishOnDisk(fish);
@@ -275,6 +287,9 @@ export function duplicateFish(fishId: string): ActiveFish | undefined {
     ...src,
     id: uuidv4(), // 新しいIDを発行
     timestamp: Date.now(), // 現在時刻で末尾（最前面）に追加
+    createdAt: Date.now(),
+    releasedAt: Date.now(),
+    archivedAt: undefined,
     physics: {
       pos: { x: src.physics.pos.x + 50, y: src.physics.pos.y + 50 }, // 少しずらして配置
       vel: { x: (Math.random() - 0.5) * 2, y: (Math.random() - 0.5) * 0.5 },
@@ -381,6 +396,9 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           id: fishId,
           textureUrl: `/lib-images/${file}`,
           timestamp: Date.now() + restoredCount,
+          createdAt: meta.createdAt ?? Date.now(),
+          releasedAt: meta.releasedAt ?? Date.now(),
+          archivedAt: meta.archivedAt,
           type: meta.type,
           author: meta.author,
           fishMeta: meta,
@@ -403,6 +421,9 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           isArchived: meta.isArchived ?? false,
         };
         activePool.set(fish.id, fish);
+        if (!meta.createdAt || !meta.releasedAt || (meta.isArchived && !meta.archivedAt)) {
+          updateActiveFishOnDisk(fish);
+        }
         restoredCount++;
       } catch (e) {
         console.error(`[FishManager] Failed to restore fish from ${file}:`, e);

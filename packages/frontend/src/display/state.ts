@@ -10,13 +10,13 @@ const params = new URLSearchParams(location.search);
 function getDisplayId(): string {
   const fromUrl = params.get("id");
   if (fromUrl) {
-    localStorage.setItem("display-id", fromUrl);
+    sessionStorage.setItem("display-id", fromUrl);
     return fromUrl;
   }
-  const saved = localStorage.getItem("display-id");
+  const saved = sessionStorage.getItem("display-id");
   if (saved) return saved;
-  const newId = `disp-${Math.random().toString(36).slice(2, 8)}`;
-  localStorage.setItem("display-id", newId);
+  const newId = `tab-${crypto.randomUUID().slice(0, 8)}`;
+  sessionStorage.setItem("display-id", newId);
   return newId;
 }
 

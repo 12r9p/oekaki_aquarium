@@ -5,6 +5,8 @@ import { updateFishLayers } from "./layer-manager";
 import { cleanExpiredFood } from "./physics/boundaries";
 import { updateAquariumMotion } from "./physics/aquarium-motion";
 import { broadcastToRenderClients } from "./ws-handler";
+import { getDisplayClientInfoList } from "./ws-handler";
+import { recordSystemMetric } from "./system-metrics";
 
 // ============================================================
 // game-loop.ts
@@ -25,6 +27,7 @@ export function stopGameLoop(): void {
 }
 
 function tick(): void {
+  const calculationStartedAt = performance.now();
   frameCount++;
   const allFish = getAllActiveFish();
   // レイヤー更新は10フレームに1回（重い処理なので間引く）
@@ -38,6 +41,11 @@ function tick(): void {
     if (fish.isArchived) continue; // アーカイブ中の魚はスキップ
 
     updateAquariumMotion(fish, allFish);
+  }
+  const fishCalculationMs = performance.now() - calculationStartedAt;
+  if (frameCount % 6 === 0) {
+    const monitorCommunicationMs = Math.max(0, ...getDisplayClientInfoList().map(display => display.ping ?? 0));
+    recordSystemMetric(allFish.filter(fish => !fish.isArchived).length, fishCalculationMs, monitorCommunicationMs);
   }
 
   // フレームパケットを組み立てて display クライアントにのみ送信

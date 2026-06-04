@@ -53,7 +53,7 @@ export function applySquid(fish: ActiveFish): void {
 
   // Y方向: sin波ホバリング
   const t = state.phase + (Date.now() / 1000) * (Math.PI * 2 / (PHYSICS.SQUID_HOVER_PERIOD / 60));
-  const targetY = state.baseY + Math.sin(t) * PHYSICS.SQUID_HOVER_AMP;
+  const targetY = state.baseY + Math.sin(t) * PHYSICS.SQUID_HOVER_AMP * world.motionSettings.verticalSpread;
   const dy = (targetY - fish.physics.pos.y) * 0.04;
   fish.physics.vel.y = dy;
   fish.physics.pos.y += dy;

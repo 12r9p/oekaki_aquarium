@@ -31,6 +31,7 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
     }
     // Viewport設定・更新
     if (msg.event === "config") {
+      if (msg.displayNumber !== undefined) document.title = `Display:${msg.displayNumber}`;
       updateStateVP(msg.viewport);
       updateWorldSize(msg.worldW, msg.worldH);
       if (msg.layers) updateLayers(msg.layers);

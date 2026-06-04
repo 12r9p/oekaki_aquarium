@@ -19,8 +19,16 @@ interface FishTableProps {
 }
 
 export function FishTable({ activeFish, onEdit, onDuplicate, onDelete }: FishTableProps) {
+    const [sort, setSort] = useState<"released-new" | "released-old" | "created-new" | "archived-new">("released-new");
+    const sortedFish = [...activeFish].sort((a, b) => {
+        if (sort === "created-new") return b.createdAt - a.createdAt;
+        if (sort === "archived-new") return (b.archivedAt ?? 0) - (a.archivedAt ?? 0);
+        if (sort === "released-old") return a.releasedAt - b.releasedAt;
+        return b.releasedAt - a.releasedAt;
+    });
     return (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-h-[60vh] overflow-y-auto">
+            <div className="sticky top-0 z-10 flex justify-end border-b border-slate-200 bg-white p-3"><select value={sort} onChange={event => setSort(event.target.value as typeof sort)} className="h-8 rounded-md border border-slate-200 px-2 text-xs"><option value="released-new">放流: 新しい順</option><option value="released-old">放流: 古い順</option><option value="created-new">作成: 新しい順</option><option value="archived-new">アーカイブ: 新しい順</option></select></div>
             <Table>
                 <TableHeader className="bg-slate-50">
                     <TableRow>
@@ -29,11 +37,12 @@ export function FishTable({ activeFish, onEdit, onDuplicate, onDelete }: FishTab
                         <TableHead className="w-24 text-center">タイプ</TableHead>
                         <TableHead className="w-24 text-center">大きさ / 速度</TableHead>
                         <TableHead className="w-24 text-center">ステータス</TableHead>
+                        <TableHead className="w-44">時刻</TableHead>
                         <TableHead className="text-right w-16">操作</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {activeFish.map(fish => (
+                    {sortedFish.map(fish => (
                         <FishRow
                             key={fish.id}
                             fish={fish}
@@ -103,6 +112,9 @@ function FishRow({
                     {!fish.isPinned && !fish.isArchived && <span className="text-[10px] text-slate-300">—</span>}
                 </div>
             </TableCell>
+            <TableCell className="align-middle border-r border-slate-100 text-[10px] text-slate-500">
+                <div>作成 {formatTime(fish.createdAt)}</div><div>放流 {formatTime(fish.releasedAt)}</div>{fish.archivedAt && <div>保管 {formatTime(fish.archivedAt)}</div>}
+            </TableCell>
             <TableCell className="text-right align-middle" onClick={event => event.stopPropagation()}>
                 {pendingDelete ? (
                     <div className="flex justify-end items-center gap-1">
@@ -120,4 +132,8 @@ function FishRow({
             </TableCell>
         </TableRow>
     );
+}
+
+function formatTime(value: number): string {
+    return new Date(value).toLocaleString("ja-JP", { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }

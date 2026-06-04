@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
-import type { AppLayerConfig, ClientConfig, HorizontalBoundaryMode, LayerConfig, WorldObject } from "@aquarium/shared";
+import type { AppLayerConfig, ClientConfig, HorizontalBoundaryMode, LayerConfig, MotionSettings, WorldObject } from "@aquarium/shared";
 
 export const DEFAULT_BACKGROUND_URL = "/images/scene/aquarium-default.png";
 
@@ -13,6 +13,7 @@ export interface PersistedAquariumSettings {
     layers: AppLayerConfig[];
     horizontalBoundaryMode: HorizontalBoundaryMode;
     fishSpeedMultiplier: number;
+    motionSettings: MotionSettings;
   };
   bgUrl?: string;
   fishLayers?: LayerConfig[];

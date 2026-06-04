@@ -30,7 +30,7 @@ async function main(): Promise<void> {
     objectFit: "fill"
   });
   document.body.appendChild(app.canvas);
-  document.title = `Display: ${DISPLAY_ID}`;
+  document.title = "Display";
 
   // 初期スケールの計算
   updateStateVP(STATE.VP);

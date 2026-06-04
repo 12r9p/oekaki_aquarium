@@ -1,4 +1,4 @@
-import type { ClientConfig, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
+import type { ClientConfig, AppLayerConfig, HorizontalBoundaryMode, MotionSettings } from "@aquarium/shared";
 import { DEFAULT_WORLD, LAYER_CONFIG, replaceLayerConfig } from "@aquarium/shared";
 
 // ============================================================
@@ -20,6 +20,7 @@ export interface WorldConfig {
   horizontalBoundaryMode: HorizontalBoundaryMode;
   /** 全魚に適用する速度倍率 */
   fishSpeedMultiplier: number;
+  motionSettings: MotionSettings;
 }
 
 export interface ValidZone {
@@ -54,6 +55,7 @@ const world: WorldConfig = {
   layers: defaultLayers,
   horizontalBoundaryMode: "wrap",
   fishSpeedMultiplier: 1,
+  motionSettings: { verticalSpread: 1, turnStrength: 1 },
 };
 
 /**
@@ -98,10 +100,17 @@ export function updateLayers(layers: AppLayerConfig[]): void {
 export function updateWorldMotionSettings(
   horizontalBoundaryMode?: HorizontalBoundaryMode,
   fishSpeedMultiplier?: number,
+  motionSettings?: MotionSettings,
 ): void {
   if (horizontalBoundaryMode) world.horizontalBoundaryMode = horizontalBoundaryMode;
   if (fishSpeedMultiplier !== undefined) {
     world.fishSpeedMultiplier = Math.max(0.1, Math.min(fishSpeedMultiplier, 3));
+  }
+  if (motionSettings) {
+    world.motionSettings = {
+      verticalSpread: Math.max(0.2, Math.min(motionSettings.verticalSpread, 2)),
+      turnStrength: Math.max(0.2, Math.min(motionSettings.turnStrength, 2)),
+    };
   }
 }
 
@@ -110,7 +119,7 @@ export function restoreWorldSettings(settings: Partial<Omit<WorldConfig, "validZ
   if (settings.forbiddenZones) updateForbiddenZones(settings.forbiddenZones);
   if (settings.spawnPoints) updateSpawnPoints(settings.spawnPoints);
   if (settings.layers) updateLayers(settings.layers);
-  updateWorldMotionSettings(settings.horizontalBoundaryMode, settings.fishSpeedMultiplier);
+  updateWorldMotionSettings(settings.horizontalBoundaryMode, settings.fishSpeedMultiplier, settings.motionSettings);
 }
 
 export function updateFishLayerConfig(layers: import("@aquarium/shared").LayerConfig[]): void {

@@ -179,8 +179,8 @@ export function drawViewportCanvas({
 
     // --- 2. 描画オブジェクトのリスト化とZ-Index昇順（奥から手前）ソート ---
     const drawObjects: { type: string; zIndex: number; layerId?: string; idx?: number; data: any }[] = [];
-    forbiddenZones.forEach(z => drawObjects.push({ type: "system_fz", zIndex: 999, data: z }));
-    spawnPoints.forEach(sp => drawObjects.push({ type: "system_sp", zIndex: 999, data: sp }));
+    forbiddenZones.forEach(z => drawObjects.push({ type: "system_fz", zIndex: 3100, data: z }));
+    spawnPoints.forEach(sp => drawObjects.push({ type: "system_sp", zIndex: 3200, data: sp }));
 
     const frameFish = (window as any).__lastFrame;
     const fishTextureMap = new Map<string, string>();
@@ -202,7 +202,7 @@ export function drawViewportCanvas({
     });
 
     displays.forEach((display, index) => {
-        if (display.viewport) drawObjects.push({ type: "display", zIndex: 900, idx: index, data: display });
+        if (display.viewport) drawObjects.push({ type: "display", zIndex: 3000, idx: index, data: display });
     });
     drawObjects.sort((a, b) => a.zIndex - b.zIndex);
 
@@ -303,12 +303,12 @@ export function drawViewportCanvas({
                 ctx.shadowColor = color;
                 ctx.shadowBlur = 8;
             }
-            ctx.fillStyle = isSel ? color + "40" : isHov ? color + "28" : color + "14";
+            ctx.fillStyle = isSel ? color + "40" : isHov ? color + "28" : color + "18";
             ctx.fillRect(p.x, p.y, dw, dh);
             ctx.shadowBlur = 0;
 
-            ctx.strokeStyle = isSel ? color : isHov ? color + "aa" : color + "88";
-            ctx.lineWidth = isSel ? 2 : 1.5;
+            ctx.strokeStyle = isSel ? color : isHov ? color : color + "dd";
+            ctx.lineWidth = isSel ? 3 : 2;
             ctx.strokeRect(p.x, p.y, dw, dh);
 
             const displayNumber = String(index + 1);
@@ -369,6 +369,15 @@ export function drawViewportCanvas({
             const spawnPoint = obj.data;
             const p = worldToCanvas(spawnPoint.x, spawnPoint.y);
             const isSel = dragState?.uuid === spawnPoint.id || selectedLocalId === spawnPoint.id;
+            ctx.strokeStyle = isSel ? "#0369a1" : "#0ea5e9";
+            ctx.lineWidth = isSel ? 4 : 3;
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, HANDLE_R * 2.7, 0, Math.PI * 2);
+            ctx.stroke();
+            ctx.beginPath();
+            ctx.moveTo(p.x - HANDLE_R * 3.5, p.y); ctx.lineTo(p.x + HANDLE_R * 3.5, p.y);
+            ctx.moveTo(p.x, p.y - HANDLE_R * 3.5); ctx.lineTo(p.x, p.y + HANDLE_R * 3.5);
+            ctx.stroke();
             ctx.fillStyle = isSel ? "#0284c7" : "#38bdf8";
             ctx.beginPath();
             ctx.arc(p.x, p.y, HANDLE_R * 1.5, 0, Math.PI * 2);
@@ -379,6 +388,9 @@ export function drawViewportCanvas({
             ctx.textAlign = "center";
             ctx.textBaseline = "middle";
             ctx.fillText("✨", p.x, p.y);
+            ctx.fillStyle = "#0369a1";
+            ctx.font = `bold ${Math.max(10, 11 * cam.zoom)}px sans-serif`;
+            ctx.fillText("放流ポイント", p.x + HANDLE_R * 2, p.y);
             ctx.textAlign = "left";
         }
     }

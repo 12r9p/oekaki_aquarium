@@ -45,7 +45,7 @@ export function applyJellyfish(fish: ActiveFish): void {
 
   // Y: sin波で大きくゆったり上下（周期が長い）
   const phase = (state.frame / PHYSICS.JELLYFISH_PULSE_PERIOD) * Math.PI * 2;
-  const targetY = state.baseY + Math.sin(phase) * PHYSICS.JELLYFISH_PULSE_AMP;
+  const targetY = state.baseY + Math.sin(phase) * PHYSICS.JELLYFISH_PULSE_AMP * world.motionSettings.verticalSpread;
   const dy = (targetY - fish.physics.pos.y) * 0.025;
   fish.physics.vel.y = dy;
   fish.physics.pos.y += dy;

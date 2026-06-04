@@ -35,6 +35,9 @@ export interface FishMeta {
   /** アーカイブ状態 */
   isArchived?: boolean;
   direction?: FishDirection;
+  createdAt?: number;
+  releasedAt?: number;
+  archivedAt?: number;
 }
 
 export const DEFAULT_FISH_META: FishMeta = {

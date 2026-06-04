@@ -1,8 +1,8 @@
 import React from "react";
 import type { DisplayClientInfo, ActiveFish, PendingFish } from "@aquarium/shared";
-import { CircleGauge, Fish, Layers, Settings, Send } from "lucide-react";
+import { CircleGauge, Fish, Layers, Settings, Send, Waves } from "lucide-react";
 
-export type ManagePage = "dashboard" | "layout" | "fish" | "pending" | "settings";
+export type ManagePage = "dashboard" | "layout" | "fish" | "pending" | "motion" | "settings";
 
 interface ToolbarProps {
     displays: DisplayClientInfo[];
@@ -32,6 +32,7 @@ export function Toolbar({
                     ["fish", "魚", Fish],
                     ["pending", "承認待ち", Send],
                     ["layout", "水槽レイアウト", Layers],
+                    ["motion", "魚の動き", Waves],
                     ["settings", "設定", Settings],
                 ] as const).map(([value, label, Icon]) => (
                     <button key={value} onClick={() => setTab(value)} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${tab === value ? "bg-sky-500 text-white" : "text-slate-300 hover:bg-slate-900 hover:text-white"}`}>

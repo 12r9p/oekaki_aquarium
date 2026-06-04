@@ -12,6 +12,7 @@ import { registerClientViewport, unregisterClient, setWorldSize, getWorld,
 import { getAllActiveFish, getPendingQueue } from "./fish-manager";
 import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_BACKGROUND_URL, getPersistedSettings, persistViewport, updatePersistedSettings } from "./settings-store";
+import { getSystemMetrics } from "./system-metrics";
 
 // ============================================================
 // ws-handler.ts（Bun ネイティブ WebSocket 版）
@@ -38,6 +39,7 @@ export interface ClientData {
   screenH: number;
   viewport: ClientConfig["viewport"] | null;
   testPattern: TestPattern;
+  ping: number;
 }
 
 const sockets = new Set<ServerWebSocket<ClientData>>();
@@ -75,6 +77,7 @@ function persistServerSettings(): void {
       layers: w.layers,
       horizontalBoundaryMode: w.horizontalBoundaryMode,
       fishSpeedMultiplier: w.fishSpeedMultiplier,
+      motionSettings: w.motionSettings,
     },
   });
 }
@@ -132,6 +135,7 @@ export const wsHandlers = {
       screenH: 1080,
       viewport: null,
       testPattern: "off",
+      ping: 0,
     };
     sockets.add(ws);
     console.log(`[WS] Connected: ${ws.data.uuid}`);
@@ -181,6 +185,9 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
   switch (msg.event) {
     case "heartbeat":
       break;
+    case "ping_response":
+      ws.data.ping = Math.max(0, Date.now() - msg.sentAt);
+      break;
 
     case "register": {
       ws.data.uuid = msg.uuid;
@@ -210,6 +217,10 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
         }
         registerClientViewport({ uuid: msg.uuid, name: msg.uuid, viewport: vp, debug: { showGrid: false, showId: false } });
         const w = getWorld();
+        const displayNumber = [...sockets]
+          .filter(socket => socket.data.clientType === "display")
+          .sort((a, b) => a.data.uuid.localeCompare(b.data.uuid))
+          .findIndex(socket => socket === ws) + 1;
         sendTo(ws, {
           event: "config",
           viewport: vp,
@@ -222,6 +233,8 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
           layers: w.layers,
           horizontalBoundaryMode: w.horizontalBoundaryMode,
           fishSpeedMultiplier: w.fishSpeedMultiplier,
+          motionSettings: w.motionSettings,
+          displayNumber,
         });
       }
       // 初回接続: シーンを送信
@@ -277,7 +290,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       updateForbiddenZones(msg.forbiddenZones);
       updateSpawnPoints(msg.spawnPoints);
       if (msg.layers) updateLayers(msg.layers);
-      updateWorldMotionSettings(msg.horizontalBoundaryMode, msg.fishSpeedMultiplier);
+      updateWorldMotionSettings(msg.horizontalBoundaryMode, msg.fishSpeedMultiplier, msg.motionSettings);
       persistServerSettings();
       const w = getWorld();
 
@@ -289,6 +302,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
         layers: msg.layers,
         horizontalBoundaryMode: w.horizontalBoundaryMode,
         fishSpeedMultiplier: w.fishSpeedMultiplier,
+        motionSettings: w.motionSettings,
       });
       // 管理画面のstate_pushもトリガー
       pushStateToManagers();
@@ -425,6 +439,8 @@ export function pushStateToManagers(): void {
     fishLayers: LAYER_CONFIG,
     horizontalBoundaryMode: w.horizontalBoundaryMode,
     fishSpeedMultiplier: w.fishSpeedMultiplier,
+    motionSettings: w.motionSettings,
+    systemMetrics: getSystemMetrics(),
   };
   const data = JSON.stringify(msg);
   for (const ws of sockets) {
@@ -453,7 +469,7 @@ export function getDisplayClientInfoList(): DisplayClientInfo[] {
       testPattern: ws.data.testPattern,
       screenW: ws.data.screenW,
       screenH: ws.data.screenH,
-      ping: now - ws.data.lastHeartbeat // 実際のpingではなく最終通信からの経過時間を指標とする
+      ping: ws.data.ping
     }));
 
   // アクティブ + 切断猶予中 の両方を返す
@@ -475,5 +491,11 @@ export function startHeartbeatWatcher(): void {
   }, 5_000);
 
   // 5秒ごとに管理画面へ接続リストをプッシュ（heartbeat確認）
-  setInterval(() => pushClientListToManagers(), 5_000);
+  setInterval(() => {
+    const sentAt = Date.now();
+    for (const ws of sockets) {
+      if (ws.data.clientType === "display") sendTo(ws, { event: "ping_probe", sentAt });
+    }
+    pushClientListToManagers();
+  }, 5_000);
 }

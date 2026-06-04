@@ -3,7 +3,7 @@ import type { ActiveFish, LayerConfig } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/shared/api";
-import { Trash2, Pin, Archive, CopyPlus, X, Shuffle, Upload, Download, Gauge, Plus } from "lucide-react";
+import { Trash2, Pin, Archive, CopyPlus, X, Shuffle, Upload, Download, Gauge } from "lucide-react";
 import { BulkMultiplierSection } from "./fish/BulkMultiplierSection";
 import { FishTable } from "./fish/FishTable";
 import { LayerOccupancySection } from "./fish/LayerOccupancySection";
@@ -412,28 +412,7 @@ export function FishTab({ activeFish, fishLayers, onRefresh }: FishTabProps) {
             />
 
             {/* --- レイヤー所属状況の視覚化 --- */}
-            <LayerOccupancySection activeFish={activeFish} configs={fishLayers} />
-
-            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-                <div className="mb-3 flex items-center justify-between">
-                    <div>
-                        <h3 className="text-sm font-bold text-slate-700">魚レイヤー設定</h3>
-                        <p className="mt-1 text-[10px] text-slate-400">定員と速度は水槽内の魚へ即時反映されます。</p>
-                    </div>
-                    <Button variant="outline" size="sm" onClick={() => void updateFishLayers([...fishLayers, { id: fishLayers.length, maxCount: 20, scale: 0.5, opacity: 0.7, speedFactor: 0.5, zIndex: Math.max(0, 100 - fishLayers.length * 30) }])}><Plus className="mr-1 h-4 w-4" />レイヤー追加</Button>
-                </div>
-                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
-                    {fishLayers.map((layer, index) => (
-                        <div key={layer.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
-                            <div className="mb-3 flex items-center justify-between text-xs font-bold text-slate-700"><span>Lyr {index}</span>{fishLayers.length > 1 && <button className="text-rose-500" onClick={() => void updateFishLayers(fishLayers.filter((_, i) => i !== index))}>削除</button>}</div>
-                            <div className="grid grid-cols-2 gap-3">
-                                <label className="text-[10px] font-bold text-slate-500">定員<Input type="number" min={1} value={layer.maxCount} onChange={event => void updateFishLayers(fishLayers.map((item, i) => i === index ? { ...item, maxCount: Number(event.target.value) || 1 } : item))} className="mt-1 h-8 bg-white text-xs" /></label>
-                                <label className="text-[10px] font-bold text-slate-500">速度倍率<Input type="number" min={0.05} max={3} step={0.05} value={layer.speedFactor} onChange={event => void updateFishLayers(fishLayers.map((item, i) => i === index ? { ...item, speedFactor: Number(event.target.value) || 0.05 } : item))} className="mt-1 h-8 bg-white text-xs" /></label>
-                            </div>
-                        </div>
-                    ))}
-                </div>
-            </div>
+            <LayerOccupancySection activeFish={activeFish} configs={fishLayers} onUpdate={layers => void updateFishLayers(layers)} />
 
             <FishTable
                 activeFish={activeFish}

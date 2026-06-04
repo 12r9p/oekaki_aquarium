@@ -24,6 +24,9 @@ export interface FishMeta {
   isArchived?: boolean;
   /** 水平方向の固定。auto は泳ぎ方に任せる。 */
   direction?: FishDirection;
+  createdAt?: number;
+  releasedAt?: number;
+  archivedAt?: number;
 }
 
 export type FishDirection = "auto" | "left" | "right";
@@ -78,6 +81,9 @@ export interface FishConfig {
 export interface ActiveFish extends FishConfig {
   /** 放流時刻（ところてんレイヤーソートのキー） */
   timestamp: number;
+  createdAt: number;
+  releasedAt: number;
+  archivedAt?: number;
   physics: {
     pos: Vector2;
     vel: Vector2;
@@ -205,6 +211,23 @@ export interface UdpFishData {
 
 export type HorizontalBoundaryMode = "bounce" | "wrap";
 
+export interface MotionSettings {
+  verticalSpread: number;
+  turnStrength: number;
+}
+
+export interface SystemMetricSample {
+  t: number;
+  fishCount: number;
+  fishCalculationMs: number;
+  monitorCommunicationMs: number;
+}
+
+export interface SystemMetrics {
+  startedAt: number;
+  samples: SystemMetricSample[];
+}
+
 export interface UdpEvent {
   type: "spawn" | "feed";
   x: number;
@@ -216,7 +239,8 @@ export interface UdpEvent {
 // -------------------------------------------------------
 export type WsClientMessage =
   | { event: "register"; uuid: string; hardware: { w: number; h: number } }
-  | { event: "heartbeat"; fps: number }
+  | { event: "heartbeat"; fps: number; sentAt?: number }
+  | { event: "ping_response"; sentAt: number }
   | { event: "spawn_food"; x: number; y: number }
   /** 管理画面がドラッグ中にリアルタイムでdisplayへViewportを仮送信する */
   | { event: "viewport_preview"; displayUuid: string; viewport: ClientConfig["viewport"] }
@@ -228,7 +252,7 @@ export type WsClientMessage =
   | { event: "update_world_size"; width: number; height: number }
   // -------------------------
   // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number };
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; motionSettings?: MotionSettings };
 
 export type WsServerMessage =
   | {
@@ -244,9 +268,13 @@ export type WsServerMessage =
       fishLayers?: LayerConfig[];
       horizontalBoundaryMode?: HorizontalBoundaryMode;
       fishSpeedMultiplier?: number;
+      motionSettings?: MotionSettings;
+      systemMetrics?: SystemMetrics;
+      displayNumber?: number;
     }
   | { event: "reload" }
   | { event: "reload_images" }
+  | { event: "ping_probe"; sentAt: number }
   | { event: "fish_added"; fish: PendingFish }
   | { event: "fish_locked"; fishId: string; lockedBy: string }
   | { event: "fish_released"; fish: ActiveFish }
@@ -267,9 +295,11 @@ export type WsServerMessage =
       fishLayers?: LayerConfig[];
       horizontalBoundaryMode?: HorizontalBoundaryMode;
       fishSpeedMultiplier?: number;
+      motionSettings?: MotionSettings;
+      systemMetrics?: SystemMetrics;
     }
   /** WebSocketによる背景 / 禁止エリア のブロードキャスト更新通知 */
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number }
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; motionSettings?: MotionSettings }
   /** display クライアントへテストパターン表示指示 */
   | { event: "test_pattern"; pattern: TestPattern; targetUuid?: string; displayNumber?: number }
   /** display クライアントの Viewport を更新する */

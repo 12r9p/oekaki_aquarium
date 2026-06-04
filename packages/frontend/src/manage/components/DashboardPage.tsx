@@ -1,9 +1,10 @@
-import type { ActiveFish, DisplayClientInfo, LayerConfig, PendingFish } from "@aquarium/shared";
+import type { ActiveFish, DisplayClientInfo, LayerConfig, PendingFish, SystemMetrics } from "@aquarium/shared";
 import { AlertTriangle, CheckCircle2, ExternalLink, Fish, ImageIcon, Maximize2, Monitor, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "./PageHeader";
 import type { ManagePage } from "./Toolbar";
 import { LayerOccupancySection } from "./fish/LayerOccupancySection";
+import { SystemMetricsChart } from "./SystemMetricsChart";
 
 function StatusCard({
     label,
@@ -50,6 +51,7 @@ export function DashboardPage({
     bgUrl,
     sendRateSetting,
     fishLayers,
+    systemMetrics,
     onNavigate,
 }: {
     connected: boolean;
@@ -61,6 +63,7 @@ export function DashboardPage({
     bgUrl: string;
     sendRateSetting: number;
     fishLayers: LayerConfig[];
+    systemMetrics: SystemMetrics;
     onNavigate: (page: ManagePage) => void;
 }) {
     const disconnectedDisplays = displays.filter(display => display.disconnectedAt).length;
@@ -92,6 +95,7 @@ export function DashboardPage({
                     <StatusCard onClick={() => onNavigate("pending")} label="承認待ち" value={pendingFish.length} detail={pendingFish.length > 0 ? "内容を確認して処理してください" : "未処理の魚はありません"} icon={<Send className="h-5 w-5" />} tone={pendingFish.length > 0 ? "amber" : "slate"} />
                     <StatusCard label="送信間隔" value={`${sendRateSetting}ms`} detail={`約 ${Math.round(1000 / sendRateSetting)} fps`} icon={<Maximize2 className="h-5 w-5" />} />
                 </section>
+                <SystemMetricsChart samples={systemMetrics.samples} />
 
                 <section className="grid gap-5 lg:grid-cols-3">
                     <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">

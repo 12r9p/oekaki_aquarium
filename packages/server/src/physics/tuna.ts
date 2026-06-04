@@ -41,10 +41,12 @@ export function applyTuna(fish: ActiveFish): void {
   state.frame++;
   state.framesUntilLaneChange--;
   if (state.framesUntilLaneChange <= 0) {
-    state.laneTargetY = world.height * (0.18 + Math.random() * 0.64);
-    state.framesUntilLaneChange = 360 + Math.floor(Math.random() * 720);
+    const spread = world.motionSettings.verticalSpread;
+    const marginRatio = Math.max(0.04, 0.18 / spread);
+    state.laneTargetY = world.height * (marginRatio + Math.random() * (1 - marginRatio * 2));
+    state.framesUntilLaneChange = 180 + Math.floor(Math.random() * 480);
   }
-  state.baseY += (state.laneTargetY - state.baseY) * 0.0015;
+  state.baseY += (state.laneTargetY - state.baseY) * 0.003 * world.motionSettings.turnStrength;
 
   // 壁および禁止エリアに近づいたら向きを反転
   let shouldTurnLeft = false;
@@ -88,7 +90,7 @@ export function applyTuna(fish: ActiveFish): void {
   fish.physics.pos.x += fish.physics.vel.x;
 
   // Y: sin波でごくわずかにドリフト（ほぼ水平）
-  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 20;
+  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 50 * world.motionSettings.verticalSpread;
   const targetY = state.baseY + driftY;
   const dy = (targetY - fish.physics.pos.y) * 0.05;
   fish.physics.vel.y = dy;

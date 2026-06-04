@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode, LayerConfig } from "@aquarium/shared";
+import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode, LayerConfig, MotionSettings, SystemMetrics } from "@aquarium/shared";
 import { LAYER_CONFIG } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
 import { api } from "../shared/api";
@@ -15,6 +15,7 @@ import { PendingTab } from "./components/PendingTab";
 import { DashboardPage } from "./components/DashboardPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { PageHeader } from "./components/PageHeader";
+import { MotionPage } from "./components/MotionPage";
 // ============================================================
 // manage/main.tsx — SaaS グレード管理画面
 // ============================================================
@@ -34,6 +35,8 @@ function ManageApp(): React.ReactElement {
     const [spawnPoints, setSpawnPoints] = useState<{ id: string; x: number; y: number }[]>([]);
     const [layers, setLayers] = useState<AppLayerConfig[]>([]);
     const [fishLayers, setFishLayers] = useState<LayerConfig[]>(LAYER_CONFIG);
+    const [motionSettings, setMotionSettings] = useState<MotionSettings>({ verticalSpread: 1, turnStrength: 1 });
+    const [systemMetrics, setSystemMetrics] = useState<SystemMetrics>({ startedAt: Date.now(), samples: [] });
     const [horizontalBoundaryMode, setHorizontalBoundaryMode] = useState<HorizontalBoundaryMode>("wrap");
     const [fishSpeedMultiplier, setFishSpeedMultiplier] = useState(1);
     const [connected, setConnected] = useState(false);
@@ -78,6 +81,8 @@ function ManageApp(): React.ReactElement {
                 if (msg.fishLayers !== undefined) setFishLayers(msg.fishLayers);
                 if (msg.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(msg.horizontalBoundaryMode);
                 if (msg.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(msg.fishSpeedMultiplier);
+                if (msg.motionSettings !== undefined) setMotionSettings(msg.motionSettings);
+                if (msg.systemMetrics !== undefined) setSystemMetrics(msg.systemMetrics);
             } else if (msg.event === "update_world_config") {
                 if (msg.bgUrl !== undefined) setBgUrl(msg.bgUrl);
                 if (msg.forbiddenZones !== undefined) setForbiddenZones(msg.forbiddenZones);
@@ -117,6 +122,8 @@ function ManageApp(): React.ReactElement {
                 horizontalBoundaryMode?: HorizontalBoundaryMode;
                 fishSpeedMultiplier?: number;
                 fishLayers?: LayerConfig[];
+                motionSettings?: MotionSettings;
+                systemMetrics?: SystemMetrics;
             };
             setDisplays(data.clients.filter((c) => c.clientType === "display"));
             setActiveFish(data.activeFish);
@@ -130,6 +137,8 @@ function ManageApp(): React.ReactElement {
             if (data.fishLayers !== undefined) setFishLayers(data.fishLayers);
             if (data.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(data.horizontalBoundaryMode);
             if (data.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(data.fishSpeedMultiplier);
+            if (data.motionSettings !== undefined) setMotionSettings(data.motionSettings);
+            if (data.systemMetrics !== undefined) setSystemMetrics(data.systemMetrics);
         } catch (err) {
             console.error("Polling error:", err);
             setLastError("サーバーとの接続に問題があります。");
@@ -270,6 +279,7 @@ function ManageApp(): React.ReactElement {
                         bgUrl={bgUrl}
                         sendRateSetting={sendRateSetting}
                         fishLayers={fishLayers}
+                        systemMetrics={systemMetrics}
                         onNavigate={setTab}
                     />
                 )}
@@ -292,6 +302,12 @@ function ManageApp(): React.ReactElement {
                 {tab === "pending" && (
                     <PendingTab pendingFish={pendingFish} onRefresh={poll} />
                 )}
+                {tab === "motion" && (
+                    <MotionPage settings={motionSettings} onChange={(next) => {
+                        setMotionSettings(next);
+                        if (connected) ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, motionSettings: next });
+                    }} />
+                )}
                 {tab === "settings" && (
                     <SettingsPage
                         sendRateSetting={sendRateSetting}
@@ -302,6 +318,7 @@ function ManageApp(): React.ReactElement {
                             await api.request("/api/clients/reload-images", { method: "POST" });
                             showAlert("モニターへ画像の再読み込みを指示しました");
                         }}
+                        startedAt={systemMetrics.startedAt}
                     />
                 )}
             </main>

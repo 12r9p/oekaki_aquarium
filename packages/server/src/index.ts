@@ -47,6 +47,7 @@ import { loadFishLibrary, getLibraryFileBuffer, DATA_FISH_DIR } from "./fish-lib
 import { readFishMeta, writeFishMeta, DEFAULT_FISH_META } from "./png-metadata";
 import { updatePersistedSettings } from "./settings-store";
 import { updateFishLayers } from "./layer-manager";
+import { getSystemMetrics } from "./system-metrics";
 
 // ============================================================
 // サーバーエントリーポイント（Bun 単一ポート統合版）
@@ -420,6 +421,8 @@ app.get("/api/state", (c) => {
     fishLayers:  LAYER_CONFIG,
     horizontalBoundaryMode: w.horizontalBoundaryMode,
     fishSpeedMultiplier: w.fishSpeedMultiplier,
+    motionSettings: w.motionSettings,
+    systemMetrics: getSystemMetrics(),
   });
 });
 
@@ -450,7 +453,8 @@ const server = Bun.serve({
           screenW: 0,
           screenH: 0,
           viewport: null,
-          testPattern: "off"
+          testPattern: "off",
+          ping: 0,
         }
       });
       return ok ? undefined : new Response("WS upgrade failed", { status: 500 });
