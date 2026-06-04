@@ -1,11 +1,18 @@
 {
   "viewports": {
     "display:disp-6u3oud": {
-      "x": 947,
-      "y": 2,
+      "x": 873.6995947526738,
+      "y": 0,
       "width": 1021.9395150772159,
       "height": 1065.5394319535592,
       "scale": 0.9462402917381628
+    },
+    "display:disp-v9urun": {
+      "x": 43.716477312093545,
+      "y": 0,
+      "width": 1330.2821270310192,
+      "height": 949,
+      "scale": 1
     }
   },
   "bgUrl": "/images/scene/aquarium-default.png",

@@ -1,83 +1,11 @@
 import React, { useRef, useEffect, useCallback, useState } from "react";
-import type { DisplayClientInfo, AppLayerConfig, ActiveFish } from "@aquarium/shared";
+import type { ActiveFish } from "@aquarium/shared";
 import { ws } from "../main";
-
-interface ViewportCanvasProps {
-    worldW: number;
-    worldH: number;
-    bgUrl: string;
-    displaysSt: DisplayClientInfo[];
-    displaysRef: React.MutableRefObject<DisplayClientInfo[]>;
-    pendingViewports: React.MutableRefObject<Map<string, NonNullable<DisplayClientInfo["viewport"]>>>;
-    selected: string | null;
-    setSelected: (id: string | null) => void;
-    hoveredRef: React.MutableRefObject<string | null>;
-    setHoveredUI: (id: string | null) => void;
-    undoStackRef: React.MutableRefObject<any[]>; // 複雑なのでanyで
-    redoStackRef: React.MutableRefObject<any[]>;
-    snapshotViewports: () => any[];
-    onSaveViewport: (uuid: string, vp: NonNullable<DisplayClientInfo["viewport"]>) => Promise<void>;
-    arLocked: boolean;
-    sendRateSetting: number;
-    setWorldSize: (w: number, h: number) => void;
-    forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
-    onUpdateForbiddenZones: (zones: { id: string; x: number; y: number; width: number; height: number }[]) => void;
-    spawnPoints: { id: string; x: number; y: number }[];
-    onUpdateSpawnPoints: (points: { id: string; x: number; y: number }[]) => void;
-    layers: AppLayerConfig[];
-    onUpdateLayers?: (layers: AppLayerConfig[]) => void;
-    activeLayerId?: string;
-    /** 管理画面に表示するアクティブな魚一覧 */
-    activeFish: ActiveFish[];
-    /** 魚をドラッグした際に呼び出すコールバック */
-    onMoveFish?: (fishId: string, x: number, y: number) => void;
-}
-
-// ハンドルの種類（8点＋ボディ移動＋Worldリサイズ用）
-type HandleType = "tl" | "t" | "tr" | "r" | "br" | "b" | "bl" | "l" | "move" | "world_br" | `fz_${string}` | `sp_${string}` | `ImgLayer_${string}`;
-interface Camera { panX: number; panY: number; zoom: number; }
-interface DragState {
-    handle: HandleType;
-    uuid: string; // display uuid または fz id
-    startMouseX: number; startMouseY: number;
-    startRect: { x: number; y: number; width: number; height: number; scale?: number };
-}
-
-const HANDLE_R = 6;
-const COLORS = ["#10b981"]; // Emerald 500 (全て緑色で統一)
-
-/** 魚の画像キャッシュ。失敗時は一定時間後に再試行する。 */
-const fishImgCache = new Map<string, { img: HTMLImageElement; loaded: boolean; retryAfter: number }>();
-function loadFishImg(url: string): HTMLImageElement | null {
-    const cached = fishImgCache.get(url);
-    if (cached?.loaded) return cached.img;
-    if (cached && Date.now() < cached.retryAfter) return null;
-
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    fishImgCache.set(url, { img, loaded: false, retryAfter: Number.POSITIVE_INFINITY });
-    img.onload = () => {
-        fishImgCache.set(url, { img, loaded: true, retryAfter: 0 });
-        window.dispatchEvent(new Event("aquarium_frame"));
-    };
-    img.onerror = () => {
-        fishImgCache.set(url, { img, loaded: false, retryAfter: Date.now() + 2_000 });
-    };
-    img.src = url;
-    return null; // 読み込み中は null
-}
-
-function getHandles(vp: { x: number; y: number; width: number; height: number; }): any {
-    const { x, y, width: w, height: h } = vp;
-    return {
-        move: { x: x + w / 2, y: y + h / 2 },
-        // ... (省略)
-        tl: { x, y }, t: { x: x + w / 2, y }, tr: { x: x + w, y },
-        r: { x: x + w, y: y + h / 2 }, br: { x: x + w, y: y + h },
-        b: { x: x + w / 2, y: y + h }, bl: { x, y: y + h },
-        l: { x, y: y + h / 2 },
-    };
-}
+import { drawViewportCanvas } from "./canvas/drawing/drawViewportCanvas";
+import { getHandles, HANDLE_R } from "./canvas/drawing/handles";
+import type { DragState, HandleType, PendingWorldSize, SnapGuides, ViewportCanvasProps } from "./canvas/types";
+import { useCanvasCamera } from "./canvas/useCanvasCamera";
+import { useCanvasImageCache } from "./canvas/useCanvasImageCache";
 
 export function ViewportCanvas({
     worldW, worldH, bgUrl, displaysSt, displaysRef, pendingViewports,
@@ -91,7 +19,7 @@ export function ViewportCanvas({
     const canvasRef = useRef<HTMLCanvasElement>(null);
     const wrapperRef = useRef<HTMLDivElement>(null);
     const dragRef = useRef<DragState | null>(null);
-    const camRef = useRef<Camera>({ panX: 0, panY: 0, zoom: 1 });
+    const { cameraRef: camRef, worldToCanvas, canvasToWorld } = useCanvasCamera();
     const rafRef = useRef<number | null>(null);
     const isPanningRef = useRef(false);
     const panStartRef = useRef({ mx: 0, my: 0, px: 0, py: 0 });
@@ -100,398 +28,46 @@ export function ViewportCanvas({
 
     const previewThrottleRef = useRef<number>(0);
     const pointerThrottleRef = useRef<number>(0);
-    const snapGuides = useRef<{ x?: number; y?: number }>({});
-    const pendingWorldSizeRef = useRef<{ w: number, h: number } | null>(null);
+    const snapGuides = useRef<SnapGuides>({});
+    const pendingWorldSizeRef = useRef<PendingWorldSize | null>(null);
 
     // キャンバス内オブジェクトのローカル選択状態 (FZやSPなど)
     const [selectedLocalId, setSelectedLocalId] = useState<string | null>(null);
     // 魚 D&D 用: 現在ドラッグ中の魚ID
     const dragFishIdRef = useRef<string | null>(null);
 
-    // ImageLayerのローカル画像キャッシュ
-    const imgCache = useRef<Map<string, HTMLImageElement>>(new Map());
+    const { loadFishImage, loadLayerImage } = useCanvasImageCache(rafRef, drawRef);
     // activeFishの参照をdrawCallback内で最新化するため
     const activeFishRef = useRef<ActiveFish[]>(activeFish);
     useEffect(() => { activeFishRef.current = activeFish; }, [activeFish]);
     const onMoveFishRef = useRef(onMoveFish);
     useEffect(() => { onMoveFishRef.current = onMoveFish; }, [onMoveFish]);
 
-    const canvasSize = useCallback(() => {
-        const c = canvasRef.current;
-        return c ? { w: c.width, h: c.height } : { w: 780, h: 280 };
-    }, []);
-    const worldToCanvas = useCallback((wx: number, wy: number) => {
-        const { panX, panY, zoom } = camRef.current;
-        return { x: wx * zoom + panX, y: wy * zoom + panY };
-    }, []);
-    const canvasToWorld = useCallback((cx: number, cy: number) => {
-        const { panX, panY, zoom } = camRef.current;
-        return { x: (cx - panX) / zoom, y: (cy - panY) / zoom };
-    }, []);
-
     const draw = useCallback(() => {
-        const canvas = canvasRef.current;
-        if (!canvas) return;
-        const ctx = canvas.getContext("2d");
-        if (!ctx) return;
-        const { w: CW, h: CH } = canvasSize();
-        const cam = camRef.current;
-
-        ctx.clearRect(0, 0, CW, CH);
-
-        // 背景チェッカーボード (Canvas領域全体の背景)
-        ctx.fillStyle = "#f8fafc"; // slate-50
-        ctx.fillRect(0, 0, CW, CH);
-        const CHECKER = 24;
-        ctx.fillStyle = "rgba(0, 0, 0, 0.03)";
-        for (let cx2 = 0; cx2 < CW; cx2 += CHECKER * 2) {
-            for (let cy2 = 0; cy2 < CH; cy2 += CHECKER * 2) {
-                ctx.fillRect(cx2, cy2, CHECKER, CHECKER);
-                ctx.fillRect(cx2 + CHECKER, cy2 + CHECKER, CHECKER, CHECKER);
-            }
-        }
-
-        // --- 1. ワールド背景（床）の描画 ---
-        const wDraw = pendingWorldSizeRef.current?.w ?? worldW;
-        const hDraw = pendingWorldSizeRef.current?.h ?? worldH;
-        const tl = worldToCanvas(0, 0);
-        const br = worldToCanvas(wDraw, hDraw);
-        const ww = br.x - tl.x, wh = br.y - tl.y;
-
-        ctx.shadowColor = "rgba(0, 0, 0, 0.05)";
-        ctx.shadowBlur = 10;
-        ctx.fillStyle = "#ffffff";
-        ctx.fillRect(tl.x, tl.y, ww, wh);
-        if (bgUrl) {
-            const background = loadFishImg(bgUrl);
-            if (background?.naturalWidth) {
-                ctx.globalAlpha = 0.72;
-                ctx.drawImage(background, tl.x, tl.y, ww, wh);
-                ctx.globalAlpha = 1;
-            }
-        }
-        ctx.shadowBlur = 0;
-        ctx.strokeStyle = "#000000"; // world境界を黒で明示
-        ctx.lineWidth = 2;
-        ctx.strokeRect(tl.x + 0.5, tl.y + 0.5, ww - 1, wh - 1);
-
-        // キャンバスリサイズ用のハンドル（World Size）
-        ctx.fillStyle = "#f59e0b"; // amber-500
-        ctx.strokeStyle = "#fff";
-        ctx.lineWidth = 1.5;
-        const R = 8;
-        ctx.beginPath();
-        ctx.arc(br.x, br.y, R, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.stroke();
-
-        // グリッド
-        const GRID = 100, MAJ = 500;
-        const wx0 = Math.floor(-cam.panX / cam.zoom / GRID) * GRID;
-        const wy0 = Math.floor(-cam.panY / cam.zoom / GRID) * GRID;
-        ctx.lineWidth = 0.5;
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.04)";
-        for (let x = wx0; x < wx0 + CW / cam.zoom + GRID * 2; x += GRID) {
-            if (x < 0 || x > wDraw) continue;
-            const px = worldToCanvas(x, 0).x;
-            ctx.beginPath(); ctx.moveTo(px, tl.y); ctx.lineTo(px, br.y); ctx.stroke();
-        }
-        for (let y = wy0; y < wy0 + CH / cam.zoom + GRID * 2; y += GRID) {
-            if (y < 0 || y > hDraw) continue;
-            const py = worldToCanvas(0, y).y;
-            ctx.beginPath(); ctx.moveTo(tl.x, py); ctx.lineTo(br.x, py); ctx.stroke();
-        }
-        // メジャーグリッド
-        ctx.lineWidth = 1;
-        ctx.strokeStyle = "rgba(0, 0, 0, 0.08)";
-        for (let x = 0; x <= wDraw; x += MAJ) {
-            const px = worldToCanvas(x, 0).x;
-            ctx.beginPath(); ctx.moveTo(px, tl.y); ctx.lineTo(px, br.y); ctx.stroke();
-        }
-        for (let y = 0; y <= hDraw; y += MAJ) {
-            const py = worldToCanvas(0, y).y;
-            ctx.beginPath(); ctx.moveTo(tl.x, py); ctx.lineTo(br.x, py); ctx.stroke();
-        }
-
-        // ルーラー
-        const RULER = 20;
-        ctx.fillStyle = "rgba(241, 245, 249, 0.9)"; // slate-100
-        ctx.fillRect(0, 0, CW, RULER);
-        ctx.fillRect(0, 0, RULER, CH);
-        ctx.strokeStyle = "#cbd5e1"; // slate-300
-        ctx.lineWidth = 1;
-        ctx.beginPath(); ctx.moveTo(0, RULER); ctx.lineTo(CW, RULER); ctx.stroke();
-        ctx.beginPath(); ctx.moveTo(RULER, 0); ctx.lineTo(RULER, CH); ctx.stroke();
-
-        ctx.fillStyle = "#64748b"; // slate-500
-        ctx.font = `${Math.max(8, 7 * cam.zoom)}px monospace`;
-        ctx.textBaseline = "top";
-        for (let x = 0; x <= wDraw; x += MAJ) {
-            const px = worldToCanvas(x, 0).x;
-            if (px < RULER || px > CW) continue;
-            ctx.fillText(String(x), px + 2, 3);
-            ctx.strokeStyle = "#94a3b8";
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(px, RULER - 4); ctx.lineTo(px, RULER); ctx.stroke();
-        }
-        for (let y = 0; y <= hDraw; y += MAJ) {
-            const py = worldToCanvas(0, y).y;
-            if (py < RULER || py > CH) continue;
-            ctx.save();
-            ctx.translate(3, py + 2);
-            ctx.rotate(-Math.PI / 2);
-            ctx.fillText(String(y), 0, 0);
-            ctx.restore();
-            ctx.strokeStyle = "#94a3b8";
-            ctx.lineWidth = 1;
-            ctx.beginPath(); ctx.moveTo(RULER - 4, py); ctx.lineTo(RULER, py); ctx.stroke();
-        }
-
-
-        // --- 2. 描画オブジェクトのリスト化とZ-Index昇順（奥から手前）ソート ---
-        const drawObjects: { type: string, zIndex: number, layerId?: string, idx?: number, data: any }[] = [];
-
-        // システムレイヤー (Z-Index: 999 相当＝最も手前)
-        forbiddenZones.forEach(z => drawObjects.push({ type: "system_fz", zIndex: 999, data: z }));
-        spawnPoints.forEach(sp => drawObjects.push({ type: "system_sp", zIndex: 999, data: sp }));
-
-        // fish用準備
-        const frameFish = (window as any).__lastFrame;
-        const fishTextureMap = new Map<string, string>();
-        for (const fish of activeFishRef.current) {
-            fishTextureMap.set(fish.id, fish.textureUrl);
-            fishTextureMap.set(fish.id.slice(0, 8), fish.textureUrl);
-        }
-
-        // ユーザーレイヤー (画像、魚)
-        layers.forEach(layer => {
-            if (layer.type === "image" && layer.url) {
-                drawObjects.push({ type: "image", zIndex: layer.zIndex, layerId: layer.id, data: layer });
-            } else if (layer.type === "fish") {
-                if (frameFish && frameFish.f) {
-                    frameFish.f.forEach((f: any) => {
-                        if (f.z === layer.zIndex) {
-                            drawObjects.push({ type: "fish", zIndex: layer.zIndex, layerId: layer.id, data: f });
-                        }
-                    });
-                }
-            }
+        drawViewportCanvas({
+            canvas: canvasRef.current,
+            camera: camRef.current,
+            worldW,
+            worldH,
+            pendingWorldSize: pendingWorldSizeRef.current,
+            bgUrl,
+            displays: displaysRef.current,
+            selected,
+            hovered: hoveredRef.current,
+            selectedLocalId,
+            dragState: dragRef.current,
+            dragFishId: dragFishIdRef.current,
+            snapGuides: snapGuides.current,
+            forbiddenZones,
+            spawnPoints,
+            layers,
+            activeLayerId,
+            activeFish: activeFishRef.current,
+            worldToCanvas,
+            loadFishImage,
+            loadLayerImage,
         });
-
-        // ディスプレイ層 (任意のZ-Index。最前面(999)や特定の扱いとする)
-        displaysRef.current.forEach((d, i) => {
-            const vp = d.viewport;
-            if (vp) drawObjects.push({ type: "display", zIndex: 900, idx: i, data: d });
-        });
-
-
-        // 昇順にソート（奥が先、手前が後）
-        drawObjects.sort((a, b) => a.zIndex - b.zIndex);
-
-        // --- 3. ソート順に従い描画 ---
-        for (const obj of drawObjects) {
-            const zIndexGroup = Math.floor(obj.zIndex / 10); // 色分け等に使う
-
-            if (obj.type === "image") {
-                const layer = obj.data;
-                let img = imgCache.current.get(layer.url);
-                if (!img) {
-                    img = new Image();
-                    img.crossOrigin = "anonymous";
-                    img.src = layer.url;
-                    img.onload = () => { if (rafRef.current) requestAnimationFrame(draw); };
-                    imgCache.current.set(layer.url, img);
-                }
-                if (img.complete && img.naturalWidth > 0) {
-                    ctx.save();
-                    const imgX = layer.x ?? 0;
-                    const imgY = layer.y ?? 0;
-                    const imgW = layer.width ?? wDraw;
-                    const imgH = layer.height ?? hDraw;
-
-                    const p1 = worldToCanvas(imgX, imgY);
-                    const p2 = worldToCanvas(imgX + imgW, imgY + imgH);
-                    const iww = p2.x - p1.x, iwh = p2.y - p1.y;
-
-                    ctx.globalAlpha = layer.opacity ?? 0.5;
-                    ctx.drawImage(img, p1.x, p1.y, iww, iwh);
-
-                    // 選択されている画像レイヤーなら紫枠とハンドル、ただし表示対象レイヤーの場合のみ
-                    const isGroupActive = !activeLayerId || activeLayerId === layer.id;
-                    const isSel = isGroupActive && (dragRef.current?.uuid === layer.id || selectedLocalId === layer.id);
-                    if (isSel) {
-                        ctx.strokeStyle = "#a855f7"; // purple-500
-                        ctx.lineWidth = 2;
-                        ctx.strokeRect(p1.x, p1.y, iww, iwh);
-                        ctx.lineWidth = 1.5;
-                        const pts = getHandles({ x: imgX, y: imgY, width: imgW, height: imgH });
-                        (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as const).forEach((ht) => {
-                            const cp = worldToCanvas(pts[ht].x, pts[ht].y);
-                            ctx.beginPath(); ctx.arc(cp.x, cp.y, HANDLE_R, 0, Math.PI * 2);
-                            ctx.fill(); ctx.stroke();
-                        });
-                    }
-                    ctx.restore();
-                }
-            } else if (obj.type === "fish") {
-                const f = obj.data;
-                const pt = worldToCanvas(f.x, f.y);
-                const layerColors = ["#ef4444", "#3b82f6", "#10b981", "#f59e0b", "#8b5cf6", "#ec4899", "#06b6d4"];
-                const colorIdx = (zIndexGroup + layerColors.length) % layerColors.length;
-                const isDragging = dragFishIdRef.current === f.i;
-                const textureUrl = f.u ?? fishTextureMap.get(f.i);
-                const sz = Math.max(12, 80 * cam.zoom) * (f.s ?? 1.0);
-
-                if (textureUrl) {
-                    const img = loadFishImg(textureUrl);
-                    if (img && img.width > 0) {
-                        ctx.save();
-                        ctx.translate(pt.x, pt.y);
-                        if (f.d === -1) ctx.scale(-1, 1);
-                        ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
-                        if (isDragging) {
-                            ctx.strokeStyle = "#f59e0b";
-                            ctx.lineWidth = 3 / cam.zoom;
-                            ctx.beginPath(); ctx.arc(0, 0, sz / 2 + 4, 0, Math.PI * 2); ctx.stroke();
-                        }
-                        ctx.restore();
-                    } else {
-                        ctx.fillStyle = layerColors[colorIdx] + "88";
-                        ctx.beginPath();
-                        ctx.arc(pt.x, pt.y, Math.max(4, 20 * cam.zoom), 0, Math.PI * 2);
-                        ctx.fill();
-                    }
-                } else {
-                    ctx.fillStyle = isDragging ? "#f59e0b" : layerColors[colorIdx];
-                    ctx.beginPath();
-                    ctx.arc(pt.x, pt.y, Math.max(4, 18 * cam.zoom), 0, Math.PI * 2);
-                    ctx.fill();
-
-                    ctx.font = "8px monospace";
-                    ctx.textAlign = "left";
-                    ctx.textBaseline = "middle";
-                    ctx.fillStyle = "#fff";
-                    ctx.fillText(f.i?.slice(0, 6) ?? "", pt.x + 10, pt.y);
-                }
-            } else if (obj.type === "display") {
-                const d = obj.data;
-                const i = obj.idx ?? 0;
-                const vp = d.viewport;
-                if (!vp) continue;
-                const p = worldToCanvas(vp.x, vp.y);
-                const p2 = worldToCanvas(vp.x + vp.width, vp.y + vp.height);
-                const dw = p2.x - p.x, dh = p2.y - p.y;
-                const col = COLORS[i % COLORS.length];
-                const isSel = d.uuid === selected;
-                const isHov = d.uuid === hoveredRef.current && !isSel;
-
-                if (isSel) {
-                    ctx.shadowColor = col;
-                    ctx.shadowBlur = 18;
-                } else if (isHov) {
-                    ctx.shadowColor = col;
-                    ctx.shadowBlur = 8;
-                }
-                ctx.fillStyle = isSel ? col + "40" : isHov ? col + "28" : col + "14";
-                ctx.fillRect(p.x, p.y, dw, dh);
-                ctx.shadowBlur = 0;
-
-                ctx.strokeStyle = isSel ? col : isHov ? col + "aa" : col + "88";
-                ctx.lineWidth = isSel ? 2 : 1.5;
-                ctx.strokeRect(p.x, p.y, dw, dh);
-
-                const displayNumber = String((obj.idx ?? 0) + 1);
-                ctx.fillStyle = isSel ? "#0f172a" : "#334155";
-                ctx.font = `900 ${Math.max(24, Math.min(dw, dh) * 0.46)}px sans-serif`;
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText(displayNumber, p.x + dw / 2, p.y + dh / 2);
-
-                const whText = `${Math.round(vp.width)}×${Math.round(vp.height)}`;
-                ctx.font = `${Math.max(9, 10 * cam.zoom)}px monospace`;
-                ctx.textAlign = "left";
-                ctx.textBaseline = "bottom";
-                ctx.fillText(whText, p.x + 4, p.y + dh - 18 * cam.zoom);
-                ctx.fillText(d.uuid.split(":")[1] || d.uuid, p.x + 4, p.y + dh - 4);
-
-                if (isSel) {
-                    ctx.fillStyle = "#fff";
-                    ctx.strokeStyle = col;
-                    ctx.lineWidth = 1.5;
-                    const pts = getHandles(vp);
-                    (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as Exclude<HandleType, "world_br" | "move">[]).forEach((ht) => {
-                        const cp = worldToCanvas(pts[ht].x, pts[ht].y);
-                        ctx.beginPath(); ctx.arc(cp.x, cp.y, HANDLE_R, 0, Math.PI * 2);
-                        ctx.fill(); ctx.stroke();
-                    });
-                }
-            } else if (obj.type === "system_fz") {
-                const z = obj.data;
-                const p = worldToCanvas(z.x, z.y);
-                const p2 = worldToCanvas(z.x + z.width, z.y + z.height);
-                const dw = p2.x - p.x, dh = p2.y - p.y;
-                const isSel = dragRef.current?.uuid === z.id || selectedLocalId === z.id;
-
-                ctx.fillStyle = "rgba(220, 38, 38, 0.15)";
-                ctx.fillRect(p.x, p.y, dw, dh);
-
-                ctx.strokeStyle = "rgba(220, 38, 38, 0.8)";
-                ctx.lineWidth = isSel ? 2 : 1;
-                ctx.strokeRect(p.x, p.y, dw, dh);
-
-                ctx.fillStyle = "rgba(153, 27, 27, 0.8)";
-                ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px sans-serif`;
-                ctx.textBaseline = "bottom";
-                ctx.fillText("FORBIDDEN", p.x + 4, p.y + dh - 4);
-
-                if (isSel) {
-                    ctx.fillStyle = "#fff";
-                    ctx.strokeStyle = "rgba(220, 38, 38, 1)";
-                    ctx.lineWidth = 1.5;
-                    const pts = getHandles(z as any);
-                    (["tl", "t", "tr", "r", "br", "b", "bl", "l"] as Exclude<HandleType, "world_br" | "move" | `fz_${string}` | `sp_${string}` | `ImgLayer_${string}`>[]).forEach((ht) => {
-                        const cp = worldToCanvas(pts[ht].x, pts[ht].y);
-                        ctx.beginPath(); ctx.arc(cp.x, cp.y, HANDLE_R, 0, Math.PI * 2);
-                        ctx.fill(); ctx.stroke();
-                    });
-                }
-            } else if (obj.type === "system_sp") {
-                const sp = obj.data;
-                const p = worldToCanvas(sp.x, sp.y);
-                const isSel = dragRef.current?.uuid === sp.id || selectedLocalId === sp.id;
-                ctx.fillStyle = isSel ? "#0284c7" : "#38bdf8";
-                ctx.beginPath();
-                ctx.arc(p.x, p.y, HANDLE_R * 1.5, 0, Math.PI * 2);
-                ctx.fill();
-
-                ctx.fillStyle = "#fff";
-                ctx.font = `bold ${Math.max(10, 14 * cam.zoom)}px sans-serif`;
-                ctx.textAlign = "center";
-                ctx.textBaseline = "middle";
-                ctx.fillText("✨", p.x, p.y);
-                ctx.textAlign = "left";
-            }
-        }
-
-        // --- 4. スナップライン等のUI補助 ---
-        const sg = snapGuides.current;
-        if (sg.x !== undefined || sg.y !== undefined) {
-            ctx.setLineDash([4, 4]);
-            ctx.strokeStyle = "#f39c12"; // オレンジ色
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            if (sg.x !== undefined) {
-                const cx = worldToCanvas(sg.x, 0).x;
-                ctx.moveTo(cx, 0); ctx.lineTo(cx, CH);
-            }
-            if (sg.y !== undefined) {
-                const cy = worldToCanvas(0, sg.y).y;
-                ctx.moveTo(0, cy); ctx.lineTo(CW, cy);
-            }
-            ctx.stroke();
-            ctx.setLineDash([]);
-        }
-    }, [selected, selectedLocalId, worldW, worldH, bgUrl, canvasSize, worldToCanvas, forbiddenZones, spawnPoints, pendingWorldSizeRef, layers, activeLayerId]);
+    }, [selected, selectedLocalId, worldW, worldH, bgUrl, worldToCanvas, forbiddenZones, spawnPoints, layers, activeLayerId, displaysRef, hoveredRef, loadFishImage, loadLayerImage]);
 
 
     drawRef.current = draw;
