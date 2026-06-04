@@ -64,7 +64,7 @@ export function DashboardPage({
     return (
         <div className="flex-1 overflow-y-auto bg-slate-50 p-8">
             <div className="mx-auto flex max-w-7xl flex-col gap-7">
-                <PageHeader title="現在の状態" description="接続状況と対応が必要な項目を確認します。" />
+                <PageHeader title="ステータス" description="接続状況と対応が必要な項目を確認します。" />
 
                 <section className={`flex items-center justify-between gap-6 rounded-xl border p-4 ${hasAttention ? "border-amber-200 bg-amber-50" : "border-emerald-200 bg-emerald-50"}`}>
                     <div className="flex items-center gap-3">

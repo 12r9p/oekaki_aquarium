@@ -28,7 +28,7 @@ export function Toolbar({
             </div>
             <nav className="flex flex-1 flex-col gap-1 p-3">
                 {([
-                    ["dashboard", "現在の状態", CircleGauge],
+                    ["dashboard", "ステータス", CircleGauge],
                     ["fish", "魚", Fish],
                     ["pending", "承認待ち", Send],
                     ["layout", "水槽レイアウト", Layers],

@@ -15,8 +15,8 @@
       "scale": 1
     },
     "display:main": {
-      "x": 199,
-      "y": 14,
+      "x": 967.0167410714286,
+      "y": 2673.1170280612246,
       "width": 1368.506390738246,
       "height": 949,
       "scale": 0.9878326252783936
@@ -27,7 +27,15 @@
   "world": {
     "width": 1572,
     "height": 1038,
-    "forbiddenZones": [],
+    "forbiddenZones": [
+      {
+        "id": "fz_1780590991520_aoxk6q5tazd",
+        "x": 238,
+        "y": 122,
+        "width": 439,
+        "height": 551
+      }
+    ],
     "spawnPoints": [],
     "layers": [
       {

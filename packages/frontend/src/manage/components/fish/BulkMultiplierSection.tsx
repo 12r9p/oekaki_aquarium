@@ -64,7 +64,6 @@ export function BulkMultiplierSection({
                     <Gauge className="w-4 h-4 text-sky-500" />
                     <h3 className="text-sm font-bold text-slate-700">全魚の速度・スケールを一括調整</h3>
                 </div>
-                <span className="text-xs font-semibold text-emerald-600">変更は自動反映</span>
             </div>
             <div className="grid grid-cols-2 gap-6">
                 <BulkMultiplierSlider label="スケール倍率" value={scale} onChange={onScaleChange} accentClass="accent-sky-500" />

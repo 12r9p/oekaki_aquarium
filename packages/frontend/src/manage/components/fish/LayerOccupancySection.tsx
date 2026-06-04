@@ -4,7 +4,7 @@ import { LAYER_CONFIG } from "@aquarium/shared";
 export function LayerOccupancySection({ activeFish }: { activeFish: ActiveFish[] }) {
     return (
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-            <h3 className="text-sm font-bold text-slate-700 mb-3">レイヤーの混雑状況 (自動押し出し)</h3>
+            <h3 className="text-sm font-bold text-slate-700 mb-3">レイヤーの混雑状況</h3>
             <div className="flex flex-col gap-3">
                 {LAYER_CONFIG.map((conf, idx) => {
                     const count = activeFish.filter(f => !f.isPinned && f.layerIndex === idx && !f.isArchived).length;
