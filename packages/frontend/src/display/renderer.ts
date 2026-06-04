@@ -12,6 +12,7 @@ export interface FishEntry {
   sprite: Sprite;
   textureUrl?: string;
   textureReady: boolean;
+  layerIndex: number;
   desiredScale: number;
   facing: 1 | -1;
   targetX: number; targetY: number;
@@ -26,8 +27,7 @@ let sceneContainer: Container | null = null;
 let currentScene: WorldObject[] = [];
 
 // レイヤー管理用
-export const fishGlobalContainer = new Container();
-fishGlobalContainer.sortableChildren = true;
+const fishLayerContainers = new Map<number, Container>();
 const imageLayerSprites = new Map<string, Sprite>();
 const FISH_BASE_SIZE = 48;
 
@@ -53,6 +53,11 @@ export function updateFishTargets(
   desiredScale: number,
 ): void {
   entry.desiredScale = desiredScale;
+  const layerIndex = fd.l ?? 0;
+  if (entry.layerIndex !== layerIndex) {
+    entry.layerIndex = layerIndex;
+    fishLayerContainers.get(layerIndex)?.addChild(entry.sprite);
+  }
   entry.facing = fd.d ?? entry.facing;
   const wrapJumpThreshold = STATE.WORLD_W * STATE.scaleX * 0.5;
   if (Math.abs(screenX - entry.targetX) > wrapJumpThreshold) {
@@ -67,8 +72,12 @@ export function updateFishTargets(
 }
 
 export function initRenderer(app: Application) {
-  // fishコンテナをstageに追加
-  app.stage.addChild(fishGlobalContainer);
+  for (let layerIndex = 0; layerIndex < 3; layerIndex++) {
+    const container = new Container();
+    container.sortableChildren = true;
+    fishLayerContainers.set(layerIndex, container);
+    app.stage.addChild(container);
+  }
 }
 
 export function buildPlaceholder(app: Application): Texture {
@@ -124,17 +133,12 @@ export function renderSceneObjects(app: Application, objects: WorldObject[]): vo
 export function updateLayersView(app: Application): void {
   const layers = STATE.layers || [];
   
-  // 魚レイヤーのプロパティを fishGlobalContainer に反映 (最初に見つかったfishレイヤーを適用)
-  const fishLayer = layers.find(l => l.type === "fish");
-  if (fishLayer) {
-    fishGlobalContainer.zIndex = fishLayer.zIndex;
-    fishGlobalContainer.alpha = fishLayer.opacity;
-    fishGlobalContainer.visible = fishLayer.visible;
-  } else {
-    // 魚レイヤーが存在しない場合のデフォルト
-    fishGlobalContainer.zIndex = 50;
-    fishGlobalContainer.alpha = 1;
-    fishGlobalContainer.visible = true;
+  // 魚レイヤーごとに別コンテナを使い、画像レイヤーとの前後関係も反映する。
+  for (const [layerIndex, container] of fishLayerContainers) {
+    const fishLayer = layers.find(l => l.id === `layer_fish_${layerIndex}`);
+    container.zIndex = fishLayer?.zIndex ?? [100, 50, 10][layerIndex] ?? 50;
+    container.alpha = fishLayer?.opacity ?? 1;
+    container.visible = fishLayer?.visible ?? true;
   }
 
   // 画像レイヤーの更新・追加
@@ -464,11 +468,13 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
   sprite.scale.set(initialScale * facing, initialScale);
   sprite.alpha = fd.o;
   sprite.zIndex = fd.z;
-  fishGlobalContainer.addChild(sprite);
+  const layerIndex = fd.l ?? 0;
+  (fishLayerContainers.get(layerIndex) ?? fishLayerContainers.get(0))?.addChild(sprite);
   const entry: FishEntry = {
     sprite,
     textureUrl: fd.u,
     textureReady: Boolean(fd.u && getLoadedFishTexture(fd.u)),
+    layerIndex,
     desiredScale: appliedScale,
     facing,
     targetX: sx,

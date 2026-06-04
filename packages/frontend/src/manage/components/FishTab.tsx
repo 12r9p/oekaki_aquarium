@@ -217,9 +217,9 @@ function FishConfigPopup({
                             <div className="flex items-center gap-2 ml-6">
                                 <label className="text-xs text-slate-500 w-16">Layer ID</label>
                                 <Input
-                                    type="number" min="0"
+                                    type="number" min="0" max={LAYER_CONFIG.length - 1}
                                     value={pinnedLayerId}
-                                    onChange={e => handlePinnedLayerId(Number(e.target.value))}
+                                    onChange={e => handlePinnedLayerId(Math.max(0, Math.min(Number(e.target.value), LAYER_CONFIG.length - 1)))}
                                     className="h-7 w-20 text-xs text-center font-mono border-sky-200 bg-sky-50/50"
                                 />
                             </div>

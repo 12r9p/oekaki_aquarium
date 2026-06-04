@@ -270,12 +270,6 @@ export function Sidebar({
                         }}>
                             <ImageIcon className="w-3.5 h-3.5 mr-1.5" /> 画像を追加
                         </Button>
-                        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => {
-                            const newZ = layers.length > 0 ? Math.max(...layers.map(l => l.zIndex)) + 1 : 0;
-                            onUpdateLayers([{ id: "L_" + Date.now(), name: "魚レイヤー", type: "fish", zIndex: newZ, visible: true, opacity: 1 }, ...layers]);
-                        }}>
-                            <Layers className="w-3.5 h-3.5 mr-1.5" /> 魚層を追加
-                        </Button>
                     </div>
 
                     <div className="flex flex-col gap-3">

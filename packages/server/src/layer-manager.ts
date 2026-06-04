@@ -34,9 +34,17 @@ export function updateFishLayers(allFish: ActiveFish[]): void {
 
   // --- ピン留め魚: 指定レイヤーに強制配置（定員無視） ---
   for (const fish of pinnedFish) {
-    const targetLayer = fish.pinnedLayerId ?? 0;
+    const targetLayer = Math.max(0, Math.min(fish.pinnedLayerId ?? 0, LAYER_CONFIG.length - 1));
     applyLayerProps(fish, targetLayer);
   }
+}
+
+export function getFishLayerCounts(allFish: ActiveFish[]): number[] {
+  const counts = LAYER_CONFIG.map(() => 0);
+  for (const fish of allFish) {
+    if (!fish.isArchived && counts[fish.layerIndex] !== undefined) counts[fish.layerIndex]++;
+  }
+  return counts;
 }
 
 /** レイヤー設定値を魚オブジェクトに反映する */

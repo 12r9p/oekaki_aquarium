@@ -185,6 +185,8 @@ export interface UdpFishData {
   o: number;
   /** Z-Index */
   z: number;
+  /** ところてん魚レイヤー番号 */
+  l: number;
   /** テクスチャ URL (任意) */
   u?: string;
   /** 安定化済みの進行方向。負なら左向き。 */

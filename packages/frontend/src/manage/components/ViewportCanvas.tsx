@@ -622,7 +622,9 @@ export function ViewportCanvas({
                 const frame = (window as any).__lastFrame;
                 if (frame && frame.f) {
                     for (const f of frame.f) {
-                        hitObjects.push({ type: "fish", zIndex: l.zIndex, data: f, layerId: l.id });
+                        if (f.z === l.zIndex) {
+                            hitObjects.push({ type: "fish", zIndex: l.zIndex, data: f, layerId: l.id });
+                        }
                     }
                 }
             }

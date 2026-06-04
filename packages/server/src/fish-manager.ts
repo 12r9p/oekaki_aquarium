@@ -12,6 +12,7 @@ import { writeFishMeta, readFishMeta, DEFAULT_FISH_META, type FishMeta } from ".
 import { getWorld } from "./world";
 import { resetTunaState } from "./physics/tuna";
 import { removeWanderState } from "./physics/wander";
+import { updateFishLayers } from "./layer-manager";
 
 /** /data/fish/ ディレクトリ（プロジェクトルート基準） */
 export const DATA_FISH_DIR = join(import.meta.dir, "..", "..", "..", "data", "fish");
@@ -40,7 +41,7 @@ function saveActiveFishToDisk(fish: ActiveFish) {
       type: fish.type,
       speed: fish.userParams.speed,
       scale: fish.userParams.scale,
-      pinnedLayerId: fish.pinnedLayerId ?? null,
+      pinnedLayerId: fish.isPinned ? (fish.pinnedLayerId ?? 0) : null,
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
     };
@@ -66,7 +67,7 @@ function updateActiveFishOnDisk(fish: ActiveFish) {
       type: fish.type,
       speed: fish.userParams.speed,
       scale: fish.userParams.scale,
-      pinnedLayerId: fish.pinnedLayerId ?? null,
+      pinnedLayerId: fish.isPinned ? (fish.pinnedLayerId ?? 0) : null,
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
     };
@@ -195,6 +196,7 @@ export function releaseFish(
   };
 
   activePool.set(fish.id, fish);
+  updateFishLayers(getAllActiveFish());
   
   // 永続化処理（/data/fish に保存し魚のtextureUrlを差し替える）
   saveActiveFishToDisk(fish);
@@ -236,9 +238,11 @@ export function updateFishParams(
   if (updates.scale !== undefined) fish.userParams.scale = updates.scale;
   if (updates.speed !== undefined) fish.userParams.speed = updates.speed;
   if (updates.isPinned !== undefined) fish.isPinned = updates.isPinned;
+  if (updates.isPinned === false) fish.pinnedLayerId = undefined;
   if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
   if (updates.type !== undefined) fish.type = updates.type;
   if (updates.isArchived !== undefined) fish.isArchived = updates.isArchived;
+  updateFishLayers(getAllActiveFish());
   
   updateActiveFishOnDisk(fish);
   return true;
@@ -263,6 +267,7 @@ export function duplicateFish(fishId: string): ActiveFish | undefined {
   };
 
   activePool.set(newFish.id, newFish);
+  updateFishLayers(getAllActiveFish());
   saveActiveFishToDisk(newFish);
   return newFish;
 }
@@ -270,7 +275,9 @@ export function duplicateFish(fishId: string): ActiveFish | undefined {
 /** 魚を削除 */
 export function removeFish(fishId: string): boolean {
   removeActiveFishFromDisk(fishId);
-  return activePool.delete(fishId);
+  const removed = activePool.delete(fishId);
+  if (removed) updateFishLayers(getAllActiveFish());
+  return removed;
 }
 
 /**
@@ -355,7 +362,7 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
         const fish: ActiveFish = {
           id: fishId,
           textureUrl: `/lib-images/${file}`,
-          timestamp: Date.now(),
+          timestamp: Date.now() + restoredCount,
           type: meta.type,
           author: meta.author,
           fishMeta: meta,
@@ -382,6 +389,7 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
         console.error(`[FishManager] Failed to restore fish from ${file}:`, e);
       }
     }
+    updateFishLayers(getAllActiveFish());
     console.log(`[FishManager] Restored ${restoredCount} fish from ${DATA_FISH_DIR}`);
   } catch (err) {
     console.error(`[FishManager] Failed to read ${DATA_FISH_DIR}:`, err);

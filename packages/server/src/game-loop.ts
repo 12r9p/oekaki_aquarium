@@ -59,6 +59,7 @@ function tick(): void {
         s: fish.targetScale,
         o: fish.targetOpacity,
         z: LAYER_CONFIG[fish.layerIndex]?.zIndex ?? 50,
+        l: fish.layerIndex,
         u: fish.textureUrl,
         d: facing,
         vx,
