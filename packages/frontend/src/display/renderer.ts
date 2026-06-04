@@ -53,7 +53,11 @@ export function updateFishTargets(
   desiredScale: number,
 ): void {
   entry.desiredScale = desiredScale;
-  entry.facing = fd.vx !== undefined && fd.vx < 0 ? -1 : 1;
+  entry.facing = fd.d ?? entry.facing;
+  const wrapJumpThreshold = STATE.WORLD_W * STATE.scaleX * 0.5;
+  if (Math.abs(screenX - entry.targetX) > wrapJumpThreshold) {
+    entry.sprite.x = screenX;
+  }
   entry.targetX = screenX;
   entry.targetY = screenY;
   entry.targetRotation = fd.r;
@@ -455,7 +459,7 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
   sprite.x = sx; sprite.y = sy;
   sprite.rotation = fd.r;
   // vx < 0 のとき（左向き移動）は scaleX を反転して画像を左向きにする
-  const facing = (fd.vx !== undefined && fd.vx < 0) ? -1 : 1;
+  const facing = fd.d ?? 1;
   const initialScale = normalizedFishScale(texture, appliedScale);
   sprite.scale.set(initialScale * facing, initialScale);
   sprite.alpha = fd.o;

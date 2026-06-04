@@ -1,4 +1,4 @@
-import type { ClientConfig, AppLayerConfig } from "@aquarium/shared";
+import type { ClientConfig, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
 import { DEFAULT_WORLD, LAYER_CONFIG } from "@aquarium/shared";
 
 // ============================================================
@@ -16,6 +16,10 @@ export interface WorldConfig {
   spawnPoints: { id: string; x: number; y: number }[];
   /** アプリケーション全体の統合レイヤー管理 */
   layers: AppLayerConfig[];
+  /** 左右端で跳ね返るか、反対側へ回り込むか */
+  horizontalBoundaryMode: HorizontalBoundaryMode;
+  /** 全魚に適用する速度倍率 */
+  fishSpeedMultiplier: number;
 }
 
 export interface ValidZone {
@@ -48,11 +52,13 @@ const world: WorldConfig = {
   forbiddenZones: [],
   spawnPoints: [],
   layers: defaultLayers,
+  horizontalBoundaryMode: "wrap",
+  fishSpeedMultiplier: 1,
 };
 
 /**
  * クライアントが接続・設定を送信したときに ValidZone を登録/更新する。
- * 全 ValidZone の外接矩形から world サイズを動的に更新する。
+ * Viewport は表示範囲としてのみ扱い、world サイズには影響させない。
  */
 export function registerClientViewport(config: ClientConfig): void {
   const zone: ValidZone = {
@@ -87,6 +93,16 @@ export function updateSpawnPoints(points: { id: string; x: number; y: number }[]
 
 export function updateLayers(layers: AppLayerConfig[]): void {
   world.layers = layers;
+}
+
+export function updateWorldMotionSettings(
+  horizontalBoundaryMode?: HorizontalBoundaryMode,
+  fishSpeedMultiplier?: number,
+): void {
+  if (horizontalBoundaryMode) world.horizontalBoundaryMode = horizontalBoundaryMode;
+  if (fishSpeedMultiplier !== undefined) {
+    world.fishSpeedMultiplier = Math.max(0.1, Math.min(fishSpeedMultiplier, 3));
+  }
 }
 
 /** クライアントが切断したときに ValidZone を削除する */

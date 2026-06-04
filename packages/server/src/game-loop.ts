@@ -13,6 +13,7 @@ import { broadcastToRenderClients } from "./ws-handler";
 
 let loopInterval: ReturnType<typeof setInterval> | null = null;
 let frameCount = 0;
+const fishFacing = new Map<string, 1 | -1>();
 
 export function startGameLoop(): void {
   loopInterval = setInterval(tick, GAME_LOOP_MS);
@@ -45,8 +46,11 @@ function tick(): void {
     f: allFish.filter(fish => !fish.isArchived).map((fish) => {
       const vx = fish.physics.vel.x;
       const vy = fish.physics.vel.y;
-      // Y成分を 0.55 倍に絞りすぎず縦移動もある程度向きに反映させる
-      const r = Math.atan2(vy * 0.55, vx);
+      const previousFacing = fishFacing.get(fish.id) ?? (vx < 0 ? -1 : 1);
+      const facing = Math.abs(vx) > 0.15 ? (vx < 0 ? -1 : 1) : previousFacing;
+      fishFacing.set(fish.id, facing);
+      // 左右は反転、回転は上下の傾きだけに分け、二重反転を防ぐ。
+      const r = Math.atan2(vy * 0.55, Math.max(Math.abs(vx), 0.1));
       return {
         i: fish.id.slice(0, 8),
         x: Math.round(fish.physics.pos.x),
@@ -56,7 +60,8 @@ function tick(): void {
         o: fish.targetOpacity,
         z: LAYER_CONFIG[fish.layerIndex]?.zIndex ?? 50,
         u: fish.textureUrl,
-        vx,  // フロント側の左右反転判定用
+        d: facing,
+        vx,
       };
     }),
     e: [],

@@ -187,9 +187,13 @@ export interface UdpFishData {
   z: number;
   /** テクスチャ URL (任意) */
   u?: string;
-  /** X方向速度符号 — 負なら左向き、フロント側左右反転用 */
+  /** 安定化済みの進行方向。負なら左向き。 */
+  d?: 1 | -1;
+  /** X方向速度（デバッグ・後方互換用） */
   vx?: number;
 }
+
+export type HorizontalBoundaryMode = "bounce" | "wrap";
 
 export interface UdpEvent {
   type: "spawn" | "feed";
@@ -212,7 +216,7 @@ export type WsClientMessage =
   | { event: "pointer_move"; x: number; y: number }
   // -------------------------
   // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[] };
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number };
 
 export type WsServerMessage =
   | {
@@ -225,6 +229,8 @@ export type WsServerMessage =
       forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
       spawnPoints: { id: string; x: number; y: number }[];
       layers?: AppLayerConfig[];
+      horizontalBoundaryMode?: HorizontalBoundaryMode;
+      fishSpeedMultiplier?: number;
     }
   | { event: "reload" }
   | { event: "fish_added"; fish: PendingFish }
@@ -244,9 +250,11 @@ export type WsServerMessage =
       forbiddenZones?: { id: string; x: number; y: number; width: number; height: number }[];
       spawnPoints?: { id: string; x: number; y: number }[];
       layers?: AppLayerConfig[];
+      horizontalBoundaryMode?: HorizontalBoundaryMode;
+      fishSpeedMultiplier?: number;
     }
   /** WebSocketによる背景 / 禁止エリア のブロードキャスト更新通知 */
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[] }
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number }
   /** display クライアントへテストパターン表示指示 */
   | { event: "test_pattern"; pattern: TestPattern; targetUuid?: string }
   /** display クライアントの Viewport を更新する */

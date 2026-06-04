@@ -1,5 +1,5 @@
 import React from "react";
-import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig } from "@aquarium/shared";
+import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +42,10 @@ interface SidebarProps {
     onUpdateSpawnPoints: (points: { id: string; x: number; y: number }[]) => void;
     layers: AppLayerConfig[];
     onUpdateLayers: (layers: AppLayerConfig[]) => void;
+    horizontalBoundaryMode: HorizontalBoundaryMode;
+    onUpdateHorizontalBoundaryMode: (mode: HorizontalBoundaryMode) => void;
+    fishSpeedMultiplier: number;
+    onUpdateFishSpeedMultiplier: (speed: number) => void;
 
     // 追加: 選択中レイヤーのIDとその更新関数
     activeLayerId?: string;
@@ -52,6 +56,7 @@ export function Sidebar({
     displays, selectedDisplayIds, onTestPattern, worldW, worldH, onAddDemoFish, onSaveViewport,
     sendRateSetting, setSendRateSetting, onUpdateWorldSize, bgUrl, onUpdateBgUrl, forbiddenZones, onUpdateForbiddenZones,
     spawnPoints, onUpdateSpawnPoints, layers, onUpdateLayers,
+    horizontalBoundaryMode, onUpdateHorizontalBoundaryMode, fishSpeedMultiplier, onUpdateFishSpeedMultiplier,
     activeLayerId, onSetActiveLayerId
 }: SidebarProps) {
 
@@ -274,7 +279,7 @@ export function Sidebar({
                     </div>
 
                     <div className="flex flex-col gap-3">
-                        {layers.sort((a, b) => b.zIndex - a.zIndex).map((layer, index, sortedLayers) => {
+                        {[...layers].sort((a, b) => b.zIndex - a.zIndex).map((layer, index, sortedLayers) => {
                             const isSystem = layer.id === "layer_system";
                             const isFirst = index === 0;
                             const isLast = index === sortedLayers.length - 1;
@@ -412,12 +417,37 @@ export function Sidebar({
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex flex-col gap-1.5">
                                 <Label htmlFor="world-width" className="text-xs text-slate-500">World Width</Label>
-                                <Input id="world-width" type="number" min={100} value={worldW} onChange={e => onUpdateWorldSize(Number(e.target.value) || 100, worldH)} className="font-mono bg-white text-slate-800 h-8 focus:ring-1 focus:ring-sky-500" />
+                                <Input key={`world-width-${worldW}`} id="world-width" type="number" min={100} defaultValue={worldW} onBlur={e => onUpdateWorldSize(Math.max(100, Number(e.target.value) || worldW), worldH)} className="font-mono bg-white text-slate-800 h-8 focus:ring-1 focus:ring-sky-500" />
                             </div>
                             <div className="flex flex-col gap-1.5">
                                 <Label htmlFor="world-height" className="text-xs text-slate-500">World Height</Label>
-                                <Input id="world-height" type="number" min={100} value={worldH} onChange={e => onUpdateWorldSize(worldW, Number(e.target.value) || 100)} className="font-mono bg-white text-slate-800 h-8 focus:ring-1 focus:ring-sky-500" />
+                                <Input key={`world-height-${worldH}`} id="world-height" type="number" min={100} defaultValue={worldH} onBlur={e => onUpdateWorldSize(worldW, Math.max(100, Number(e.target.value) || worldH))} className="font-mono bg-white text-slate-800 h-8 focus:ring-1 focus:ring-sky-500" />
                             </div>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="horizontal-boundary" className="text-xs text-slate-500">左右端の動作</Label>
+                            <select
+                                id="horizontal-boundary"
+                                value={horizontalBoundaryMode}
+                                onChange={e => onUpdateHorizontalBoundaryMode(e.target.value as HorizontalBoundaryMode)}
+                                className="h-8 rounded-md border border-slate-200 bg-white px-2 text-xs text-slate-700"
+                            >
+                                <option value="wrap">反対側から出る</option>
+                                <option value="bounce">壁で折り返す</option>
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <div className="flex items-center justify-between">
+                                <Label className="text-xs text-slate-500">魚の全体速度</Label>
+                                <span className="font-mono text-xs text-slate-600">×{fishSpeedMultiplier.toFixed(2)}</span>
+                            </div>
+                            <Slider
+                                value={[fishSpeedMultiplier]}
+                                onValueChange={value => onUpdateFishSpeedMultiplier(value[0])}
+                                min={0.1}
+                                max={3}
+                                step={0.05}
+                            />
                         </div>
 
                     </div>
@@ -506,4 +536,3 @@ export function Sidebar({
         </aside>
     );
 }
-

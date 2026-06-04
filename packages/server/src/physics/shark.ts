@@ -46,8 +46,8 @@ export function applyShark(fish: ActiveFish): void {
   state.angle += state.turnRate * state.turnDir;
   const margin = PHYSICS.WALL_MARGIN * 2.5;
   if (
-    fish.physics.pos.x < margin ||
-    fish.physics.pos.x > world.width - margin ||
+    (world.horizontalBoundaryMode === "bounce" && fish.physics.pos.x < margin) ||
+    (world.horizontalBoundaryMode === "bounce" && fish.physics.pos.x > world.width - margin) ||
     fish.physics.pos.y < margin ||
     fish.physics.pos.y > world.height - margin
   ) {

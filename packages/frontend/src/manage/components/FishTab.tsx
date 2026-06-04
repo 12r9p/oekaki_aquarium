@@ -360,7 +360,6 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
             });
             if (!releaseRes.ok) return;
             onRefresh();
-            setIsGalleryOpen(false);
         } catch (e) {
             console.error("[addFromGallery] Error:", e);
         }

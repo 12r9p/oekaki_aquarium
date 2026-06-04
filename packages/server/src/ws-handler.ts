@@ -6,6 +6,7 @@ import { registerClientViewport, unregisterClient, setWorldSize, getWorld,
   updateForbiddenZones,
   updateSpawnPoints,
   updateLayers,
+  updateWorldMotionSettings,
 } from "./world";
 import { getAllActiveFish, getPendingQueue } from "./fish-manager";
 import { v4 as uuidv4 } from "uuid";
@@ -138,6 +139,9 @@ export const wsHandlers = {
     }
     
     sockets.delete(ws);
+    if (![...sockets].some(socket => socket.data.uuid === ws.data.uuid)) {
+      unregisterClient(ws.data.uuid);
+    }
     // 管理画面に更新をプッシュ
     pushClientListToManagers();
   },
@@ -162,16 +166,12 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       console.log(`[WS] Registered: ${msg.uuid} (${ws.data.clientType})`);
 
       if (ws.data.clientType === "display") {
-        // 保存済みViewportがあれば復元、なければハードウェアサイズをデフォルトに
+        // 保存済みViewportがあれば復元。初回は水槽内に収まる表示範囲を割り当てる。
         const savedVp = viewportStore.get(msg.uuid);
-        const vp: ClientConfig["viewport"] = savedVp ?? {
-          x: 0, y: 0,
-          width: msg.hardware.w,
-          height: msg.hardware.h,
-          scale: 1,
-        };
+        const vp: ClientConfig["viewport"] = savedVp ?? defaultViewport(msg.hardware.w, msg.hardware.h);
         ws.data.viewport = vp;
         if (!savedVp) viewportStore.set(msg.uuid, vp); // 初回接続は保存
+        registerClientViewport({ uuid: msg.uuid, name: msg.uuid, viewport: vp, debug: { showGrid: false, showId: false } });
         const w = getWorld();
         sendTo(ws, {
           event: "config",
@@ -183,6 +183,8 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
           forbiddenZones: w.forbiddenZones,
           spawnPoints: w.spawnPoints,
           layers: w.layers,
+          horizontalBoundaryMode: w.horizontalBoundaryMode,
+          fishSpeedMultiplier: w.fishSpeedMultiplier,
         });
       }
       // 初回接続: シーンを送信
@@ -226,9 +228,9 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
     }
     // @ts-ignore
     case "update_world_size": {
-      // 既存のイベント互換用（使わない方針だが残しておく）
       setWorldSize((msg as any).width, (msg as any).height);
-      pushClientListToManagers();
+      broadcastToAll({ event: "update_world_size", width: (msg as any).width, height: (msg as any).height });
+      pushStateToManagers();
       break;
     }
 
@@ -238,6 +240,8 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       updateForbiddenZones(msg.forbiddenZones);
       updateSpawnPoints(msg.spawnPoints);
       if (msg.layers) updateLayers(msg.layers);
+      updateWorldMotionSettings(msg.horizontalBoundaryMode, msg.fishSpeedMultiplier);
+      const w = getWorld();
 
       broadcastToAll({
         event: "update_world_config",
@@ -245,6 +249,8 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
         forbiddenZones: msg.forbiddenZones,
         spawnPoints: msg.spawnPoints,
         layers: msg.layers,
+        horizontalBoundaryMode: w.horizontalBoundaryMode,
+        fishSpeedMultiplier: w.fishSpeedMultiplier,
       });
       // 管理画面のstate_pushもトリガー
       pushStateToManagers();
@@ -303,6 +309,7 @@ export function updateDisplayViewport(targetUuid: string, viewport: ClientConfig
   for (const ws of sockets) {
     if (ws.data.uuid === targetUuid) {
       ws.data.viewport = viewport;
+      registerClientViewport({ uuid: targetUuid, name: targetUuid, viewport, debug: { showGrid: false, showId: false } });
       sendTo(ws, { event: "update_viewport", targetUuid, viewport });
       pushClientListToManagers();
       return true;
@@ -311,6 +318,24 @@ export function updateDisplayViewport(targetUuid: string, viewport: ClientConfig
   // 対象が切断中でも保存はしておく（再接続時に適用される）
   pushClientListToManagers();
   return false;
+}
+
+function defaultViewport(screenW: number, screenH: number): ClientConfig["viewport"] {
+  const world = getWorld();
+  const aspect = Math.max(screenW, 1) / Math.max(screenH, 1);
+  let width = world.width;
+  let height = width / aspect;
+  if (height > world.height) {
+    height = world.height;
+    width = height * aspect;
+  }
+  return {
+    x: (world.width - width) / 2,
+    y: (world.height - height) / 2,
+    width,
+    height,
+    scale: 1,
+  };
 }
 
 /** テストパターンを特定/全displayに送信 */
@@ -354,6 +379,8 @@ export function pushStateToManagers(): void {
     forbiddenZones: w.forbiddenZones,
     spawnPoints: w.spawnPoints,
     layers: w.layers,
+    horizontalBoundaryMode: w.horizontalBoundaryMode,
+    fishSpeedMultiplier: w.fishSpeedMultiplier,
   };
   const data = JSON.stringify(msg);
   for (const ws of sockets) {

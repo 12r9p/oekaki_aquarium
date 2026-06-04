@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig } from "@aquarium/shared";
+import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
 import "../styles/global.css";
 
@@ -28,6 +28,8 @@ function ManageApp(): React.ReactElement {
     const [forbiddenZones, setForbiddenZones] = useState<{ id: string; x: number; y: number; width: number; height: number }[]>([]);
     const [spawnPoints, setSpawnPoints] = useState<{ id: string; x: number; y: number }[]>([]);
     const [layers, setLayers] = useState<AppLayerConfig[]>([]);
+    const [horizontalBoundaryMode, setHorizontalBoundaryMode] = useState<HorizontalBoundaryMode>("wrap");
+    const [fishSpeedMultiplier, setFishSpeedMultiplier] = useState(1);
     const [connected, setConnected] = useState(false);
     const [alert, setAlert] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string | null>(null);
@@ -70,11 +72,15 @@ function ManageApp(): React.ReactElement {
                 if (msg.forbiddenZones !== undefined) setForbiddenZones(msg.forbiddenZones);
                 if (msg.spawnPoints !== undefined) setSpawnPoints(msg.spawnPoints);
                 if (msg.layers !== undefined) setLayers(msg.layers);
+                if (msg.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(msg.horizontalBoundaryMode);
+                if (msg.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(msg.fishSpeedMultiplier);
             } else if (msg.event === "update_world_config") {
                 if (msg.bgUrl !== undefined) setBgUrl(msg.bgUrl);
                 if (msg.forbiddenZones !== undefined) setForbiddenZones(msg.forbiddenZones);
                 if (msg.spawnPoints !== undefined) setSpawnPoints(msg.spawnPoints);
                 if (msg.layers !== undefined) setLayers(msg.layers);
+                if (msg.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(msg.horizontalBoundaryMode);
+                if (msg.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(msg.fishSpeedMultiplier);
             } else if (msg.event === "fish_list") {
                 setActiveFish(msg.activeFish);
                 setPendingFish(msg.pendingFish);
@@ -104,6 +110,8 @@ function ManageApp(): React.ReactElement {
                 forbiddenZones?: { id: string; x: number; y: number; width: number; height: number }[];
                 spawnPoints?: { id: string; x: number; y: number }[];
                 layers?: AppLayerConfig[];
+                horizontalBoundaryMode?: HorizontalBoundaryMode;
+                fishSpeedMultiplier?: number;
             };
             setDisplays(data.clients.filter((c) => c.clientType === "display"));
             setActiveFish(data.activeFish);
@@ -114,6 +122,8 @@ function ManageApp(): React.ReactElement {
             if (data.forbiddenZones !== undefined) setForbiddenZones(data.forbiddenZones);
             if (data.spawnPoints !== undefined) setSpawnPoints(data.spawnPoints);
             if (data.layers !== undefined) setLayers(data.layers);
+            if (data.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(data.horizontalBoundaryMode);
+            if (data.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(data.fishSpeedMultiplier);
         } catch (err) {
             console.error("Polling error:", err);
             setLastError("サーバーとの接続に問題があります。");
@@ -228,7 +238,7 @@ function ManageApp(): React.ReactElement {
         displays, activeFish, pendingFish, sendRateSetting, setSendRateSetting,
         worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints,
-        layers, setLayers,
+        layers, setLayers, horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier,
         selectedDisplay, setSelectedDisplay, activeLayerId, setActiveLayerId, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports,
@@ -304,6 +314,10 @@ interface LayoutTabProps {
         setSpawnPoints: React.Dispatch<React.SetStateAction<{ id: string; x: number; y: number }[]>>;
         layers: AppLayerConfig[];
         setLayers: React.Dispatch<React.SetStateAction<AppLayerConfig[]>>;
+        horizontalBoundaryMode: HorizontalBoundaryMode;
+        setHorizontalBoundaryMode: React.Dispatch<React.SetStateAction<HorizontalBoundaryMode>>;
+        fishSpeedMultiplier: number;
+        setFishSpeedMultiplier: React.Dispatch<React.SetStateAction<number>>;
         selectedDisplay: string | null;
         setSelectedDisplay: React.Dispatch<React.SetStateAction<string | null>>;
         activeLayerId?: string;
@@ -329,40 +343,41 @@ interface LayoutTabProps {
 function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPattern, onUpdateWorldSize }: LayoutTabProps) {
     const { displays, sendRateSetting, setSendRateSetting, worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints, layers, setLayers,
+        horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier,
         selectedDisplay, setSelectedDisplay, activeLayerId, setActiveLayerId, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports } = state;
 
+    const updateWorldConfig = (patch: {
+        bgUrl?: string;
+        forbiddenZones?: typeof forbiddenZones;
+        spawnPoints?: typeof spawnPoints;
+        layers?: AppLayerConfig[];
+        horizontalBoundaryMode?: HorizontalBoundaryMode;
+        fishSpeedMultiplier?: number;
+    }) => {
+        const next = { bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, ...patch };
+        if (connected) ws.send({ event: "update_world_config", ...next });
+    };
+
     const onUpdateBgUrl = (url: string) => {
         setBgUrl(url);
-        if (connected) {
-            // @ts-ignore
-            ws.send({ event: "update_world_config", bgUrl: url, forbiddenZones, spawnPoints, layers });
-        }
+        updateWorldConfig({ bgUrl: url });
     };
 
     const onUpdateForbiddenZones = (zones: { id: string; x: number; y: number; width: number; height: number }[]) => {
         setForbiddenZones(zones);
-        if (connected) {
-            // @ts-ignore
-            ws.send({ event: "update_world_config", bgUrl, forbiddenZones: zones, spawnPoints, layers });
-        }
+        updateWorldConfig({ forbiddenZones: zones });
     };
 
     const onUpdateSpawnPoints = (points: { id: string; x: number; y: number }[]) => {
         setSpawnPoints(points);
-        if (connected) {
-            // @ts-ignore
-            ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints: points, layers });
-        }
+        updateWorldConfig({ spawnPoints: points });
     };
 
     const onUpdateLayers = (newLayers: AppLayerConfig[]) => {
         setLayers(newLayers);
-        if (connected) {
-            // @ts-ignore
-            ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints, layers: newLayers });
-        }
+        updateWorldConfig({ layers: newLayers });
     };
 
     return (
@@ -388,6 +403,16 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     onUpdateSpawnPoints={onUpdateSpawnPoints}
                     layers={layers}
                     onUpdateLayers={onUpdateLayers}
+                    horizontalBoundaryMode={horizontalBoundaryMode}
+                    onUpdateHorizontalBoundaryMode={(mode) => {
+                        setHorizontalBoundaryMode(mode);
+                        updateWorldConfig({ horizontalBoundaryMode: mode });
+                    }}
+                    fishSpeedMultiplier={fishSpeedMultiplier}
+                    onUpdateFishSpeedMultiplier={(speed) => {
+                        setFishSpeedMultiplier(speed);
+                        updateWorldConfig({ fishSpeedMultiplier: speed });
+                    }}
                     activeLayerId={activeLayerId}
                     onSetActiveLayerId={setActiveLayerId}
                 />

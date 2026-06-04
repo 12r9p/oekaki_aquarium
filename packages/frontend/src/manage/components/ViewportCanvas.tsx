@@ -338,7 +338,7 @@ export function ViewportCanvas({
                     if (img && img.width > 0) {
                         ctx.save();
                         ctx.translate(pt.x, pt.y);
-                        if (f.vx !== undefined && f.vx < 0) ctx.scale(-1, 1);
+                        if (f.d === -1) ctx.scale(-1, 1);
                         ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
                         if (isDragging) {
                             ctx.strokeStyle = "#f59e0b";
@@ -555,7 +555,7 @@ export function ViewportCanvas({
         return { mx: evtX - rect.left, my: evtY - rect.top };
     }, []);
 
-    const handleMouseDown = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const handleMouseDown = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
         if (e.button === 1 || spaceRef.current) {
             isPanningRef.current = true;
             const { mx, my } = getCanvasPt(e.clientX, e.clientY);
@@ -640,6 +640,7 @@ export function ViewportCanvas({
                 const FISH_R = Math.max(16, 40 * z) / z;
                 if (Math.abs(wPt.x - f.x) <= FISH_R && Math.abs(wPt.y - f.y) <= FISH_R) {
                     dragFishIdRef.current = f.i;
+                    e.currentTarget.setPointerCapture(e.pointerId);
                     setSelectedLocalId(null);
                     setSelected(null);
                     if (rafRef.current) cancelAnimationFrame(rafRef.current);
@@ -778,7 +779,7 @@ export function ViewportCanvas({
         }
     }, [selected, displaysRef, getCanvasPt, canvasToWorld, snapshotViewports, setSelected, undoStackRef, redoStackRef, forbiddenZones, onUpdateForbiddenZones, spawnPoints, onUpdateSpawnPoints, worldW, worldH, activeLayerId]);
 
-    const handleMouseMove = useCallback((e: React.MouseEvent<HTMLCanvasElement>) => {
+    const handleMouseMove = useCallback((e: React.PointerEvent<HTMLCanvasElement>) => {
         const { mx, my } = getCanvasPt(e.clientX, e.clientY);
 
         // パン
@@ -787,6 +788,19 @@ export function ViewportCanvas({
             const dy = my - panStartRef.current.my;
             camRef.current.panX = panStartRef.current.px + dx;
             camRef.current.panY = panStartRef.current.py + dy;
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(draw);
+            return;
+        }
+
+        // --- 魚のドラッグ中：ワールド座標でライブ再描画 ---
+        if (dragFishIdRef.current) {
+            const wp = canvasToWorld(mx, my);
+            const frameData = (window as any).__lastFrame;
+            if (frameData?.f) {
+                const fish = (frameData.f as any[]).find((f: any) => f.i === dragFishIdRef.current);
+                if (fish) { fish.x = wp.x; fish.y = wp.y; }
+            }
             if (rafRef.current) cancelAnimationFrame(rafRef.current);
             rafRef.current = requestAnimationFrame(draw);
             return;
@@ -808,20 +822,6 @@ export function ViewportCanvas({
                 pointerThrottleRef.current = now;
                 ws.send({ event: "pointer_move", x: wp2.x, y: wp2.y });
             }
-            return;
-        }
-
-        // --- 魚のドラッグ中：ワールド座標でライブ再描画 ---
-        if (dragFishIdRef.current) {
-            const wp = canvasToWorld(mx, my);
-            // リアルタイム処理のフレームデータを一時書き換えて农站ち位置を描画上更新
-            const frameData = (window as any).__lastFrame;
-            if (frameData && frameData.f) {
-                const idx = (frameData.f as any[]).findIndex((f: any) => f.i === dragFishIdRef.current);
-                if (idx >= 0) { frameData.f[idx].x = wp.x; frameData.f[idx].y = wp.y; }
-            }
-            if (rafRef.current) cancelAnimationFrame(rafRef.current);
-            rafRef.current = requestAnimationFrame(draw);
             return;
         }
 
@@ -992,10 +992,24 @@ export function ViewportCanvas({
         }
     }, [getCanvasPt, canvasToWorld, displaysRef, worldW, worldH, arLocked, sendRateSetting, draw, forbiddenZones, onUpdateForbiddenZones, spawnPoints, onUpdateSpawnPoints, pendingWorldSizeRef]);
 
-    const handleMouseUp = useCallback(() => {
+    const handleMouseUp = useCallback((e?: React.PointerEvent<HTMLCanvasElement>) => {
         isPanningRef.current = false;
-        canvasRef.current!.style.cursor = "default";
+        if (canvasRef.current) canvasRef.current.style.cursor = "default";
         snapGuides.current = {};
+
+        if (dragFishIdRef.current) {
+            const shortId = dragFishIdRef.current;
+            const frameFish = (window as any).__lastFrame?.f?.find((f: any) => f.i === shortId);
+            const fullId = activeFishRef.current.find(f => f.id.startsWith(shortId))?.id;
+            if (frameFish && fullId) void onMoveFishRef.current?.(fullId, frameFish.x, frameFish.y);
+            dragFishIdRef.current = null;
+            if (e?.currentTarget.hasPointerCapture(e.pointerId)) {
+                e.currentTarget.releasePointerCapture(e.pointerId);
+            }
+            if (rafRef.current) cancelAnimationFrame(rafRef.current);
+            rafRef.current = requestAnimationFrame(draw);
+            return;
+        }
 
         if (dragRef.current) {
             if (dragRef.current.handle === "world_br") {
@@ -1095,6 +1109,7 @@ export function ViewportCanvas({
                 onPointerDown={handleMouseDown}
                 onPointerMove={handleMouseMove}
                 onPointerUp={handleMouseUp}
+                onPointerCancel={handleMouseUp}
                 onPointerLeave={handleMouseUp}
                 onContextMenu={e => e.preventDefault()}
                 style={{ width: "100%", height: "100%", display: "block" }}

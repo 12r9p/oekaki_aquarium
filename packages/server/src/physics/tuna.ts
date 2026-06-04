@@ -51,8 +51,10 @@ export function applyTuna(fish: ActiveFish): void {
   let shouldTurnRight = false;
 
   // 1. ワールド境界の判定
-  if (fish.physics.pos.x >= world.width - margin) shouldTurnLeft = true;
-  if (fish.physics.pos.x <= margin) shouldTurnRight = true;
+  if (world.horizontalBoundaryMode === "bounce") {
+    if (fish.physics.pos.x >= world.width - margin) shouldTurnLeft = true;
+    if (fish.physics.pos.x <= margin) shouldTurnRight = true;
+  }
 
   // 2. 進入禁止エリアの判定
   if (!shouldTurnLeft && !shouldTurnRight) {

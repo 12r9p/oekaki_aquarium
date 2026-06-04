@@ -30,13 +30,18 @@ export function applyBoundaries(fish: ActiveFish): void {
   // --- 1. Void / 画面外 からの押し戻し (ハードクランプ + 速度反転方式) ---
   // 力ベースだと高速時に外に出たままになるので、座標を強制修正する
   const bounceDamp = 0.75;
-  if (pos.x < PHYSICS.WALL_MARGIN) {
-    pos.x = PHYSICS.WALL_MARGIN;
-    if (vel.x < 0) vel.x *= -bounceDamp;
-  }
-  if (pos.x > world.width - PHYSICS.WALL_MARGIN) {
-    pos.x = world.width - PHYSICS.WALL_MARGIN;
-    if (vel.x > 0) vel.x *= -bounceDamp;
+  if (world.horizontalBoundaryMode === "wrap") {
+    if (pos.x < -PHYSICS.WALL_MARGIN) pos.x = world.width + PHYSICS.WALL_MARGIN;
+    if (pos.x > world.width + PHYSICS.WALL_MARGIN) pos.x = -PHYSICS.WALL_MARGIN;
+  } else {
+    if (pos.x < PHYSICS.WALL_MARGIN) {
+      pos.x = PHYSICS.WALL_MARGIN;
+      if (vel.x < 0) vel.x *= -bounceDamp;
+    }
+    if (pos.x > world.width - PHYSICS.WALL_MARGIN) {
+      pos.x = world.width - PHYSICS.WALL_MARGIN;
+      if (vel.x > 0) vel.x *= -bounceDamp;
+    }
   }
   if (pos.y < PHYSICS.WALL_MARGIN) {
     pos.y = PHYSICS.WALL_MARGIN;

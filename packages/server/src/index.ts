@@ -6,6 +6,7 @@ import { mkdirSync, readFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { PORTS } from "@aquarium/shared";
 import { startGameLoop } from "./game-loop";
+import { resetAquariumMotionPosition } from "./physics/aquarium-motion";
 import {
   wsHandlers,
   startHeartbeatWatcher,
@@ -280,6 +281,7 @@ app.put("/api/fish/:id/position", async (c) => {
   fish.physics.pos.y = y;
   fish.physics.vel.x = 0;
   fish.physics.vel.y = 0;
+  resetAquariumMotionPosition(fish);
   return c.json({ success: true });
 });
 
@@ -299,6 +301,8 @@ app.get("/api/state", (c) => {
     forbiddenZones: w.forbiddenZones,
     spawnPoints: w.spawnPoints,
     layers:      w.layers,
+    horizontalBoundaryMode: w.horizontalBoundaryMode,
+    fishSpeedMultiplier: w.fishSpeedMultiplier,
   });
 });
 

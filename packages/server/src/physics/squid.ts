@@ -35,8 +35,10 @@ export function applySquid(fish: ActiveFish): void {
   const state = squidState.get(fish.id)!;
   state.frame = (state.frame + 1) % CYCLE;
   const margin = PHYSICS.WALL_MARGIN * 1.5;
-  if (fish.physics.pos.x > world.width - margin && state.dir === 1) state.dir = -1;
-  if (fish.physics.pos.x < margin && state.dir === -1) state.dir = 1;
+  if (world.horizontalBoundaryMode === "bounce") {
+    if (fish.physics.pos.x > world.width - margin && state.dir === 1) state.dir = -1;
+    if (fish.physics.pos.x < margin && state.dir === -1) state.dir = 1;
+  }
   state.baseY = Math.max(margin, Math.min(world.height - margin, state.baseY));
 
   // X方向: パルスか巡航か
@@ -55,4 +57,9 @@ export function applySquid(fish: ActiveFish): void {
   const dy = (targetY - fish.physics.pos.y) * 0.04;
   fish.physics.vel.y = dy;
   fish.physics.pos.y += dy;
+}
+
+export function resetSquidState(fishId: string, newY: number): void {
+  const state = squidState.get(fishId);
+  if (state) state.baseY = newY;
 }

@@ -30,8 +30,10 @@ export function applyJellyfish(fish: ActiveFish): void {
   const state = jellyfishState.get(fish.id)!;
   state.frame++;
   const margin = PHYSICS.WALL_MARGIN * 1.5;
-  if (fish.physics.pos.x > world.width - margin && state.dir === 1) state.dir = -1;
-  if (fish.physics.pos.x < margin && state.dir === -1) state.dir = 1;
+  if (world.horizontalBoundaryMode === "bounce") {
+    if (fish.physics.pos.x > world.width - margin && state.dir === 1) state.dir = -1;
+    if (fish.physics.pos.x < margin && state.dir === -1) state.dir = 1;
+  }
   if (state.baseY < margin || state.baseY > world.height - margin) {
     state.baseY = Math.max(margin, Math.min(world.height - margin, state.baseY));
   }
@@ -47,4 +49,9 @@ export function applyJellyfish(fish: ActiveFish): void {
   const dy = (targetY - fish.physics.pos.y) * 0.025;
   fish.physics.vel.y = dy;
   fish.physics.pos.y += dy;
+}
+
+export function resetJellyfishState(fishId: string, newY: number): void {
+  const state = jellyfishState.get(fishId);
+  if (state) state.baseY = newY;
 }
