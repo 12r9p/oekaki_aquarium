@@ -44,6 +44,7 @@ function saveActiveFishToDisk(fish: ActiveFish) {
       pinnedLayerId: fish.isPinned ? (fish.pinnedLayerId ?? 0) : null,
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
+      direction: fish.userParams.direction ?? "auto",
     };
     buf = writeFishMeta(buf, meta);
     // URLを公開する前に書き込みを完了させ、初回リクエストの404を防ぐ。
@@ -70,6 +71,7 @@ function updateActiveFishOnDisk(fish: ActiveFish) {
       pinnedLayerId: fish.isPinned ? (fish.pinnedLayerId ?? 0) : null,
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
+      direction: fish.userParams.direction ?? "auto",
     };
     buf = writeFishMeta(buf, meta);
     writeFileSync(destPath, buf);
@@ -101,11 +103,12 @@ const activePool: Map<string, ActiveFish> = new Map();
 // -------------------------------------------------------
 
 /** スキャンノードから画像を受け取り待機リストに追加する */
-export function addToPending(imageUrl: string): PendingFish {
+export function addToPending(imageUrl: string, fishMeta?: FishMeta): PendingFish {
   const fish: PendingFish = {
     id: uuidv4(),
     imageUrl,
     timestamp: Date.now(),
+    fishMeta,
   };
   pendingQueue.push(fish);
   return fish;
@@ -231,12 +234,13 @@ export function setPinned(
 /** 魚のプロパティを更新する */
 export function updateFishParams(
   fishId: string,
-  updates: Partial<{ scale: number; speed: number; isPinned: boolean; pinnedLayerId: number; type: FishType; isArchived: boolean }>
+  updates: Partial<{ scale: number; speed: number; direction: "auto" | "left" | "right"; isPinned: boolean; pinnedLayerId: number; type: FishType; isArchived: boolean }>
 ): boolean {
   const fish = activePool.get(fishId);
   if (!fish) return false;
   if (updates.scale !== undefined) fish.userParams.scale = updates.scale;
   if (updates.speed !== undefined) fish.userParams.speed = updates.speed;
+  if (updates.direction !== undefined) fish.userParams.direction = updates.direction;
   if (updates.isPinned !== undefined) fish.isPinned = updates.isPinned;
   if (updates.isPinned === false) fish.pinnedLayerId = undefined;
   if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
@@ -249,8 +253,9 @@ export function updateFishParams(
 }
 
 export function multiplyAllFishParams(scaleMultiplier: number, speedMultiplier: number): number {
-  const safeScaleMultiplier = Math.max(0.1, Math.min(scaleMultiplier, 3));
-  const safeSpeedMultiplier = Math.max(0.1, Math.min(speedMultiplier, 3));
+  // UIの絶対倍率を差分比率で受けるため、3→0.1 のような操作では 0.033... も許容する。
+  const safeScaleMultiplier = Math.max(0.01, Math.min(scaleMultiplier, 100));
+  const safeSpeedMultiplier = Math.max(0.01, Math.min(speedMultiplier, 100));
 
   for (const fish of activePool.values()) {
     fish.userParams.scale = Math.max(0.1, Math.min(fish.userParams.scale * safeScaleMultiplier, 3));
@@ -382,7 +387,8 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           userParams: {
             scale: meta.scale,
             speed: meta.speed,
-            rotationOffset: 0
+            rotationOffset: 0,
+            direction: meta.direction ?? "auto",
           },
           physics: {
             pos: { x: sp.x, y: sp.y },

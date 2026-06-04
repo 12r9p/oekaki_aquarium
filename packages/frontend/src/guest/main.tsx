@@ -2,6 +2,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { createWsClient } from "../shared/useWs";
 import type { WsClientMessage } from "@aquarium/shared";
+import type { PendingFish } from "@aquarium/shared";
+import { Editor } from "../controller/Editor";
 import "../styles/global.css";
 
 // ============================================================
@@ -13,6 +15,17 @@ function App(): React.ReactElement {
     const [connected, setConnected] = React.useState(false);
     const [feedCount, setFeedCount] = React.useState(0);
     const [ripple, setRipple] = React.useState<{ x: number; y: number; id: number } | null>(null);
+    const [mode, setMode] = React.useState<"feed" | "create">("feed");
+    const [editingFish, setEditingFish] = React.useState<PendingFish | null>(null);
+
+    const uploadPhoto = async (file: File): Promise<void> => {
+        const form = new FormData();
+        form.append("image", file);
+        const res = await fetch("/api/scan", { method: "POST", body: form });
+        if (!res.ok) return;
+        const data = await res.json() as { fish: PendingFish };
+        setEditingFish(data.fish);
+    };
 
     React.useEffect(() => {
         const remove = ws.onMessage((msg) => {
@@ -37,6 +50,26 @@ function App(): React.ReactElement {
         setRipple({ x: clientX, y: clientY, id: Date.now() });
         setTimeout(() => setRipple(null), 700);
     };
+
+    if (editingFish) {
+        return <Editor fish={editingFish} onReleased={() => { setEditingFish(null); setMode("feed"); }}
+            onCancel={() => setEditingFish(null)} />;
+    }
+
+    if (mode === "create") {
+        return (
+            <div style={{ minHeight: "100svh", background: "linear-gradient(180deg,#001a3a,#000d24)", color: "white", padding: 24, textAlign: "center" }}>
+                <button className="btn btn--ghost" onClick={() => setMode("feed")}>← エサやりへ</button>
+                <h1 style={{ margin: "48px 0 12px" }}>魚を放流する</h1>
+                <p style={{ color: "#7ec8e3", marginBottom: 24 }}>写真を撮るかPNGを選ぶと、泳ぎ方・向き・大きさ・速度を設定できます。</p>
+                <label className="btn btn--primary" style={{ display: "inline-block", padding: "16px 24px" }}>
+                    写真を撮る / PNGを選ぶ
+                    <input type="file" accept="image/*" capture="environment" hidden
+                        onChange={e => e.target.files?.[0] && void uploadPhoto(e.target.files[0])} />
+                </label>
+            </div>
+        );
+    }
 
     return (
         <div
@@ -82,6 +115,10 @@ function App(): React.ReactElement {
                 {feedCount > 0 && (
                     <p style={{ color: "#ffd700", fontSize: "0.9rem" }}>🍖 エサ投入 {feedCount}回</p>
                 )}
+                <button className="btn btn--primary" style={{ marginTop: 28, pointerEvents: "auto" }}
+                    onClick={e => { e.stopPropagation(); setMode("create"); }}>
+                    自分の魚を放流する
+                </button>
             </div>
         </div>
     );

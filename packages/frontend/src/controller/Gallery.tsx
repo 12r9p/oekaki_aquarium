@@ -41,12 +41,31 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
         onSelect(locked);
     };
 
+    const uploadFiles = async (files: FileList | File[]) => {
+        for (const file of Array.from(files)) {
+            if (file.type !== "image/png") continue;
+            const form = new FormData();
+            form.append("image", file);
+            await fetch("/api/scan", { method: "POST", body: form });
+        }
+        await fetchPending();
+    };
+
     return (
         <div className="gallery">
             <header className="gallery-header">
                 <h1>🐟 待合室</h1>
                 <p className="gallery-subtitle">自分の絵をタップして設定しよう！</p>
+                <label className="btn btn--primary">
+                    写真・PNGを追加
+                    <input type="file" accept="image/png,image/*" capture="environment" multiple hidden
+                        onChange={e => e.target.files && void uploadFiles(e.target.files)} />
+                </label>
             </header>
+            <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void uploadFiles(e.dataTransfer.files); }}
+                style={{ margin: "0 16px 12px", padding: 12, border: "2px dashed rgba(126,200,227,.5)", borderRadius: 12, textAlign: "center" }}>
+                PNGをここへドロップ
+            </div>
             {loading ? (
                 <div className="gallery-empty">読み込み中...</div>
             ) : fishList.length === 0 ? (

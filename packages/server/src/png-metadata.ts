@@ -6,7 +6,7 @@
 // ============================================================
 
 import { Buffer } from "node:buffer";
-import type { FishType } from "@aquarium/shared";
+import type { FishDirection, FishType } from "@aquarium/shared";
 
 // PNG ファイルシグネチャ (8バイト)
 const PNG_SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -34,6 +34,7 @@ export interface FishMeta {
   tags: string[];
   /** アーカイブ状態 */
   isArchived?: boolean;
+  direction?: FishDirection;
 }
 
 export const DEFAULT_FISH_META: FishMeta = {
@@ -45,6 +46,7 @@ export const DEFAULT_FISH_META: FishMeta = {
   pinnedLayerId: null,
   tags: [],
   isArchived: false,
+  direction: "auto",
 };
 
 // ============================================================

@@ -69,7 +69,8 @@ export function updateFishTargets(
   entry.targetX = screenX;
   entry.targetY = screenY;
   entry.targetRotation = fd.r;
-  entry.targetScale = normalizedFishScale(entry.sprite.texture, desiredScale) * entry.facing;
+  // 登録される魚画像は左向きを正としているため、進行方向とは逆符号で反転する。
+  entry.targetScale = normalizedFishScale(entry.sprite.texture, desiredScale) * -entry.facing;
   entry.targetAlpha = fd.o;
   entry.targetZIndex = fd.z;
 }
@@ -322,8 +323,22 @@ export function drawTestPattern(app: Application, pattern: TestPattern): void {
       break;
     }
 
-    case "identify":
-    // calibration — ディスプレイIDと座標情報を大きく表示して物理位置を特定する
+    case "identify": {
+      // 水槽の位置関係を見ながら識別できるよう、背景は塗り潰さず番号だけを重ねる。
+      let calDiv = document.getElementById("calibration-overlay");
+      if (!calDiv) {
+        calDiv = document.createElement("div");
+        calDiv.id = "calibration-overlay";
+        document.body.appendChild(calDiv);
+      }
+      Object.assign(calDiv.style, {
+        position: "fixed", inset: "0", display: "flex", alignItems: "center",
+        justifyContent: "center", pointerEvents: "none", zIndex: "10001",
+      });
+      calDiv.innerHTML = `<div style="font-family:monospace;color:#fff;font-size:min(52vw,52vh);line-height:1;font-weight:900;text-shadow:0 0 18px #000,0 0 40px #000,0 0 70px #00aaff;-webkit-text-stroke:4px #001a3a">${displayNumber ?? "?"}</div>`;
+      break;
+    }
+    // calibration は詳細調整用なので従来どおり全面パターンを表示する。
     case "calibration": {
       g.rect(0, 0, ww, wh).fill({ color: 0x0a0820 });
       g.setStrokeStyle({ width: 6, color: 0x00aaff });

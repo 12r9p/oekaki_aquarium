@@ -466,7 +466,7 @@ export function getDisplayClientInfoList(): DisplayClientInfo[] {
     }));
 
   // アクティブ + 切断猶予中 の両方を返す
-  return [...active, ...disconnectedDisplays];
+  return [...active, ...disconnectedDisplays].sort((a, b) => a.uuid.localeCompare(b.uuid));
 }
 
 /** ハートビートタイムアウトチェック（30秒） */

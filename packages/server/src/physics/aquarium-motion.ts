@@ -15,6 +15,7 @@ import { getWorld } from "../world";
  * 固有の遊泳モデルを持つ魚へ共通wanderを重ねないことで、不自然な加速や壁張り付きを防ぐ。
  */
 export function updateAquariumMotion(fish: ActiveFish, allFish: ActiveFish[]): void {
+  const previousX = fish.physics.pos.x;
   switch (fish.type) {
     case "tuna":
       applyTuna(fish);
@@ -42,6 +43,13 @@ export function updateAquariumMotion(fish: ActiveFish, allFish: ActiveFish[]): v
       return;
   }
 
+  const preferredDirection = fish.userParams.direction;
+  if (preferredDirection && preferredDirection !== "auto") {
+    const sign = preferredDirection === "right" ? 1 : -1;
+    const movedX = fish.physics.pos.x - previousX;
+    if (movedX * sign < 0) fish.physics.pos.x = previousX - movedX;
+    fish.physics.vel.x = Math.abs(fish.physics.vel.x) * sign;
+  }
   applyBoundaries(fish);
 }
 

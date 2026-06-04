@@ -22,7 +22,11 @@ export interface FishMeta {
   tags: string[];
   /** アーカイブ状態 */
   isArchived?: boolean;
+  /** 水平方向の固定。auto は泳ぎ方に任せる。 */
+  direction?: FishDirection;
 }
+
+export type FishDirection = "auto" | "left" | "right";
 
 // -------------------------------------------------------
 // 魚の挙動タイプ (= 動きプリセット)
@@ -57,6 +61,8 @@ export interface FishConfig {
     speed: number;
     /** 右向き統一のための回転補正値（ラジアン） */
     rotationOffset: number;
+    /** 泳ぐ水平方向。未指定は auto。 */
+    direction?: FishDirection;
   };
   /** Type B/C 用: 手描きモーションパス */
   motionPath?: Vector2[];
@@ -97,6 +103,8 @@ export interface PendingFish {
   timestamp: number;
   /** 排他制御: 現在編集中の iPad の UUID。undefined なら空き */
   lockedBy?: string;
+  /** アップロードPNGに埋め込まれていた初期設定 */
+  fishMeta?: FishMeta;
 }
 
 // -------------------------------------------------------

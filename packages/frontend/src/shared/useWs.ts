@@ -27,7 +27,20 @@ class WsClient {
   constructor(clientType: string) {
     this.clientType = clientType;
     this.connect();
+    window.addEventListener("online", this.reconnectNow);
+    document.addEventListener("visibilitychange", this.reconnectWhenVisible);
   }
+
+  private reconnectNow = (): void => {
+    if (this.ws?.readyState === WebSocket.OPEN || this.ws?.readyState === WebSocket.CONNECTING) return;
+    if (this.retryTimer) clearTimeout(this.retryTimer);
+    this.retryTimer = null;
+    this.connect();
+  };
+
+  private reconnectWhenVisible = (): void => {
+    if (document.visibilityState === "visible") this.reconnectNow();
+  };
 
   private connect(): void {
     // 開発時は Vite プロキシ経由、本番は同一オリジンになる
@@ -105,6 +118,8 @@ class WsClient {
     this.stopHeartbeat();
     if (this.retryTimer) clearTimeout(this.retryTimer);
     this.ws?.close();
+    window.removeEventListener("online", this.reconnectNow);
+    document.removeEventListener("visibilitychange", this.reconnectWhenVisible);
   }
 }
 

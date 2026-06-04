@@ -10,10 +10,11 @@ interface EditorProps {
 }
 
 export function Editor({ fish, onReleased, onCancel }: EditorProps): React.ReactElement {
-    const [fishType, setFishType] = useState<FishType>("school");
-    const [scale, setScale] = useState(1.0);
-    const [speed, setSpeed] = useState(1.0);
+    const [fishType, setFishType] = useState<FishType>(fish.fishMeta?.type ?? "school");
+    const [scale, setScale] = useState(fish.fishMeta?.scale ?? 1.0);
+    const [speed, setSpeed] = useState(fish.fishMeta?.speed ?? 1.0);
     const [rotationDeg, setRotationDeg] = useState(0);
+    const [direction, setDirection] = useState<"auto" | "left" | "right">(fish.fishMeta?.direction ?? "auto");
     const [isRecording, setIsRecording] = useState(false);
     const [motionPath, setMotionPath] = useState<Vector2[]>([]);
     const [releasedImageUrl, setReleasedImageUrl] = useState<string | null>(null);
@@ -49,7 +50,7 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
                 id: fish.id,
                 type: fishType,
                 textureUrl: fish.imageUrl,
-                userParams: { scale, speed, rotationOffset: (rotationDeg * Math.PI) / 180 },
+                userParams: { scale, speed, rotationOffset: (rotationDeg * Math.PI) / 180, direction },
                 motionPath: motionPath.length > 1 ? motionPath : undefined,
             };
             const res = await fetch("/api/release", {
@@ -58,12 +59,36 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
                 body: JSON.stringify(config),
             });
             if (!res.ok) throw new Error("放流失敗");
+            const owned = JSON.parse(localStorage.getItem("aquarium-owned-fish") ?? "[]") as string[];
+            if (!owned.includes(fish.id)) {
+                localStorage.setItem("aquarium-owned-fish", JSON.stringify([...owned, fish.id]));
+            }
             setReleasedImageUrl(fish.imageUrl);
         } catch {
             alert("放流に失敗しました。もう一度試してください。");
         } finally {
             setReleasing(false);
         }
+    };
+
+    const handleDownload = async (): Promise<void> => {
+        const res = await fetch("/api/png/configure", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                imageUrl: fish.imageUrl,
+                meta: {
+                    version: 1, author: fish.fishMeta?.author ?? "anonymous", type: fishType,
+                    scale, speed, direction, pinnedLayerId: null, tags: fish.fishMeta?.tags ?? [],
+                },
+            }),
+        });
+        if (!res.ok) { alert("PNGの作成に失敗しました"); return; }
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(await res.blob());
+        link.download = `${fish.id}.png`;
+        link.click();
+        URL.revokeObjectURL(link.href);
     };
 
     if (releasedImageUrl) {
@@ -109,6 +134,16 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
                     style={{ transform: `rotate(${rotationDeg}deg)` }}
                 />
             </div>
+
+            <section className="editor-section">
+                <label className="editor-label">泳ぐ向き</label>
+                <div className="editor-type-grid">
+                    {([["auto", "自動"], ["left", "← 左向き"], ["right", "右向き →"]] as const).map(([value, label]) => (
+                        <button key={value} className={`editor-type-btn ${direction === value ? "active" : ""}`}
+                            onClick={() => setDirection(value)}>{label}</button>
+                    ))}
+                </div>
+            </section>
 
             <section className="editor-section">
                 <label className="editor-label">🔄 回転補正</label>
@@ -159,6 +194,7 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
             )}
 
             <div className="editor-footer">
+                <button className="btn btn--ghost" onClick={() => void handleDownload()}>設定入りPNGをDL</button>
                 <button className="btn btn--release" onClick={() => void handleRelease()} disabled={releasing}>
                     {releasing ? "放流中..." : "🌊 泳げ！"}
                 </button>

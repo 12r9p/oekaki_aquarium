@@ -18,6 +18,15 @@ interface PendingTabProps {
 }
 
 export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
+    const uploadFiles = async (files: FileList | File[]) => {
+        for (const file of Array.from(files)) {
+            if (file.type !== "image/png") continue;
+            const form = new FormData();
+            form.append("image", file);
+            await fetch("/api/scan", { method: "POST", body: form });
+        }
+        onRefresh();
+    };
     const releaseFish = async (fish: PendingFish) => {
         await fetch("/api/release", {
             method: "POST",
@@ -40,7 +49,17 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
 
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-            <h2 className="text-xl font-bold text-slate-800 mb-4">待機中の魚一覧 ({pendingFish.length}匹)</h2>
+            <div className="flex items-center justify-between mb-4">
+                <h2 className="text-xl font-bold text-slate-800">待機中の魚一覧 ({pendingFish.length}匹)</h2>
+                <label className="cursor-pointer rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-white">
+                    PNGを追加
+                    <input type="file" accept="image/png" multiple hidden onChange={e => e.target.files && void uploadFiles(e.target.files)} />
+                </label>
+            </div>
+            <div className="mb-4 rounded-xl border-2 border-dashed border-sky-200 bg-sky-50 p-4 text-center text-sm text-sky-700"
+                onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void uploadFiles(e.dataTransfer.files); }}>
+                パラメーター入りPNGをドロップすると待機リストへ追加します
+            </div>
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
                 <Table>
                     <TableHeader className="bg-slate-50">

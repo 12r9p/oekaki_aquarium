@@ -85,7 +85,14 @@ export function Sidebar({
                     img.onload = () => {
                         const w = img.naturalWidth || 800;
                         const h = img.naturalHeight || 600;
-                        onUpdateLayers(layers.map(l => l.id === layerId ? { ...l, url: data.url, name: file.name, x: 0, y: 0, width: w, height: h, aspectRatioLocked: true } : l));
+                        const fitScale = Math.min(1, (worldW / 4) / w, (worldH / 4) / h);
+                        const width = Math.round(w * fitScale);
+                        const height = Math.round(h * fitScale);
+                        onUpdateLayers(layers.map(l => l.id === layerId ? {
+                            ...l, url: data.url, name: file.name,
+                            x: Math.round((worldW - width) / 2), y: Math.round((worldH - height) / 2),
+                            width, height, aspectRatioLocked: true
+                        } : l));
                     };
                     img.src = dataUrl;
                 }
@@ -227,7 +234,7 @@ export function Sidebar({
                                 }}>
                                     <Copy className="w-4 h-4 mr-2" /> URLをクリップボードにコピー
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => window.open("/display", "_blank")}>
+                                <DropdownMenuItem onClick={() => window.open(`/display?id=tab-${crypto.randomUUID().slice(0, 8)}`, "_blank")}>
                                     <ExternalLink className="w-4 h-4 mr-2" /> 新しいタブで開く
                                 </DropdownMenuItem>
                             </DropdownMenuContent>

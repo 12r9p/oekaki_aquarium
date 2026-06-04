@@ -403,7 +403,7 @@ export function ViewportCanvas({
                 ctx.fillStyle = isSel ? "#0f172a" : "#334155";
                 ctx.font = `bold ${Math.max(10, 12 * cam.zoom)}px sans-serif`;
                 ctx.textBaseline = "bottom";
-                ctx.fillText(`ID: ${d.uuid.split(":")[1] || d.uuid}`, p.x + 4, p.y + dh - 4);
+                ctx.fillText(`画面 ${(obj.idx ?? 0) + 1} / ID: ${d.uuid.split(":")[1] || d.uuid}`, p.x + 4, p.y + dh - 4);
 
                 const whText = `${Math.round(vp.width)}×${Math.round(vp.height)}`;
                 ctx.font = `${Math.max(9, 10 * cam.zoom)}px monospace`;

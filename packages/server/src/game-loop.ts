@@ -47,7 +47,10 @@ function tick(): void {
       const vx = fish.physics.vel.x;
       const vy = fish.physics.vel.y;
       const previousFacing = fishFacing.get(fish.id) ?? (vx < 0 ? -1 : 1);
-      const facing = Math.abs(vx) > 0.15 ? (vx < 0 ? -1 : 1) : previousFacing;
+      const preferredDirection = fish.userParams.direction;
+      const facing = preferredDirection === "left" ? -1
+        : preferredDirection === "right" ? 1
+        : Math.abs(vx) > 0.15 ? (vx < 0 ? -1 : 1) : previousFacing;
       fishFacing.set(fish.id, facing);
       // 左右は反転、回転は上下の傾きだけに分け、二重反転を防ぐ。
       const r = Math.atan2(vy * 0.55, Math.max(Math.abs(vx), 0.1));

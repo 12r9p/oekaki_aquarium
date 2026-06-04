@@ -100,6 +100,7 @@ function FishConfigPopup({
     const [isPinned, setIsPinned] = useState(fish.isPinned);
     const [isArchived, setIsArchived] = useState(!!fish.isArchived);
     const [type, setType] = useState(fish.type);
+    const [direction, setDirection] = useState(fish.userParams.direction ?? "auto");
     // 削除確認インラインUIの表示状態
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -111,6 +112,7 @@ function FishConfigPopup({
         setIsPinned(fish.isPinned);
         setIsArchived(!!fish.isArchived);
         setType(fish.type);
+        setDirection(fish.userParams.direction ?? "auto");
         setShowDeleteConfirm(false);
     }, [fish.id]);
 
@@ -134,6 +136,10 @@ function FishConfigPopup({
     const handleSpeed = (val: number) => {
         setSpeed(val);
         debouncedUpdate({ speed: val });
+    };
+    const handleDirection = (val: "auto" | "left" | "right") => {
+        setDirection(val);
+        onUpdate(fish.id, { direction: val });
     };
     const handleIsPinned = (val: boolean) => {
         setIsPinned(val);
@@ -246,6 +252,22 @@ function FishConfigPopup({
                         </div>
                     </div>
 
+                    <div className="flex flex-col gap-1.5">
+                        <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">泳ぐ向き</label>
+                        <div className="grid grid-cols-3 gap-1.5">
+                            {([
+                                ["auto", "自動"],
+                                ["left", "← 左"],
+                                ["right", "右 →"],
+                            ] as const).map(([value, label]) => (
+                                <button key={value} onClick={() => handleDirection(value)}
+                                    className={`text-xs py-1.5 px-2 rounded-lg border font-medium ${direction === value ? "bg-sky-500 text-white border-sky-500" : "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                                    {label}
+                                </button>
+                            ))}
+                        </div>
+                    </div>
+
                     {/* ピン留め */}
                     <div className="flex flex-col gap-2 bg-slate-50 rounded-xl p-3 border border-slate-100">
                         <label className="flex items-center gap-2 cursor-pointer">
@@ -276,7 +298,7 @@ function FishConfigPopup({
                         <input
                             type="checkbox"
                             checked={isArchived}
-                            onChange={e => setIsArchived(e.target.checked)}
+                            onChange={e => handleIsArchived(e.target.checked)}
                             className="w-4 h-4 rounded text-amber-500"
                         />
                         <Archive className="w-4 h-4 text-amber-500" />
@@ -353,7 +375,8 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     const [selectedFish, setSelectedFish] = useState<ActiveFish | null>(null);
     const [bulkScaleMultiplier, setBulkScaleMultiplier] = useState(1);
     const [bulkSpeedMultiplier, setBulkSpeedMultiplier] = useState(1);
-    const [isApplyingBulk, setIsApplyingBulk] = useState(false);
+    const lastBulkValues = React.useRef({ scale: 1, speed: 1 });
+    const bulkTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
     // 削除確認モード（true = 削除前に確認する）
     const [confirmMode, setConfirmMode] = useState(true);
 
@@ -432,25 +455,23 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
         onRefresh();
     };
 
-    const applyBulkMultipliers = async () => {
-        setIsApplyingBulk(true);
-        try {
+    React.useEffect(() => {
+        if (bulkTimer.current) clearTimeout(bulkTimer.current);
+        bulkTimer.current = setTimeout(async () => {
+            const scaleMultiplier = bulkScaleMultiplier / lastBulkValues.current.scale;
+            const speedMultiplier = bulkSpeedMultiplier / lastBulkValues.current.speed;
+            if (Math.abs(scaleMultiplier - 1) < 0.0001 && Math.abs(speedMultiplier - 1) < 0.0001) return;
             const response = await fetch("/api/fish/bulk-multiply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    scaleMultiplier: bulkScaleMultiplier,
-                    speedMultiplier: bulkSpeedMultiplier,
-                }),
+                body: JSON.stringify({ scaleMultiplier, speedMultiplier }),
             });
             if (!response.ok) return;
-            setBulkScaleMultiplier(1);
-            setBulkSpeedMultiplier(1);
+            lastBulkValues.current = { scale: bulkScaleMultiplier, speed: bulkSpeedMultiplier };
             onRefresh();
-        } finally {
-            setIsApplyingBulk(false);
-        }
-    };
+        }, 150);
+        return () => { if (bulkTimer.current) clearTimeout(bulkTimer.current); };
+    }, [bulkScaleMultiplier, bulkSpeedMultiplier]);
 
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col gap-6">
@@ -506,14 +527,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                         <Gauge className="w-4 h-4 text-sky-500" />
                         <h3 className="text-sm font-bold text-slate-700">全魚の速度・スケールを一括調整</h3>
                     </div>
-                    <Button
-                        onClick={applyBulkMultipliers}
-                        disabled={isApplyingBulk || activeFish.length === 0 || (bulkScaleMultiplier === 1 && bulkSpeedMultiplier === 1)}
-                        className="bg-sky-500 hover:bg-sky-600 text-white"
-                    >
-                        {isApplyingBulk && <Loader2 className="w-4 h-4 mr-1.5 animate-spin" />}
-                        {activeFish.length}匹に適用
-                    </Button>
+                    <span className="text-xs font-semibold text-emerald-600">変更は自動反映</span>
                 </div>
                 <div className="grid grid-cols-2 gap-6">
                     <BulkMultiplierSlider
@@ -529,7 +543,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                         accentClass="accent-emerald-500"
                     />
                 </div>
-                <p className="mt-3 text-[10px] text-slate-400">現在の各魚の個別設定値に倍率を掛けて保存します。適用後、倍率は1.00に戻ります。</p>
+                <p className="mt-3 text-[10px] text-slate-400">倍率を動かすと、全魚の現在値へ差分が随時反映されます。</p>
             </div>
 
             {/* --- ギャラリー表示エリア --- */}

@@ -41,7 +41,7 @@ import {
 } from "./fish-manager";
 import { getWorld } from "./world";
 import { loadFishLibrary, getLibraryFileBuffer, DATA_FISH_DIR } from "./fish-library";
-import { readFishMeta } from "./png-metadata";
+import { readFishMeta, writeFishMeta, DEFAULT_FISH_META } from "./png-metadata";
 import type { FishConfig, FishType } from "@aquarium/shared";
 
 // ============================================================
@@ -219,6 +219,26 @@ app.get("/api/gallery", async (c) => {
   return c.json({ images: files });
 });
 
+// PNGへ魚パラメーターを埋め込み、ダウンロード用ファイルとして返す。
+app.post("/api/png/configure", async (c) => {
+  const { imageUrl, meta } = await c.req.json<{ imageUrl: string; meta: Partial<import("./png-metadata").FishMeta> }>();
+  let sourcePath: string | null = null;
+  if (imageUrl?.startsWith("/images/")) sourcePath = join(PUBLIC_IMAGES_DIR, imageUrl.slice("/images/".length));
+  if (imageUrl?.startsWith("/lib-images/")) sourcePath = join(DATA_FISH_DIR, decodeURIComponent(imageUrl.slice("/lib-images/".length)));
+  if (!sourcePath) return c.json({ error: "Unsupported image URL" }, 400);
+  try {
+    const configured = writeFishMeta(readFileSync(sourcePath) as Buffer, { ...DEFAULT_FISH_META, ...meta });
+    return new Response(configured, {
+      headers: {
+        "Content-Type": "image/png",
+        "Content-Disposition": 'attachment; filename="aquarium-fish.png"',
+      },
+    });
+  } catch {
+    return c.json({ error: "Could not configure PNG" }, 400);
+  }
+});
+
 // ---- 魚ライブラリ: /data/fish/ から一覧取得 ----
 app.get("/api/library", (c) => {
   const entries = loadFishLibrary();
@@ -268,6 +288,7 @@ app.post("/api/library/:filename/release", async (c) => {
       scale: meta?.scale ?? 1.0,
       speed: meta?.speed ?? 1.0,
       rotationOffset: 0,
+      direction: meta?.direction ?? "auto",
     },
     isPinned: meta?.pinnedLayerId !== null && meta?.pinnedLayerId !== undefined,
     pinnedLayerId: meta?.pinnedLayerId ?? undefined,
