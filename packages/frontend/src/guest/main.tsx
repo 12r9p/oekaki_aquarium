@@ -4,6 +4,7 @@ import { createWsClient } from "../shared/useWs";
 import type { WsClientMessage } from "@aquarium/shared";
 import type { PendingFish } from "@aquarium/shared";
 import { Editor } from "../controller/Editor";
+import { api } from "../shared/api";
 import "../styles/global.css";
 
 // ============================================================
@@ -21,7 +22,7 @@ function App(): React.ReactElement {
     const uploadPhoto = async (file: File): Promise<void> => {
         const form = new FormData();
         form.append("image", file);
-        const res = await fetch("/api/scan", { method: "POST", body: form });
+        const res = await api.request("/api/scan", { method: "POST", body: form });
         if (!res.ok) return;
         const data = await res.json() as { fish: PendingFish };
         setEditingFish(data.fish);

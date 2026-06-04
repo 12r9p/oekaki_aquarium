@@ -261,11 +261,10 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       broadcastToDisplays({ event: "pointer_move", x: msg.x, y: msg.y });
       break;
     }
-    // @ts-ignore
     case "update_world_size": {
-      setWorldSize((msg as any).width, (msg as any).height);
+      setWorldSize(msg.width, msg.height);
       persistServerSettings();
-      broadcastToAll({ event: "update_world_size", width: (msg as any).width, height: (msg as any).height });
+      broadcastToAll({ event: "update_world_size", width: msg.width, height: msg.height });
       pushStateToManagers();
       break;
     }

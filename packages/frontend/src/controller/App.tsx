@@ -3,6 +3,7 @@ import type { PendingFish, WsServerMessage } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
 import { Gallery } from "./Gallery";
 import { Editor } from "./Editor";
+import { api } from "../shared/api";
 
 type Page = "gallery" | "editor";
 
@@ -21,7 +22,7 @@ export default function App(): React.ReactElement {
 
     const cancelEditing = async (): Promise<void> => {
         if (selectedFish) {
-            await fetch("/api/pending/unlock", {
+            await api.request("/api/pending/unlock", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ fishId: selectedFish.id }),

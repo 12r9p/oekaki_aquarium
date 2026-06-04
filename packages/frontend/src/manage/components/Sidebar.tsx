@@ -1,6 +1,7 @@
 import React from "react";
 import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
+import { api } from "@/shared/api";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -74,7 +75,7 @@ export function Sidebar({
             const dataUrl = ev.target?.result as string;
             if (!dataUrl) return;
             try {
-                const res = await fetch("/api/upload-image", {
+                const res = await api.request("/api/upload-image", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({ filename: file.name, data: dataUrl })

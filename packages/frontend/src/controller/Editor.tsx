@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import type { FishConfig, PendingFish, FishType, Vector2 } from "@aquarium/shared";
 import "./Editor.css";
+import { api } from "../shared/api";
 
 interface EditorProps {
     fish: PendingFish;
@@ -53,7 +54,7 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
                 userParams: { scale, speed, rotationOffset: (rotationDeg * Math.PI) / 180, direction },
                 motionPath: motionPath.length > 1 ? motionPath : undefined,
             };
-            const res = await fetch("/api/release", {
+            const res = await api.request("/api/release", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify(config),
@@ -72,7 +73,7 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
     };
 
     const handleDownload = async (): Promise<void> => {
-        const res = await fetch("/api/png/configure", {
+        const res = await api.request("/api/png/configure", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({

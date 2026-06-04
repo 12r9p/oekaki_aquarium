@@ -3,79 +3,16 @@ import type { ActiveFish } from "@aquarium/shared";
 import { LAYER_CONFIG } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Copy, Trash2, Pin, Archive, CopyPlus, Loader2, RefreshCw, X, Settings2, Gauge } from "lucide-react";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableHead,
-    TableHeader,
-    TableRow,
-} from "@/components/ui/table";
-
-/** /api/library から返るエントリ型 */
-interface LibraryEntry {
-    filename: string;
-    imageUrl: string;
-    meta: {
-        version: number;
-        author: string;
-        type: "swimmer" | "looper" | "anchor";
-        speed: number;
-        scale: number;
-        pinnedLayerId: number | null;
-        tags: string[];
-    };
-}
-
+import { api } from "@/shared/api";
+import { Trash2, Pin, Archive, CopyPlus, Loader2, RefreshCw, X } from "lucide-react";
+import { BulkMultiplierSection } from "./fish/BulkMultiplierSection";
+import { FishGallerySection } from "./fish/FishGallerySection";
+import { FishTable } from "./fish/FishTable";
+import { LayerOccupancySection } from "./fish/LayerOccupancySection";
+import type { GalleryEntry } from "./fish/types";
 interface FishTabProps {
     activeFish: ActiveFish[];
     onRefresh: () => void;
-}
-
-function BulkMultiplierSlider({
-    label,
-    value,
-    onChange,
-    accentClass,
-}: {
-    label: string;
-    value: number;
-    onChange: (value: number) => void;
-    accentClass: string;
-}) {
-    const setClampedValue = (next: number) => onChange(Math.max(0.1, Math.min(next, 3)));
-    return (
-        <div className="flex flex-col gap-2">
-            <div className="flex items-center justify-between">
-                <label className="text-xs font-semibold text-slate-600">{label}</label>
-                <div className="flex items-center gap-1">
-                    <span className="text-xs text-slate-400">×</span>
-                    <Input
-                        type="number"
-                        min="0.1"
-                        max="3"
-                        step="0.05"
-                        value={value}
-                        onChange={event => setClampedValue(Number(event.target.value) || 1)}
-                        className="h-7 w-20 text-right text-xs font-mono"
-                    />
-                </div>
-            </div>
-            <input
-                type="range"
-                min="0.1"
-                max="3"
-                step="0.05"
-                value={value}
-                onChange={event => setClampedValue(Number(event.target.value))}
-                className={`w-full ${accentClass}`}
-            />
-            <div className="flex justify-between text-[10px] text-slate-400">
-                <span>×0.1</span><span>×1.0</span><span>×3.0</span>
-            </div>
-        </div>
-    );
 }
 
 /** 魚コンフィグポップアップ */
@@ -369,7 +306,7 @@ function FishConfigPopup({
 }
 
 export function FishTab({ activeFish, onRefresh }: FishTabProps) {
-    const [galleryImages, setGalleryImages] = useState<Array<{ url: string; meta?: LibraryEntry["meta"] }>>([]);
+    const [galleryImages, setGalleryImages] = useState<GalleryEntry[]>([]);
     const [isGalleryOpen, setIsGalleryOpen] = useState(false);
     const [isReloading, setIsReloading] = useState(false);
     const [selectedFish, setSelectedFish] = useState<ActiveFish | null>(null);
@@ -381,7 +318,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     const [confirmMode, setConfirmMode] = useState(true);
 
     React.useEffect(() => {
-        fetch("/api/gallery").then(res => res.json()).then(data => {
+        api.request("/api/gallery").then(res => res.json()).then(data => {
             if (data.images) setGalleryImages(data.images);
         }).catch(e => console.error("Gallery fetch error:", e));
     }, []);
@@ -389,7 +326,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     const reloadFromDisk = async () => {
         setIsReloading(true);
         try {
-            await fetch("/api/library/reload", { method: "POST" });
+            await api.request("/api/library/reload", { method: "POST" });
             onRefresh();
         } catch (e) {
             console.error("[Library] reload error:", e);
@@ -398,7 +335,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
         }
     };
 
-    const addFromGallery = async (entry: { url: string; meta?: LibraryEntry["meta"] }) => {
+    const addFromGallery = async (entry: GalleryEntry) => {
         const type = entry.meta?.type ?? "swimmer";
         const scale = entry.meta?.scale ?? 1.0;
         const speed = entry.meta?.speed ?? 1.0;
@@ -406,7 +343,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
         const url = entry.url;
 
         try {
-            const scanRes = await fetch("/api/scan", {
+            const scanRes = await api.request("/api/scan", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ deviceId: "demo-gallery", imageUrl: url, imageLocalPath: url })
@@ -421,7 +358,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                 return;
             }
 
-            const releaseRes = await fetch("/api/release", {
+            const releaseRes = await api.request("/api/release", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -437,7 +374,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     };
 
     const updateFish = async (id: string, updates: Record<string, unknown>) => {
-        await fetch(`/api/fish/${encodeURIComponent(id)}`, {
+        await api.request(`/api/fish/${encodeURIComponent(id)}`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(updates),
@@ -446,12 +383,12 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     };
 
     const duplicateFish = async (id: string) => {
-        await fetch(`/api/fish/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
+        await api.request(`/api/fish/${encodeURIComponent(id)}/duplicate`, { method: "POST" });
         onRefresh();
     };
 
     const deleteFish = async (id: string) => {
-        await fetch(`/api/fish/${encodeURIComponent(id)}`, { method: "DELETE" });
+        await api.request(`/api/fish/${encodeURIComponent(id)}`, { method: "DELETE" });
         onRefresh();
     };
 
@@ -461,7 +398,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
             const scaleMultiplier = bulkScaleMultiplier / lastBulkValues.current.scale;
             const speedMultiplier = bulkSpeedMultiplier / lastBulkValues.current.speed;
             if (Math.abs(scaleMultiplier - 1) < 0.0001 && Math.abs(speedMultiplier - 1) < 0.0001) return;
-            const response = await fetch("/api/fish/bulk-multiply", {
+            const response = await api.request("/api/fish/bulk-multiply", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ scaleMultiplier, speedMultiplier }),
@@ -506,7 +443,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                     <Button
                         variant="outline"
                         onClick={async () => {
-                            await fetch("/api/fish/redistribute", { method: "POST" });
+                            await api.request("/api/fish/redistribute", { method: "POST" });
                         }}
                         className="bg-white gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                         title="worldサイズ変更後に魚が偏った場合、全体に再均等配置します"
@@ -520,112 +457,26 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                 </div>
             </div>
 
-            {/* --- 全魚一括調整 --- */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2">
-                        <Gauge className="w-4 h-4 text-sky-500" />
-                        <h3 className="text-sm font-bold text-slate-700">全魚の速度・スケールを一括調整</h3>
-                    </div>
-                    <span className="text-xs font-semibold text-emerald-600">変更は自動反映</span>
-                </div>
-                <div className="grid grid-cols-2 gap-6">
-                    <BulkMultiplierSlider
-                        label="スケール倍率"
-                        value={bulkScaleMultiplier}
-                        onChange={setBulkScaleMultiplier}
-                        accentClass="accent-sky-500"
-                    />
-                    <BulkMultiplierSlider
-                        label="速度倍率"
-                        value={bulkSpeedMultiplier}
-                        onChange={setBulkSpeedMultiplier}
-                        accentClass="accent-emerald-500"
-                    />
-                </div>
-                <p className="mt-3 text-[10px] text-slate-400">倍率を動かすと、全魚の現在値へ差分が随時反映されます。</p>
-            </div>
+            <BulkMultiplierSection
+                scale={bulkScaleMultiplier}
+                speed={bulkSpeedMultiplier}
+                onScaleChange={setBulkScaleMultiplier}
+                onSpeedChange={setBulkSpeedMultiplier}
+            />
 
             {/* --- ギャラリー表示エリア --- */}
-            {isGalleryOpen && (
-                <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                    <h3 className="text-sm font-bold text-slate-700 mb-3">テンプレートギャラリー (クリックで放流)</h3>
-                    <div className="grid grid-cols-6 sm:grid-cols-8 md:grid-cols-10 gap-3 overflow-y-auto max-h-48 p-2 bg-slate-50 rounded-lg border border-slate-100">
-                        {galleryImages.length > 0 ? galleryImages.map((entry, idx) => (
-                            <div
-                                key={idx}
-                                onClick={() => addFromGallery(entry)}
-                                className="flex flex-col gap-1.5 aspect-square bg-white rounded cursor-pointer border border-transparent hover:border-emerald-500 hover:shadow-md transition-all p-1"
-                            >
-                                <div className="flex-1 overflow-hidden flex items-center justify-center">
-                                    <img src={entry.url} alt={`gallery-${idx}`} className="max-w-full max-h-full object-contain" loading="lazy" />
-                                </div>
-                            </div>
-                        )) : (
-                            <div className="col-span-full text-xs text-slate-400 text-center py-4">テンプレートが見つかりません<br /><code className="text-[10px]">/server/src/public/images</code></div>
-                        )}
-                    </div>
-                </div>
-            )}
+            {isGalleryOpen && <FishGallerySection entries={galleryImages} onSelect={addFromGallery} />}
 
             {/* --- レイヤー所属状況の視覚化 --- */}
-            <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
-                <h3 className="text-sm font-bold text-slate-700 mb-3">レイヤーの混雑状況 (自動押し出し)</h3>
-                <div className="flex flex-col gap-3">
-                    {LAYER_CONFIG.map((conf, idx) => {
-                        const inLayer = activeFish.filter(f => !f.isPinned && f.layerIndex === idx && !f.isArchived);
-                        const count = inLayer.length;
-                        const max = conf.maxCount;
-                        const ratio = Math.min(count / max, 1);
-                        const isFull = count >= max;
-                        return (
-                            <div key={conf.id} className="flex items-center gap-3">
-                                <div className="w-16 text-[11px] font-bold text-slate-500 text-right mt-0.5">Lyr {conf.id}</div>
-                                <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200 outline outline-1 outline-white mt-1">
-                                    <div
-                                        className={`absolute top-0 left-0 h-full transition-all duration-300 ${isFull ? "bg-amber-400" : "bg-emerald-400"}`}
-                                        style={{ width: `${ratio * 100}%` }}
-                                    />
-                                </div>
-                                <div className={`w-12 text-xs font-mono text-right mt-0.5 ${isFull ? "text-amber-600 font-bold" : "text-slate-500"}`}>
-                                    {count}/{max}
-                                </div>
-                            </div>
-                        );
-                    })}
-                </div>
-                <div className="mt-3 text-[10px] text-slate-400 leading-snug">
-                    ※最前面(Lyr0)がいっぱいになると、順次奥のレイヤーへ押し出されます。ピン留めされた魚は定員({LAYER_CONFIG.reduce((acc, c) => acc + c.maxCount, 0)}匹)から除外されます。
-                </div>
-            </div>
+            <LayerOccupancySection activeFish={activeFish} />
 
-            {/* --- 魚テーブル --- */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-h-[60vh] overflow-y-auto">
-                <Table>
-                    <TableHeader className="bg-slate-50">
-                        <TableRow>
-                            <TableHead className="w-16 text-center">画像</TableHead>
-                            <TableHead>情報</TableHead>
-                            <TableHead className="w-24 text-center">タイプ</TableHead>
-                            <TableHead className="w-24 text-center">Scale / Speed</TableHead>
-                            <TableHead className="w-24 text-center">ステータス</TableHead>
-                            <TableHead className="text-right w-16">操作</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {activeFish.map(f => (
-                            <FishRow
-                                key={f.id}
-                                fish={f}
-                                onEdit={() => setSelectedFish(f)}
-                                onDuplicate={duplicateFish}
-                                onDelete={deleteFish}
-                                confirmMode={confirmMode}
-                            />
-                        ))}
-                    </TableBody>
-                </Table>
-            </div>
+            <FishTable
+                activeFish={activeFish}
+                confirmMode={confirmMode}
+                onEdit={setSelectedFish}
+                onDuplicate={duplicateFish}
+                onDelete={deleteFish}
+            />
             {activeFish.length === 0 && (
                 <div className="text-slate-400 text-center py-12">現在水槽に魚はいません</div>
             )}
@@ -642,137 +493,5 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                 />
             )}
         </div>
-    );
-}
-
-function FishRow({
-    fish,
-    onEdit,
-    onDuplicate,
-    onDelete,
-    confirmMode,
-}: {
-    fish: ActiveFish;
-    onEdit: () => void;
-    onDuplicate: (id: string) => void;
-    onDelete: (id: string) => void;
-    confirmMode: boolean;
-}) {
-    // 確認モード時のインライン確認状態
-    const [pendingDelete, setPendingDelete] = useState(false);
-    const typeLabel: Record<string, string> = {
-        tuna: "🐟 マグロ", school: "🐠 イワシ", squid: "🦑 イカ",
-        jellyfish: "🪼 クラゲ", shark: "🦈 サメ", anchor: "🌿 固定",
-        swimmer: "swimmer", looper: "looper",
-    };
-
-    return (
-        <TableRow
-            className={`cursor-pointer hover:bg-sky-50/50 transition-colors ${fish.isArchived ? "opacity-50" : ""}`}
-            onClick={onEdit}
-        >
-            {/* 画像 */}
-            <TableCell className="p-2 align-middle border-r border-slate-100 relative">
-                <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200 mx-auto">
-                    <img src={fish.textureUrl} alt="fish" className="max-w-full max-h-full object-contain" />
-                </div>
-                {fish.isArchived && (
-                    <div className="absolute top-1 right-1 bg-slate-700 text-white text-[9px] px-1 rounded">Arcv</div>
-                )}
-                {fish.isPinned && (
-                    <div className="absolute top-1 left-1 text-sky-500 text-[10px]">📌</div>
-                )}
-            </TableCell>
-
-            {/* 情報 */}
-            <TableCell className="align-middle border-r border-slate-100">
-                <div className="flex flex-col gap-0.5">
-                    <span className="text-xs font-bold text-slate-700 truncate max-w-[160px]">{fish.author ?? "anonymous"}</span>
-                    <span className="text-[10px] font-mono text-slate-400">{fish.id.slice(0, 12)}…</span>
-                    <span className="text-[10px] text-slate-400">Lyr {fish.layerIndex}</span>
-                </div>
-            </TableCell>
-
-            {/* タイプ */}
-            <TableCell className="align-middle border-r border-slate-100 text-center">
-                <span className="text-[11px] font-bold bg-sky-50 text-sky-700 px-2 py-0.5 rounded-full border border-sky-100">
-                    {typeLabel[fish.type] ?? fish.type}
-                </span>
-            </TableCell>
-
-            {/* パラメータ */}
-            <TableCell className="align-middle border-r border-slate-100 text-center">
-                <div className="flex flex-col text-[11px] font-mono gap-0.5">
-                    <span className="text-slate-600">×<span className="text-sky-600 font-bold">{fish.userParams.scale.toFixed(2)}</span></span>
-                    <span className="text-slate-600">⚡<span className="text-emerald-600 font-bold">{fish.userParams.speed.toFixed(2)}</span></span>
-                </div>
-            </TableCell>
-
-            {/* ステータス */}
-            <TableCell className="align-middle border-r border-slate-100 text-center">
-                <div className="flex flex-col gap-0.5 items-center">
-                    {fish.isPinned && <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">📌 固定</span>}
-                    {fish.isArchived && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">🗃️ Arcv</span>}
-                    {!fish.isPinned && !fish.isArchived && <span className="text-[10px] text-slate-300">—</span>}
-                </div>
-            </TableCell>
-
-            {/* 操作 */}
-            <TableCell className="text-right align-middle" onClick={e => e.stopPropagation()}>
-                {pendingDelete ? (
-                    /* 確認 UI （設定アイコン隔に表示） */
-                    <div className="flex justify-end items-center gap-1">
-                        <span className="text-[10px] text-red-600 font-bold">?</span>
-                        <Button
-                            variant="ghost" size="sm"
-                            className="h-7 px-1.5 text-[10px] text-slate-500 hover:bg-slate-100"
-                            onClick={() => setPendingDelete(false)}
-                        >
-                            No
-                        </Button>
-                        <Button
-                            size="sm"
-                            className="h-7 px-1.5 text-[10px] bg-red-500 hover:bg-red-600 text-white"
-                            onClick={() => { onDelete(fish.id); setPendingDelete(false); }}
-                        >
-                            Yes
-                        </Button>
-                    </div>
-                ) : (
-                    <div className="flex justify-end gap-1">
-                        <Button
-                            variant="ghost" size="sm"
-                            className="text-sky-500 hover:text-sky-700 hover:bg-sky-50 h-8 w-8 p-0"
-                            onClick={() => onEdit()}
-                            title="設定"
-                        >
-                            <Settings2 className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="ghost" size="sm"
-                            className="text-stone-500 hover:text-stone-700 hover:bg-stone-100 h-8 w-8 p-0"
-                            onClick={() => onDuplicate(fish.id)}
-                            title="複製"
-                        >
-                            <CopyPlus className="w-4 h-4" />
-                        </Button>
-                        <Button
-                            variant="ghost" size="sm"
-                            className="text-red-500 hover:text-red-600 hover:bg-red-50 h-8 w-8 p-0"
-                            onClick={() => {
-                                if (confirmMode) {
-                                    setPendingDelete(true);
-                                } else {
-                                    onDelete(fish.id);
-                                }
-                            }}
-                            title="削除"
-                        >
-                            <Trash2 className="w-4 h-4" />
-                        </Button>
-                    </div>
-                )}
-            </TableCell>
-        </TableRow>
     );
 }

@@ -13,6 +13,13 @@
       "width": 1330.2821270310192,
       "height": 949,
       "scale": 1
+    },
+    "display:main": {
+      "x": 0,
+      "y": 0,
+      "width": 1385.3626168224298,
+      "height": 949,
+      "scale": 1
     }
   },
   "bgUrl": "/images/scene/aquarium-default.png",

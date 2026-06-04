@@ -1,6 +1,7 @@
 import React from "react";
 import type { PendingFish } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
+import { api } from "@/shared/api";
 import { Check, Trash2 } from "lucide-react";
 
 import {
@@ -23,12 +24,12 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
             if (file.type !== "image/png") continue;
             const form = new FormData();
             form.append("image", file);
-            await fetch("/api/scan", { method: "POST", body: form });
+            await api.request("/api/scan", { method: "POST", body: form });
         }
         onRefresh();
     };
     const releaseFish = async (fish: PendingFish) => {
-        await fetch("/api/release", {
+        await api.request("/api/release", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -43,7 +44,7 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
 
     const deletePending = async (id: string) => {
         if (!confirm("この待機中の魚を削除（拒否）しますか？")) return;
-        await fetch(`/api/pending/${encodeURIComponent(id)}`, { method: "DELETE" });
+        await api.request(`/api/pending/${encodeURIComponent(id)}`, { method: "DELETE" });
         onRefresh();
     };
 

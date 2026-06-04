@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
 import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
+import { api } from "../shared/api";
 import "../styles/global.css";
 
 // コンポーネント群をimport
@@ -99,7 +100,7 @@ function ManageApp(): React.ReactElement {
     // 定期ポーリング（バックアップ）
     const poll = useCallback(async () => {
         try {
-            const res = await fetch("/api/state");
+            const res = await api.request("/api/state");
             const data = await res.json() as {
                 clients: DisplayClientInfo[];
                 activeFish: ActiveFish[];
@@ -138,7 +139,7 @@ function ManageApp(): React.ReactElement {
     }, [poll]);
 
     const sendTestPattern = async (pattern: TestPattern, targetUuid?: string): Promise<void> => {
-        await fetch("/api/clients/test-pattern", {
+        await api.request("/api/clients/test-pattern", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ pattern, targetUuid }),
@@ -148,7 +149,7 @@ function ManageApp(): React.ReactElement {
 
     const saveViewport = async (uuid: string, vp: DisplayClientInfo["viewport"]): Promise<void> => {
         if (!vp) return;
-        const res = await fetch(`/api/clients/${encodeURIComponent(uuid)}/viewport`, {
+        const res = await api.request(`/api/clients/${encodeURIComponent(uuid)}/viewport`, {
             method: "PUT",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(vp),
@@ -158,7 +159,7 @@ function ManageApp(): React.ReactElement {
 
     const removeAllFish = async (): Promise<void> => {
         setConfirmAllFishDelete(false);
-        await fetch("/api/fish/all", { method: "DELETE" });
+        await api.request("/api/fish/all", { method: "DELETE" });
         void poll();
         showAlert("全ての魚を削除しました");
     };
@@ -183,14 +184,14 @@ function ManageApp(): React.ReactElement {
         }
         const dataUrl = canvas.toDataURL("image/png");
         try {
-            const res = await fetch("/api/scan", {
+            const res = await api.request("/api/scan", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ image: dataUrl })
             });
             const data = await res.json() as { fish: { id: string; imageUrl: string } };
             // 放流APIを叩く (FishConfig 形式)
-            await fetch("/api/release", {
+            await api.request("/api/release", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
@@ -263,7 +264,6 @@ function ManageApp(): React.ReactElement {
                         onTestPattern={sendTestPattern}
                         onUpdateWorldSize={(w, h) => {
                             if (connected) {
-                                // @ts-ignore
                                 ws.send({ event: "update_world_size", width: w, height: h });
                             }
                         }}
@@ -446,7 +446,7 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     activeLayerId={activeLayerId}
                     activeFish={state.activeFish}
                     onMoveFish={async (fishId, x, y) => {
-                        await fetch(`/api/fish/${encodeURIComponent(fishId)}/position`, {
+                        await api.request(`/api/fish/${encodeURIComponent(fishId)}/position`, {
                             method: "PUT",
                             headers: { "Content-Type": "application/json" },
                             body: JSON.stringify({ x, y }),

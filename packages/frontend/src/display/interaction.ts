@@ -1,6 +1,7 @@
 import { Application } from "pixi.js";
 import { STATE, updateStateVP, DISPLAY_ID } from "./state";
 import { ws } from "./network";
+import { api } from "../shared/api";
 
 // ============================================================
 // display/interaction.ts
@@ -74,7 +75,7 @@ export function setupInteractions(app: Application) {
     if (dragDistance < 10) {
       const { x: wx, y: wy } = getHoverWorldPos(e.clientX, e.clientY);
       // /api/release へ ダミーの餌(エサ画像) を追加送信
-      void fetch("/api/release", {
+      void api.request("/api/release", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

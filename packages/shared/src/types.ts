@@ -224,6 +224,8 @@ export type WsClientMessage =
   | { event: "update_viewport"; clientInfo: ClientConfig }
   /** 管理画面でマウスホバー中の座標（ワールド座標）を送信する */
   | { event: "pointer_move"; x: number; y: number }
+  /** 管理画面から全クライアントのWorldサイズを更新する */
+  | { event: "update_world_size"; width: number; height: number }
   // -------------------------
   // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
   | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number };

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import type { PendingFish } from "@aquarium/shared";
 import "./Gallery.css";
+import { api } from "../shared/api";
 
 interface GalleryProps {
     onSelect: (fish: PendingFish) => void;
@@ -14,7 +15,7 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
 
     const fetchPending = useCallback(async (): Promise<void> => {
         try {
-            const res = await fetch("/api/pending");
+            const res = await api.request("/api/pending");
             setFishList(await res.json() as PendingFish[]);
         } catch (e) {
             console.error(e);
@@ -31,7 +32,7 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
 
     const handleSelect = async (fish: PendingFish): Promise<void> => {
         if (fish.lockedBy) { alert("この魚は現在編集中です"); return; }
-        const res = await fetch("/api/pending/lock", {
+        const res = await api.request("/api/pending/lock", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ fishId: fish.id, editorUuid: EDITOR_ID }),
@@ -47,7 +48,7 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
             const form = new FormData();
             form.append("image", file);
             form.append("autoProcess", "true");
-            await fetch("/api/scan", { method: "POST", body: form });
+            await api.request("/api/scan", { method: "POST", body: form });
         }
         await fetchPending();
     };
