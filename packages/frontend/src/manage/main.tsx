@@ -419,6 +419,7 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                 {/* ---------- Left: Viewport Canvas ---------- */}
                 <ViewportCanvas
                     worldW={worldW} worldH={worldH}
+                    bgUrl={bgUrl}
                     setWorldSize={(w, h) => {
                         setWorldW(w); setWorldH(h);
                         onUpdateWorldSize(w, h);

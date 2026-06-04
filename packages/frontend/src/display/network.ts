@@ -9,6 +9,8 @@ import {
   destroyFish, 
   updateFishTexture,
   updateFishTargets,
+  updateBackground,
+  setDisplayNumber,
   type FishEntry
 } from "./renderer";
 import type { WsServerMessage, UdpPacket } from "@aquarium/shared";
@@ -28,6 +30,7 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
       updateStateVP(msg.viewport);
       updateWorldSize(msg.worldW, msg.worldH);
       if (msg.layers) updateLayers(msg.layers);
+      updateBackground(app, msg.bgUrl);
       applyViewport(app);
       if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
       return;
@@ -36,6 +39,7 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
     // 背景・レイヤー・ワールド設定更新
     if (msg.event === "update_world_config") {
       if (msg.layers) updateLayers(msg.layers);
+      updateBackground(app, msg.bgUrl);
       applyViewport(app);
       if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
       return;
@@ -137,6 +141,7 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
     }
 
     if (msg.event === "test_pattern") {
+      setDisplayNumber(msg.displayNumber);
       drawTestPattern(app, msg.pattern);
       return;
     }

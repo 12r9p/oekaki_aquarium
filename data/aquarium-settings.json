@@ -1,0 +1,69 @@
+{
+  "viewports": {
+    "display:disp-6u3oud": {
+      "x": 18.22151431595364,
+      "y": 0,
+      "width": 1080,
+      "height": 1126.0770031217482,
+      "scale": 1
+    }
+  },
+  "bgUrl": "/images/scene/aquarium-default.png",
+  "sceneObjects": [],
+  "world": {
+    "width": 1321,
+    "height": 702,
+    "forbiddenZones": [],
+    "spawnPoints": [],
+    "layers": [
+      {
+        "id": "L_1780554026185",
+        "name": "8k Wallpaper Geometry.jpg",
+        "type": "image",
+        "zIndex": 101,
+        "visible": true,
+        "opacity": 1,
+        "url": "/images/scene/8e5af158-ab9b-47f7-8b0f-108380bd075d.jpg",
+        "x": 866,
+        "y": 511,
+        "width": 269,
+        "height": 151,
+        "aspectRatioLocked": true
+      },
+      {
+        "id": "layer_system",
+        "name": "System (モニター・壁)",
+        "type": "foreground",
+        "zIndex": -100,
+        "visible": true,
+        "opacity": 1
+      },
+      {
+        "id": "layer_fish_0",
+        "name": "Lyr 0 (魚レイヤー)",
+        "type": "fish",
+        "zIndex": 100,
+        "visible": true,
+        "opacity": 1
+      },
+      {
+        "id": "layer_fish_1",
+        "name": "Lyr 1 (魚レイヤー)",
+        "type": "fish",
+        "zIndex": 50,
+        "visible": true,
+        "opacity": 1
+      },
+      {
+        "id": "layer_fish_2",
+        "name": "Lyr 2 (魚レイヤー)",
+        "type": "fish",
+        "zIndex": 10,
+        "visible": true,
+        "opacity": 1
+      }
+    ],
+    "horizontalBoundaryMode": "wrap",
+    "fishSpeedMultiplier": 1
+  }
+}

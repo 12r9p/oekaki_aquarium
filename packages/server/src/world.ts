@@ -105,6 +105,14 @@ export function updateWorldMotionSettings(
   }
 }
 
+export function restoreWorldSettings(settings: Partial<Omit<WorldConfig, "validZones">>): void {
+  if (settings.width !== undefined && settings.height !== undefined) setWorldSize(settings.width, settings.height);
+  if (settings.forbiddenZones) updateForbiddenZones(settings.forbiddenZones);
+  if (settings.spawnPoints) updateSpawnPoints(settings.spawnPoints);
+  if (settings.layers) updateLayers(settings.layers);
+  updateWorldMotionSettings(settings.horizontalBoundaryMode, settings.fishSpeedMultiplier);
+}
+
 /** クライアントが切断したときに ValidZone を削除する */
 export function unregisterClient(uuid: string): void {
   const idx = world.validZones.findIndex((z) => z.clientUuid === uuid);

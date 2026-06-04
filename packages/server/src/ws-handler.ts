@@ -7,16 +7,20 @@ import { registerClientViewport, unregisterClient, setWorldSize, getWorld,
   updateSpawnPoints,
   updateLayers,
   updateWorldMotionSettings,
+  restoreWorldSettings,
 } from "./world";
 import { getAllActiveFish, getPendingQueue } from "./fish-manager";
 import { v4 as uuidv4 } from "uuid";
+import { DEFAULT_BACKGROUND_URL, getPersistedSettings, persistViewport, updatePersistedSettings } from "./settings-store";
 
 // ============================================================
 // ws-handler.ts（Bun ネイティブ WebSocket 版）
 // ============================================================
 // グローバルな水槽背景状態（再起動でリセット）
 // ============================================================
-let currentBgUrl = "";
+const restoredSettings = getPersistedSettings();
+restoreWorldSettings(restoredSettings.world ?? {});
+let currentBgUrl = restoredSettings.bgUrl ?? DEFAULT_BACKGROUND_URL;
 
 /** 現在の背景画像URLを取得する */
 export function getCurrentBgUrl(): string { return currentBgUrl; }
@@ -36,13 +40,16 @@ export interface ClientData {
 }
 
 const sockets = new Set<ServerWebSocket<ClientData>>();
+let identifyRestoreTimer: ReturnType<typeof setTimeout> | null = null;
 
 /**
  * displayIDごとにViewportを永続保存するMap。
  * これにより、displayが再接続しても管理画面で設定したViewportが維持される。
  * サーバー再起動でリセットされる（永続化が必要な場合はファイルに書き出す）。
  */
-const viewportStore = new Map<string, NonNullable<ClientConfig["viewport"]>>();
+const viewportStore = new Map<string, NonNullable<ClientConfig["viewport"]>>(
+  Object.entries(restoredSettings.viewports ?? {}),
+);
 
 /** 切断されたディスプレイの履歴を一定期間（猶予期間）保持するためのリスト */
 let disconnectedDisplays: DisplayClientInfo[] = [];
@@ -52,12 +59,30 @@ let disconnectedDisplays: DisplayClientInfo[] = [];
  * WorldObject[] をサーバーIn-memoryで管理。
  * ブロードキャスト時は全displayとmanageに送信。
  */
-let sceneObjects: WorldObject[] = [];
+let sceneObjects: WorldObject[] = [...(restoredSettings.sceneObjects ?? [])];
+
+function persistServerSettings(): void {
+  const w = getWorld();
+  updatePersistedSettings({
+    bgUrl: currentBgUrl,
+    sceneObjects,
+    world: {
+      width: w.width,
+      height: w.height,
+      forbiddenZones: w.forbiddenZones,
+      spawnPoints: w.spawnPoints,
+      layers: w.layers,
+      horizontalBoundaryMode: w.horizontalBoundaryMode,
+      fishSpeedMultiplier: w.fishSpeedMultiplier,
+    },
+  });
+}
 
 export function getScene(): WorldObject[] { return sceneObjects; }
 
 export function addSceneObject(obj: WorldObject): void {
   sceneObjects.push(obj);
+  persistServerSettings();
   broadcastSceneUpdate();
 }
 
@@ -65,6 +90,7 @@ export function updateSceneObject(id: string, patch: Partial<WorldObject>): bool
   const idx = sceneObjects.findIndex(o => o.id === id);
   if (idx === -1) return false;
   sceneObjects[idx] = { ...sceneObjects[idx]!, ...patch, id };
+  persistServerSettings();
   broadcastSceneUpdate();
   return true;
 }
@@ -72,12 +98,13 @@ export function updateSceneObject(id: string, patch: Partial<WorldObject>): bool
 export function deleteSceneObject(id: string): boolean {
   const before = sceneObjects.length;
   sceneObjects = sceneObjects.filter(o => o.id !== id);
-  if (sceneObjects.length !== before) { broadcastSceneUpdate(); return true; }
+  if (sceneObjects.length !== before) { persistServerSettings(); broadcastSceneUpdate(); return true; }
   return false;
 }
 
 export function replaceScene(objects: WorldObject[]): void {
   sceneObjects = objects;
+  persistServerSettings();
   broadcastSceneUpdate();
 }
 
@@ -167,10 +194,14 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
 
       if (ws.data.clientType === "display") {
         // 保存済みViewportがあれば復元。初回は水槽内に収まる表示範囲を割り当てる。
-        const savedVp = viewportStore.get(msg.uuid);
+        const savedVp = viewportStore.get(msg.uuid)
+          ?? [...viewportStore.entries()].find(([uuid]) => uuid.startsWith(`${msg.uuid}-`))?.[1];
         const vp: ClientConfig["viewport"] = savedVp ?? defaultViewport(msg.hardware.w, msg.hardware.h);
         ws.data.viewport = vp;
-        if (!savedVp) viewportStore.set(msg.uuid, vp); // 初回接続は保存
+        if (!viewportStore.has(msg.uuid)) {
+          viewportStore.set(msg.uuid, vp);
+          persistViewport(msg.uuid, vp);
+        }
         registerClientViewport({ uuid: msg.uuid, name: msg.uuid, viewport: vp, debug: { showGrid: false, showId: false } });
         const w = getWorld();
         sendTo(ws, {
@@ -218,6 +249,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       // 管理画面からのドラッグ中リアルタイムプレビュー: 対象displayのみに転送
       const target = [...sockets].find(s => s.data.uuid === msg.displayUuid);
       if (target) sendTo(target, { event: "viewport_preview", viewport: msg.viewport });
+      flashDisplayNumbers();
       break;
     }
 
@@ -229,6 +261,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
     // @ts-ignore
     case "update_world_size": {
       setWorldSize((msg as any).width, (msg as any).height);
+      persistServerSettings();
       broadcastToAll({ event: "update_world_size", width: (msg as any).width, height: (msg as any).height });
       pushStateToManagers();
       break;
@@ -241,6 +274,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       updateSpawnPoints(msg.spawnPoints);
       if (msg.layers) updateLayers(msg.layers);
       updateWorldMotionSettings(msg.horizontalBoundaryMode, msg.fishSpeedMultiplier);
+      persistServerSettings();
       const w = getWorld();
 
       broadcastToAll({
@@ -257,6 +291,21 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       break;
     }
   }
+}
+
+function flashDisplayNumbers(): void {
+  const displays = [...sockets]
+    .filter(ws => ws.data.clientType === "display")
+    .sort((a, b) => a.data.uuid.localeCompare(b.data.uuid));
+  displays.forEach((ws, index) => sendTo(ws, { event: "test_pattern", pattern: "identify", displayNumber: index + 1 }));
+  if (identifyRestoreTimer) clearTimeout(identifyRestoreTimer);
+  identifyRestoreTimer = setTimeout(() => {
+    displays.forEach((ws, index) => sendTo(ws, {
+      event: "test_pattern",
+      pattern: ws.data.testPattern,
+      displayNumber: index + 1,
+    }));
+  }, 1200);
 }
 
 // ---- ユーティリティ -------------------------------------------
@@ -305,7 +354,10 @@ export function sendToDisplay(targetUuid: string, msg: WsServerMessage): boolean
 /** Viewport をサーバー側にも保存してdisplayに送信 */
 export function updateDisplayViewport(targetUuid: string, viewport: ClientConfig["viewport"]): boolean {
   // ViewportをMapに永続保存（再接続後も維持される）
-  if (viewport) viewportStore.set(targetUuid, viewport);
+  if (viewport) {
+    viewportStore.set(targetUuid, viewport);
+    persistViewport(targetUuid, viewport);
+  }
   for (const ws of sockets) {
     if (ws.data.uuid === targetUuid) {
       ws.data.viewport = viewport;
@@ -340,20 +392,21 @@ function defaultViewport(screenW: number, screenH: number): ClientConfig["viewpo
 
 /** テストパターンを特定/全displayに送信 */
 export function sendTestPattern(pattern: TestPattern, targetUuid?: string): void {
+  const displays = [...sockets]
+    .filter(ws => ws.data.clientType === "display")
+    .sort((a, b) => a.data.uuid.localeCompare(b.data.uuid));
   if (targetUuid) {
-    for (const ws of sockets) {
+    for (const [index, ws] of displays.entries()) {
       if (ws.data.uuid === targetUuid) {
         ws.data.testPattern = pattern;
-        sendTo(ws, { event: "test_pattern", pattern, targetUuid });
+        sendTo(ws, { event: "test_pattern", pattern, targetUuid, displayNumber: index + 1 });
         return;
       }
     }
   } else {
-    for (const ws of sockets) {
-      if (ws.data.clientType === "display") {
-        ws.data.testPattern = pattern;
-        sendTo(ws, { event: "test_pattern", pattern });
-      }
+    for (const [index, ws] of displays.entries()) {
+      ws.data.testPattern = pattern;
+      sendTo(ws, { event: "test_pattern", pattern, displayNumber: index + 1 });
     }
   }
   pushClientListToManagers();

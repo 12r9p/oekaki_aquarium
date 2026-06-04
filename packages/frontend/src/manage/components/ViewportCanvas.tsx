@@ -5,6 +5,7 @@ import { ws } from "../main";
 interface ViewportCanvasProps {
     worldW: number;
     worldH: number;
+    bgUrl: string;
     displaysSt: DisplayClientInfo[];
     displaysRef: React.MutableRefObject<DisplayClientInfo[]>;
     pendingViewports: React.MutableRefObject<Map<string, NonNullable<DisplayClientInfo["viewport"]>>>;
@@ -79,7 +80,7 @@ function getHandles(vp: { x: number; y: number; width: number; height: number; }
 }
 
 export function ViewportCanvas({
-    worldW, worldH, displaysSt, displaysRef, pendingViewports,
+    worldW, worldH, bgUrl, displaysSt, displaysRef, pendingViewports,
     selected, setSelected, hoveredRef, setHoveredUI,
     undoStackRef, redoStackRef, snapshotViewports, onSaveViewport,
     arLocked, sendRateSetting, setWorldSize, forbiddenZones, onUpdateForbiddenZones,
@@ -161,6 +162,14 @@ export function ViewportCanvas({
         ctx.shadowBlur = 10;
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(tl.x, tl.y, ww, wh);
+        if (bgUrl) {
+            const background = loadFishImg(bgUrl);
+            if (background?.naturalWidth) {
+                ctx.globalAlpha = 0.72;
+                ctx.drawImage(background, tl.x, tl.y, ww, wh);
+                ctx.globalAlpha = 1;
+            }
+        }
         ctx.shadowBlur = 0;
         ctx.strokeStyle = "#000000"; // world境界を黒で明示
         ctx.lineWidth = 2;
@@ -477,7 +486,7 @@ export function ViewportCanvas({
             ctx.stroke();
             ctx.setLineDash([]);
         }
-    }, [selected, selectedLocalId, worldW, worldH, canvasSize, worldToCanvas, forbiddenZones, spawnPoints, pendingWorldSizeRef, layers, activeLayerId]);
+    }, [selected, selectedLocalId, worldW, worldH, bgUrl, canvasSize, worldToCanvas, forbiddenZones, spawnPoints, pendingWorldSizeRef, layers, activeLayerId]);
 
 
     drawRef.current = draw;

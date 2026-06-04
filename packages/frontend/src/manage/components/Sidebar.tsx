@@ -190,6 +190,8 @@ export function Sidebar({
                                             <div>
                                                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Test Pattern</div>
                                                 <div className="grid grid-cols-2 gap-2">
+                                                    <Button variant={d.testPattern === "identify" ? "default" : "outline"} size="sm" onClick={() => onTestPattern("identify", d.uuid)} className="h-8 text-xs font-semibold justify-start"><Monitor className="w-3.5 h-3.5 mr-2" /> Identify</Button>
+                                                    <Button variant={d.testPattern === "gradient" ? "default" : "outline"} size="sm" onClick={() => onTestPattern("gradient", d.uuid)} className="h-8 text-xs font-semibold justify-start"><Palette className="w-3.5 h-3.5 mr-2" /> Gradient</Button>
                                                     <Button variant={d.testPattern === "worldmap" ? "default" : "outline"} size="sm" onClick={() => onTestPattern("worldmap", d.uuid)} className="h-8 text-xs font-semibold justify-start"><MapIcon className="w-3.5 h-3.5 mr-2" /> WorldMap</Button>
                                                     <Button variant={d.testPattern === "calibration" ? "default" : "outline"} size="sm" onClick={() => onTestPattern("calibration", d.uuid)} className="h-8 text-xs font-semibold justify-start"><Target className="w-3.5 h-3.5 mr-2" /> Calibration</Button>
                                                     <Button variant={d.testPattern === "colorbars" ? "default" : "outline"} size="sm" onClick={() => onTestPattern("colorbars", d.uuid)} className="h-8 text-xs font-semibold justify-start"><Palette className="w-3.5 h-3.5 mr-2" /> Colorbars</Button>
@@ -443,6 +445,27 @@ export function Sidebar({
                                 step={0.05}
                             />
                         </div>
+                        <div className="flex flex-col gap-1.5">
+                            <Label htmlFor="background-url" className="text-xs text-slate-500">水槽背景画像</Label>
+                            <div className="flex gap-2">
+                                <Input
+                                    key={bgUrl}
+                                    id="background-url"
+                                    defaultValue={bgUrl}
+                                    onBlur={event => onUpdateBgUrl(event.target.value)}
+                                    placeholder="/images/scene/aquarium-default.png"
+                                    className="h-8 text-xs font-mono"
+                                />
+                                <Button
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => onUpdateBgUrl("/images/scene/aquarium-default.png")}
+                                    className="h-8 px-2 text-xs"
+                                >
+                                    Default
+                                </Button>
+                            </div>
+                        </div>
 
                     </div>
 
@@ -519,8 +542,12 @@ export function Sidebar({
                     <div className="flex flex-col gap-3 mt-auto pt-4 border-t border-slate-100">
                         <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">グローバル テストパターン表示</h3>
                         <div className="grid grid-cols-2 gap-2">
+                            <Button variant="outline" size="sm" onClick={() => onTestPattern("identify")} className="h-8 text-xs font-semibold justify-start"><Monitor className="w-3.5 h-3.5 mr-2" /> All Identify</Button>
+                            <Button variant="outline" size="sm" onClick={() => onTestPattern("gradient")} className="h-8 text-xs font-semibold justify-start"><Palette className="w-3.5 h-3.5 mr-2" /> All Gradient</Button>
                             <Button variant="outline" size="sm" onClick={() => onTestPattern("worldmap")} className="h-8 text-xs font-semibold justify-start"><MapIcon className="w-3.5 h-3.5 mr-2" /> All WorldMap</Button>
                             <Button variant="outline" size="sm" onClick={() => onTestPattern("calibration")} className="h-8 text-xs font-semibold justify-start"><Target className="w-3.5 h-3.5 mr-2" /> All Calibrate</Button>
+                            <Button variant="outline" size="sm" onClick={() => onTestPattern("grid")} className="h-8 text-xs font-semibold justify-start"><LayoutGrid className="w-3.5 h-3.5 mr-2" /> All Grid</Button>
+                            <Button variant="outline" size="sm" onClick={() => onTestPattern("colorbars")} className="h-8 text-xs font-semibold justify-start"><Palette className="w-3.5 h-3.5 mr-2" /> All Colorbars</Button>
                             <Button variant="secondary" size="sm" onClick={() => onTestPattern("off")} className="h-8 text-xs font-semibold justify-center col-span-2 text-slate-600"><MonitorOff className="w-3.5 h-3.5 mr-2" /> All Off</Button>
                         </div>
                     </div>

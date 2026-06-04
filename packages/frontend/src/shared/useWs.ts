@@ -11,7 +11,7 @@ import { v4 as uuidv4 } from "uuid";
 // - メッセージハンドラーの登録/解除
 // ============================================================
 
-/** このブラウザセッションの固有 ID（ページリロードで変わる） */
+/** このブラウザセッションの固有 ID。Display以外の一時クライアントに使う。 */
 export const SESSION_UUID = uuidv4();
 
 type MessageHandler = (msg: WsServerMessage) => void;
@@ -41,7 +41,8 @@ class WsClient {
       // サーバーに自分の種別を登録
       this.send({
         event: "register",
-        uuid: `${this.clientType}-${SESSION_UUID}`,
+        // DisplayはlocalStorage由来のIDをそのまま使い、再起動後もViewportを復元できるようにする。
+        uuid: this.clientType.startsWith("display:") ? this.clientType : `${this.clientType}-${SESSION_UUID}`,
         // screen.width/height は物理解像度（HiDPIで実際と異なる場合がある）。
         // ブラウザの表示領域(innerWidth/Height)をAR算出に使いたいためこちらを送る。
         hardware: { w: window.innerWidth, h: window.innerHeight },

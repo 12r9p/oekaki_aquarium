@@ -258,7 +258,7 @@ export type WsServerMessage =
   /** WebSocketによる背景 / 禁止エリア のブロードキャスト更新通知 */
   | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number }
   /** display クライアントへテストパターン表示指示 */
-  | { event: "test_pattern"; pattern: TestPattern; targetUuid?: string }
+  | { event: "test_pattern"; pattern: TestPattern; targetUuid?: string; displayNumber?: number }
   /** display クライアントの Viewport を更新する */
   | { event: "update_viewport"; targetUuid: string; viewport: ClientConfig["viewport"] }
   /** 接続クライアント一覧を管理画面に push する */
@@ -275,7 +275,7 @@ export type WsServerMessage =
   | { event: "update_world_size"; width: number; height: number };
 
 /** テストパターンの種類 */
-export type TestPattern = "off" | "grid" | "colorbars" | "white" | "black" | "crosshair" | "worldmap" | "calibration";
+export type TestPattern = "off" | "identify" | "gradient" | "grid" | "colorbars" | "white" | "black" | "crosshair" | "worldmap" | "calibration";
 
 /** 管理画面に公開するディスプレイクライアント情報 */
 export interface DisplayClientInfo {

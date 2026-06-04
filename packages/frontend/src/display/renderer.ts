@@ -25,6 +25,9 @@ export let currentPattern: TestPattern = "off";
 let testGraphics: Graphics | null = null;
 let sceneContainer: Container | null = null;
 let currentScene: WorldObject[] = [];
+let backgroundSprite: Sprite | null = null;
+let backgroundUrl = "";
+let displayNumber: number | undefined;
 
 // レイヤー管理用
 const fishLayerContainers = new Map<number, Container>();
@@ -78,6 +81,38 @@ export function initRenderer(app: Application) {
     fishLayerContainers.set(layerIndex, container);
     app.stage.addChild(container);
   }
+}
+
+export function setDisplayNumber(value?: number): void {
+  displayNumber = value;
+}
+
+export function updateBackground(app: Application, url: string): void {
+  backgroundUrl = url;
+  if (!url) {
+    backgroundSprite?.destroy();
+    backgroundSprite = null;
+    return;
+  }
+  void Assets.load<Texture>(url).then(texture => {
+    if (backgroundUrl !== url) return;
+    if (!backgroundSprite) {
+      backgroundSprite = new Sprite(texture);
+      backgroundSprite.zIndex = -1000;
+      app.stage.addChild(backgroundSprite);
+    } else {
+      backgroundSprite.texture = texture;
+    }
+    layoutBackground();
+  });
+}
+
+function layoutBackground(): void {
+  if (!backgroundSprite) return;
+  backgroundSprite.x = -STATE.VP.x * STATE.scaleX;
+  backgroundSprite.y = -STATE.VP.y * STATE.scaleY;
+  backgroundSprite.width = STATE.WORLD_W * STATE.scaleX;
+  backgroundSprite.height = STATE.WORLD_H * STATE.scaleY;
 }
 
 export function buildPlaceholder(app: Application): Texture {
@@ -198,6 +233,7 @@ export function drawTestPattern(app: Application, pattern: TestPattern): void {
   testGraphics = null;
   document.getElementById("worldmap-overlay")?.remove();
   document.getElementById("calibration-overlay")?.remove();
+  document.getElementById("gradient-overlay")?.remove();
   if (pattern === "off") {
     document.getElementById("vp-overlay")?.remove();
     return;
@@ -214,12 +250,11 @@ export function drawTestPattern(app: Application, pattern: TestPattern): void {
     case "black": g.rect(0, 0, ww, wh).fill({ color: 0x000000 }); break;
 
     case "colorbars": {
-      const bars = [0xc0c0c0, 0xc0c000, 0x00c0c0, 0x00c000, 0xc000c0, 0xc00000, 0x0000c0];
+      const bars = [0xffffff, 0xffff00, 0x00ffff, 0x00ff00, 0xff00ff, 0xff0000, 0x0000ff, 0x000000];
       const barW = ww / bars.length;
-      bars.forEach((color, i) => g.rect(i * barW, 0, barW, wh * 0.75).fill({ color }));
-      const bottom = [0x0000c0, 0x131313, 0xc000c0, 0x131313, 0x0d0d0d, 0x131313, 0xc0c0c0];
-      bottom.forEach((color, i) => g.rect(i * barW, wh * 0.75, barW, wh * 0.25).fill({ color }));
-      g.rect(ww * 0.3, wh * 0.75, ww * 0.4, wh * 0.25).fill({ color: 0xffffff });
+      bars.forEach((color, i) => g.rect(i * barW, 0, barW + 1, wh * 0.72).fill({ color }));
+      const gray = [0xffffff, 0xd9d9d9, 0xb6b6b6, 0x929292, 0x6d6d6d, 0x494949, 0x242424, 0x000000];
+      gray.forEach((color, i) => g.rect(i * barW, wh * 0.72, barW + 1, wh * 0.28).fill({ color }));
       break;
     }
 
@@ -263,6 +298,31 @@ export function drawTestPattern(app: Application, pattern: TestPattern): void {
       break;
     }
 
+    case "gradient": {
+      const canvas = document.createElement("canvas");
+      canvas.id = "gradient-overlay";
+      canvas.width = ww;
+      canvas.height = wh;
+      Object.assign(canvas.style, { position: "fixed", inset: "0", width: "100%", height: "100%", zIndex: "10001", pointerEvents: "none" });
+      const ctx = canvas.getContext("2d")!;
+      const horizontal = ctx.createLinearGradient(0, 0, ww, 0);
+      horizontal.addColorStop(0, "#000000");
+      horizontal.addColorStop(0.25, "#ff0000");
+      horizontal.addColorStop(0.5, "#00ff00");
+      horizontal.addColorStop(0.75, "#0000ff");
+      horizontal.addColorStop(1, "#ffffff");
+      ctx.fillStyle = horizontal;
+      ctx.fillRect(0, 0, ww, wh * 0.65);
+      const vertical = ctx.createLinearGradient(0, wh * 0.65, 0, wh);
+      vertical.addColorStop(0, "#ffffff");
+      vertical.addColorStop(1, "#000000");
+      ctx.fillStyle = vertical;
+      ctx.fillRect(0, wh * 0.65, ww, wh * 0.35);
+      document.body.appendChild(canvas);
+      break;
+    }
+
+    case "identify":
     // calibration — ディスプレイIDと座標情報を大きく表示して物理位置を特定する
     case "calibration": {
       g.rect(0, 0, ww, wh).fill({ color: 0x0a0820 });
@@ -287,7 +347,8 @@ export function drawTestPattern(app: Application, pattern: TestPattern): void {
         document.body.appendChild(calDiv);
       }
       calDiv.innerHTML = `
-        <div style="font-family:monospace;color:#00aaff;font-size:9vw;font-weight:bold;text-shadow:0 0 20px #00aaff">${DISPLAY_ID}</div>
+        <div style="font-family:monospace;color:#ffffff;font-size:32vw;line-height:0.85;font-weight:900;text-shadow:0 0 40px #00aaff">${displayNumber ?? "?"}</div>
+        <div style="font-family:monospace;color:#00aaff;font-size:4vw;font-weight:bold;margin-top:0.3em">${DISPLAY_ID}</div>
         <div style="font-family:monospace;color:#ffffff;font-size:3vw;margin-top:1em;opacity:0.7">
           ${STATE.VP.width}&times;${STATE.VP.height} &nbsp;|&nbsp; scale: ${STATE.VP.scale} &nbsp;|&nbsp; pos: (${STATE.VP.x}, ${STATE.VP.y})
         </div>
@@ -378,7 +439,8 @@ function drawWorldmapOverlay(): void {
   const WORLD_H = STATE.WORLD_H;
   const MINI_W_CSS = 200;
   const MINI_H_CSS = Math.round(MINI_W_CSS * WORLD_H / WORLD_W);
-  const pR = window.devicePixelRatio || 1; 
+  // Canvasの内部サイズをCSSピクセルに合わせているため、ここではDPRを重ねない。
+  const pR = 1;
   const MINI_W = MINI_W_CSS * pR;
   const MINI_H = MINI_H_CSS * pR;
   const MARGIN  = 16 * pR;
@@ -452,6 +514,7 @@ export function applyViewport(app: Application, silent = false): void {
   }
   
   if (currentScene.length > 0) renderSceneObjects(app, currentScene);
+  layoutBackground();
   updateLayersView(app);
 }
 
