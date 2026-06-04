@@ -17,7 +17,7 @@ import { updateFishLayers } from "./layer-manager";
 /** /data/fish/ ディレクトリ（プロジェクトルート基準） */
 export const DATA_FISH_DIR = join(import.meta.dir, "..", "..", "..", "data", "fish");
 /** public/images ディレクトリ */
-export const PUBLIC_IMAGES_DIR = join(import.meta.dir, "..", "public", "images");
+export const PUBLIC_IMAGES_DIR = join(import.meta.dir, "public", "images");
 
 /** URLからローカルパスを解決する */
 function getLocalPathFromUrl(url: string): string | null {

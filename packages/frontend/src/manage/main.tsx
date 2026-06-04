@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from "react";
 import { createRoot } from "react-dom/client";
-import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
+import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode, LayerConfig } from "@aquarium/shared";
+import { LAYER_CONFIG } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
 import { api } from "../shared/api";
 import "../styles/global.css";
@@ -12,7 +13,6 @@ import { Toolbar, type ManagePage } from "./components/Toolbar";
 import { FishTab } from "./components/FishTab";
 import { PendingTab } from "./components/PendingTab";
 import { DashboardPage } from "./components/DashboardPage";
-import { ClientsPage } from "./components/ClientsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { PageHeader } from "./components/PageHeader";
 // ============================================================
@@ -33,6 +33,7 @@ function ManageApp(): React.ReactElement {
     const [forbiddenZones, setForbiddenZones] = useState<{ id: string; x: number; y: number; width: number; height: number }[]>([]);
     const [spawnPoints, setSpawnPoints] = useState<{ id: string; x: number; y: number }[]>([]);
     const [layers, setLayers] = useState<AppLayerConfig[]>([]);
+    const [fishLayers, setFishLayers] = useState<LayerConfig[]>(LAYER_CONFIG);
     const [horizontalBoundaryMode, setHorizontalBoundaryMode] = useState<HorizontalBoundaryMode>("wrap");
     const [fishSpeedMultiplier, setFishSpeedMultiplier] = useState(1);
     const [connected, setConnected] = useState(false);
@@ -74,6 +75,7 @@ function ManageApp(): React.ReactElement {
                 if (msg.forbiddenZones !== undefined) setForbiddenZones(msg.forbiddenZones);
                 if (msg.spawnPoints !== undefined) setSpawnPoints(msg.spawnPoints);
                 if (msg.layers !== undefined) setLayers(msg.layers);
+                if (msg.fishLayers !== undefined) setFishLayers(msg.fishLayers);
                 if (msg.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(msg.horizontalBoundaryMode);
                 if (msg.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(msg.fishSpeedMultiplier);
             } else if (msg.event === "update_world_config") {
@@ -114,6 +116,7 @@ function ManageApp(): React.ReactElement {
                 layers?: AppLayerConfig[];
                 horizontalBoundaryMode?: HorizontalBoundaryMode;
                 fishSpeedMultiplier?: number;
+                fishLayers?: LayerConfig[];
             };
             setDisplays(data.clients.filter((c) => c.clientType === "display"));
             setActiveFish(data.activeFish);
@@ -124,6 +127,7 @@ function ManageApp(): React.ReactElement {
             if (data.forbiddenZones !== undefined) setForbiddenZones(data.forbiddenZones);
             if (data.spawnPoints !== undefined) setSpawnPoints(data.spawnPoints);
             if (data.layers !== undefined) setLayers(data.layers);
+            if (data.fishLayers !== undefined) setFishLayers(data.fishLayers);
             if (data.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(data.horizontalBoundaryMode);
             if (data.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(data.fishSpeedMultiplier);
         } catch (err) {
@@ -214,7 +218,7 @@ function ManageApp(): React.ReactElement {
 
     // LayoutTab の状態管理
     const [selectedDisplay, setSelectedDisplay] = useState<string | null>(null);
-    const [activeLayerId, setActiveLayerId] = useState<string | undefined>(undefined);
+    const [activeLayerId, setActiveLayerId] = useState<string | undefined>("layer_system");
     const [arLocked, setArLocked] = useState(true);
     const displaysRef = useRef<DisplayClientInfo[]>([]);
     const pendingViewports = useRef<Map<string, NonNullable<DisplayClientInfo["viewport"]>>>(new Map());
@@ -265,6 +269,7 @@ function ManageApp(): React.ReactElement {
                         worldH={worldH}
                         bgUrl={bgUrl}
                         sendRateSetting={sendRateSetting}
+                        fishLayers={fishLayers}
                         onNavigate={setTab}
                     />
                 )}
@@ -282,13 +287,10 @@ function ManageApp(): React.ReactElement {
                     />
                 )}
                 {tab === "fish" && (
-                    <FishTab activeFish={activeFish} onRefresh={poll} />
+                    <FishTab activeFish={activeFish} fishLayers={fishLayers} onRefresh={poll} />
                 )}
                 {tab === "pending" && (
                     <PendingTab pendingFish={pendingFish} onRefresh={poll} />
-                )}
-                {tab === "clients" && (
-                    <ClientsPage displays={displays} onTestPattern={sendTestPattern} onOpenLayout={() => setTab("layout")} />
                 )}
                 {tab === "settings" && (
                     <SettingsPage
@@ -296,6 +298,10 @@ function ManageApp(): React.ReactElement {
                         setSendRateSetting={setSendRateSetting}
                         onAddDemoFish={() => void addDemoFish()}
                         onRemoveAllFish={removeAllFish}
+                        onReloadImages={async () => {
+                            await api.request("/api/clients/reload-images", { method: "POST" });
+                            showAlert("モニターへ画像の再読み込みを指示しました");
+                        }}
                     />
                 )}
             </main>
@@ -403,8 +409,16 @@ function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWo
 
     return (
         <div className="flex h-full w-full flex-col bg-slate-50">
-            <div className="border-b border-slate-200 bg-white px-6 py-4">
-                <PageHeader title="水槽レイアウト" description="表示範囲、禁止エリア、放流ポイント、画像レイヤーを調整します。" />
+            <div className="flex items-center justify-between gap-4 border-b border-slate-200 bg-white px-6 py-3">
+                <PageHeader title="水槽レイアウト" description="モニター、禁止エリア、放流ポイント、画像レイヤーを調整します。" />
+                <div className="flex items-center gap-2 text-xs text-slate-600">
+                    <label className="flex cursor-pointer items-center gap-1.5 rounded-md border border-slate-200 px-3 py-2">
+                        <input type="checkbox" checked={arLocked} onChange={e => setArLocked(e.target.checked)} className="form-checkbox text-blue-500" />
+                        縦横比を固定
+                    </label>
+                    <button className="rounded-md border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-400" disabled>元に戻す</button>
+                    <button className="rounded-md border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-400" disabled>やり直す</button>
+                </div>
             </div>
             <div className="flex flex-1 overflow-hidden relative">
                 {/* ---------- Right: Sidebar Properties ---------- */}
@@ -428,11 +442,6 @@ function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWo
                     onUpdateHorizontalBoundaryMode={(mode) => {
                         setHorizontalBoundaryMode(mode);
                         updateWorldConfig({ horizontalBoundaryMode: mode });
-                    }}
-                    fishSpeedMultiplier={fishSpeedMultiplier}
-                    onUpdateFishSpeedMultiplier={(speed) => {
-                        setFishSpeedMultiplier(speed);
-                        updateWorldConfig({ fishSpeedMultiplier: speed });
                     }}
                     activeLayerId={activeLayerId}
                     onSetActiveLayerId={setActiveLayerId}
@@ -476,19 +485,6 @@ function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWo
                 />
             </div>
 
-            <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
-                <div className="flex gap-2">
-                    <label className="flex items-center gap-1 cursor-pointer">
-                        <input type="checkbox" checked={arLocked} onChange={e => setArLocked(e.target.checked)} className="form-checkbox text-blue-500" />
-                        縦横比を固定
-                    </label>
-                </div>
-                <div style={{ flex: 1 }}></div>
-                <button className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-400" disabled onClick={() => {
-                    // TODO: undo実装移動による補完
-                }}>元に戻す</button>
-                <button className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-400" disabled onClick={() => { }}>やり直す</button>
-            </div>
         </div>
     );
 }

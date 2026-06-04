@@ -120,13 +120,13 @@ export function ViewportCanvas({
             if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return;
             if (e.key === "Backspace" || e.key === "Delete") {
                 if (selectedLocalId) {
-                    if (forbiddenZones.find(z => z.id === selectedLocalId)) {
+                    if (activeLayerId === "layer_system" && forbiddenZones.find(z => z.id === selectedLocalId)) {
                         onUpdateForbiddenZones(forbiddenZones.filter(z => z.id !== selectedLocalId));
                         setSelectedLocalId(null);
-                    } else if (spawnPoints.find(p => p.id === selectedLocalId)) {
+                    } else if (activeLayerId === "layer_system" && spawnPoints.find(p => p.id === selectedLocalId)) {
                         onUpdateSpawnPoints(spawnPoints.filter(p => p.id !== selectedLocalId));
                         setSelectedLocalId(null);
-                    } else if (layers.find(l => l.id === selectedLocalId && l.type === "image")) {
+                    } else if (activeLayerId === selectedLocalId && layers.find(l => l.id === selectedLocalId && l.type === "image")) {
                         if (onUpdateLayers) {
                             onUpdateLayers(layers.map(l => l.id === selectedLocalId ? { ...l, url: undefined, name: "空レイヤー" } : l));
                         }
@@ -137,7 +137,7 @@ export function ViewportCanvas({
         };
         window.addEventListener("keydown", onKeyDown);
         return () => window.removeEventListener("keydown", onKeyDown);
-    }, [selectedLocalId, forbiddenZones, spawnPoints, layers, onUpdateForbiddenZones, onUpdateSpawnPoints, onUpdateLayers]);
+    }, [selectedLocalId, forbiddenZones, spawnPoints, layers, activeLayerId, onUpdateForbiddenZones, onUpdateSpawnPoints, onUpdateLayers]);
 
     // マウスイベント処理
     const getCanvasPt = useCallback((evtX: number, evtY: number) => {
@@ -159,7 +159,7 @@ export function ViewportCanvas({
 
         // 新規追加 (右クリドラッグでForbiddenZone)
         if (e.button === 2) {
-            const canMoveFz = !activeLayerId || activeLayerId === "layer_system";
+            const canMoveFz = activeLayerId === "layer_system";
             if (!canMoveFz) return;
 
             const newZone = { id: `fz_${Date.now()}_${Math.random().toString(36).slice(2)}`, x: wPt.x, y: wPt.y, width: 0, height: 0 };
@@ -171,6 +171,7 @@ export function ViewportCanvas({
         }
 
         if (e.button !== 0) return;
+        e.currentTarget.setPointerCapture(e.pointerId);
 
         // まず World Resizer かどうか判定
         const z = camRef.current.zoom;
@@ -179,7 +180,7 @@ export function ViewportCanvas({
         const currentWorldH = pendingWorldSizeRef.current?.h ?? worldH;
         // World Resizer はいつでも触れる、または選択制限をかけるか？
         // World設定はグローバルなのでレイヤー制限には含めないでおく
-        if (Math.abs(wPt.x - currentWorldW) <= R_WORLD && Math.abs(wPt.y - currentWorldH) <= R_WORLD) {
+        if (activeLayerId === "layer_system" && Math.abs(wPt.x - currentWorldW) <= R_WORLD && Math.abs(wPt.y - currentWorldH) <= R_WORLD) {
             undoStackRef.current.push(snapshotViewports());
             redoStackRef.current.length = 0;
             pendingWorldSizeRef.current = { w: worldW, h: worldH }; // Store current world size for pending updates
@@ -310,7 +311,7 @@ export function ViewportCanvas({
             }
         }
 
-        const canMoveDisp = !activeLayerId;
+        const canMoveDisp = activeLayerId === "layer_system";
         if (canMoveDisp) {
             if (selected) {
                 const t = displaysRef.current.find(d => d.uuid === selected);
@@ -343,7 +344,7 @@ export function ViewportCanvas({
             }
 
             let hitBody: string | null = null;
-            for (const d of displaysRef.current) {
+            for (const d of [...displaysRef.current].reverse()) {
                 const vp = d.viewport;
                 if (!vp) continue;
                 if (wPt.x >= vp.x && wPt.x <= vp.x + vp.width && wPt.y >= vp.y && wPt.y <= vp.y + vp.height) {
@@ -404,12 +405,13 @@ export function ViewportCanvas({
         if (!dragRef.current) {
             const wp2 = canvasToWorld(mx, my);
             let hitH: string | null = null;
-            for (const d of displaysRef.current) {
+            for (const d of [...displaysRef.current].reverse()) {
                 const vp = d.viewport;
                 if (!vp) continue;
                 if (wp2.x >= vp.x && wp2.x <= vp.x + vp.width && wp2.y >= vp.y && wp2.y <= vp.y + vp.height) { hitH = d.uuid; break; }
             }
-            if (hitH !== hoveredRef.current) { hoveredRef.current = hitH; setHoveredUI(hitH); if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(draw); }
+            const activeHit = activeLayerId === "layer_system" ? hitH : null;
+            if (activeHit !== hoveredRef.current) { hoveredRef.current = activeHit; setHoveredUI(activeHit); if (rafRef.current) cancelAnimationFrame(rafRef.current); rafRef.current = requestAnimationFrame(draw); }
 
             const now = Date.now();
             if (now - pointerThrottleRef.current > sendRateSetting) {
@@ -508,7 +510,7 @@ export function ViewportCanvas({
 
         const dObj = displaysRef.current.find(d => d.uuid === drag.uuid);
         if (!dObj || !dObj.viewport) return;
-        const vp = dObj.viewport;
+        const vp = { ...dObj.viewport };
 
         // ... （ドラッグロジック: startRect をもとに dx/dy を加算・減算する処理）...
         // 今回は既存のコードそのまま移植
@@ -575,6 +577,7 @@ export function ViewportCanvas({
 
         // リストへの差分適用
         pendingViewports.current.set(drag.uuid, { ...vp });
+        dObj.viewport = vp;
 
         if (rafRef.current) cancelAnimationFrame(rafRef.current);
         rafRef.current = requestAnimationFrame(draw);
@@ -707,7 +710,6 @@ export function ViewportCanvas({
                 onPointerMove={handleMouseMove}
                 onPointerUp={handleMouseUp}
                 onPointerCancel={handleMouseUp}
-                onPointerLeave={handleMouseUp}
                 onContextMenu={e => e.preventDefault()}
                 style={{ width: "100%", height: "100%", display: "block" }}
             />

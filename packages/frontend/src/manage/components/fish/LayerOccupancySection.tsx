@@ -1,12 +1,12 @@
-import type { ActiveFish } from "@aquarium/shared";
+import type { ActiveFish, LayerConfig } from "@aquarium/shared";
 import { LAYER_CONFIG } from "@aquarium/shared";
 
-export function LayerOccupancySection({ activeFish }: { activeFish: ActiveFish[] }) {
+export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, compact = false }: { activeFish: ActiveFish[]; configs?: LayerConfig[]; compact?: boolean }) {
     return (
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <h3 className="text-sm font-bold text-slate-700 mb-3">レイヤーの混雑状況</h3>
             <div className="flex flex-col gap-3">
-                {LAYER_CONFIG.map((conf, idx) => {
+                {configs.map((conf, idx) => {
                     const count = activeFish.filter(f => !f.isPinned && f.layerIndex === idx && !f.isArchived).length;
                     const ratio = Math.min(count / conf.maxCount, 1);
                     const isFull = count >= conf.maxCount;
@@ -26,9 +26,9 @@ export function LayerOccupancySection({ activeFish }: { activeFish: ActiveFish[]
                     );
                 })}
             </div>
-            <div className="mt-3 text-[10px] text-slate-400 leading-snug">
-                ※最前面(Lyr0)がいっぱいになると、順次奥のレイヤーへ押し出されます。ピン留めされた魚は定員({LAYER_CONFIG.reduce((acc, conf) => acc + conf.maxCount, 0)}匹)から除外されます。
-            </div>
+            {!compact && <div className="mt-3 text-[10px] text-slate-400 leading-snug">
+                ※最前面(Lyr0)がいっぱいになると、順次奥のレイヤーへ押し出されます。ピン留めされた魚は定員({configs.reduce((acc, conf) => acc + conf.maxCount, 0)}匹)から除外されます。
+            </div>}
         </div>
     );
 }

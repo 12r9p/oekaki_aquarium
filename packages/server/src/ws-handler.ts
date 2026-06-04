@@ -1,6 +1,6 @@
 import type { ServerWebSocket } from "bun";
 import type { WsClientMessage, WsServerMessage, TestPattern, DisplayClientInfo, ClientConfig, WorldObject } from "@aquarium/shared";
-import { PHYSICS } from "@aquarium/shared";
+import { LAYER_CONFIG, PHYSICS, replaceLayerConfig } from "@aquarium/shared";
 import { foodItems } from "./physics/boundaries";
 import { registerClientViewport, unregisterClient, setWorldSize, getWorld,
   updateForbiddenZones,
@@ -19,6 +19,7 @@ import { DEFAULT_BACKGROUND_URL, getPersistedSettings, persistViewport, updatePe
 // グローバルな水槽背景状態（再起動でリセット）
 // ============================================================
 const restoredSettings = getPersistedSettings();
+if (restoredSettings.fishLayers) replaceLayerConfig(restoredSettings.fishLayers);
 restoreWorldSettings(restoredSettings.world ?? {});
 let currentBgUrl = restoredSettings.bgUrl ?? DEFAULT_BACKGROUND_URL;
 
@@ -65,6 +66,7 @@ function persistServerSettings(): void {
   updatePersistedSettings({
     bgUrl: currentBgUrl,
     sceneObjects,
+    fishLayers: LAYER_CONFIG,
     world: {
       width: w.width,
       height: w.height,
@@ -420,6 +422,7 @@ export function pushStateToManagers(): void {
     forbiddenZones: w.forbiddenZones,
     spawnPoints: w.spawnPoints,
     layers: w.layers,
+    fishLayers: LAYER_CONFIG,
     horizontalBoundaryMode: w.horizontalBoundaryMode,
     fishSpeedMultiplier: w.fishSpeedMultiplier,
   };

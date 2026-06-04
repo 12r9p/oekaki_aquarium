@@ -18,11 +18,7 @@ export async function releaseRoute(c: Context): Promise<Response> {
 
   if (world.spawnPoints && world.spawnPoints.length > 0) {
     const sp = world.spawnPoints[Math.floor(Math.random() * world.spawnPoints.length)];
-    // ばらつきを持たせるために少しランダムを加える
-    spawnPos = { 
-      x: sp.x + (Math.random() - 0.5) * 40, 
-      y: sp.y + (Math.random() - 0.5) * 40 
-    };
+    spawnPos = { x: sp.x, y: sp.y };
   } else if (world.validZones.length > 0) {
     const zone = world.validZones[0];
     spawnPos = { x: zone.x + 100, y: zone.y + zone.height * 0.5 };

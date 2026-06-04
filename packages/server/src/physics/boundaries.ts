@@ -31,8 +31,8 @@ export function applyBoundaries(fish: ActiveFish): void {
   // 力ベースだと高速時に外に出たままになるので、座標を強制修正する
   const bounceDamp = 0.75;
   if (world.horizontalBoundaryMode === "wrap") {
-    if (pos.x < -PHYSICS.WALL_MARGIN) pos.x = world.width + PHYSICS.WALL_MARGIN;
-    if (pos.x > world.width + PHYSICS.WALL_MARGIN) pos.x = -PHYSICS.WALL_MARGIN;
+    if (pos.x < 0) pos.x = world.width;
+    if (pos.x > world.width) pos.x = 0;
   } else {
     if (pos.x < PHYSICS.WALL_MARGIN) {
       pos.x = PHYSICS.WALL_MARGIN;

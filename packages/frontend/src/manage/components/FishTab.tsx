@@ -1,18 +1,16 @@
 import React, { useState } from "react";
-import type { ActiveFish } from "@aquarium/shared";
-import { LAYER_CONFIG } from "@aquarium/shared";
+import type { ActiveFish, LayerConfig } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/shared/api";
-import { Trash2, Pin, Archive, CopyPlus, Loader2, RefreshCw, X, Shuffle, Images } from "lucide-react";
+import { Trash2, Pin, Archive, CopyPlus, X, Shuffle, Upload, Download, Gauge, Plus } from "lucide-react";
 import { BulkMultiplierSection } from "./fish/BulkMultiplierSection";
-import { FishGallerySection } from "./fish/FishGallerySection";
 import { FishTable } from "./fish/FishTable";
 import { LayerOccupancySection } from "./fish/LayerOccupancySection";
-import type { GalleryEntry } from "./fish/types";
 import { PageHeader } from "./PageHeader";
 interface FishTabProps {
     activeFish: ActiveFish[];
+    fishLayers: LayerConfig[];
     onRefresh: () => void;
 }
 
@@ -23,12 +21,14 @@ function FishConfigPopup({
     onDelete,
     onDuplicate,
     onClose,
+    layerCount,
 }: {
     fish: ActiveFish;
     onUpdate: (id: string, updates: Record<string, unknown>) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
     onClose: () => void;
+    layerCount: number;
 }) {
     const [scale, setScale] = useState(fish.userParams.scale);
     const [speed, setSpeed] = useState(fish.userParams.speed);
@@ -220,9 +220,9 @@ function FishConfigPopup({
                             <div className="flex items-center gap-2 ml-6">
                                 <label className="text-xs text-slate-500 w-16">レイヤー番号</label>
                                 <Input
-                                    type="number" min="0" max={LAYER_CONFIG.length - 1}
+                                    type="number" min="0" max={layerCount - 1}
                                     value={pinnedLayerId}
-                                    onChange={e => handlePinnedLayerId(Math.max(0, Math.min(Number(e.target.value), LAYER_CONFIG.length - 1)))}
+                                    onChange={e => handlePinnedLayerId(Math.max(0, Math.min(Number(e.target.value), layerCount - 1)))}
                                     className="h-7 w-20 text-xs text-center font-mono border-sky-200 bg-sky-50/50"
                                 />
                             </div>
@@ -298,70 +298,48 @@ function FishConfigPopup({
     );
 }
 
-export function FishTab({ activeFish, onRefresh }: FishTabProps) {
-    const [galleryImages, setGalleryImages] = useState<GalleryEntry[]>([]);
-    const [isGalleryOpen, setIsGalleryOpen] = useState(false);
-    const [isReloading, setIsReloading] = useState(false);
+export function FishTab({ activeFish, fishLayers, onRefresh }: FishTabProps) {
     const [selectedFish, setSelectedFish] = useState<ActiveFish | null>(null);
+    const [showBulk, setShowBulk] = useState(false);
+    const [isImporting, setIsImporting] = useState(false);
     const [bulkScaleMultiplier, setBulkScaleMultiplier] = useState(1);
     const [bulkSpeedMultiplier, setBulkSpeedMultiplier] = useState(1);
     const lastBulkValues = React.useRef({ scale: 1, speed: 1 });
     const bulkTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-    React.useEffect(() => {
-        api.request("/api/gallery").then(res => res.json()).then(data => {
-            if (data.images) setGalleryImages(data.images);
-        }).catch(e => console.error("Gallery fetch error:", e));
-    }, []);
-
-    const reloadFromDisk = async () => {
-        setIsReloading(true);
+    const importFish = async (files: FileList | null) => {
+        if (!files?.length) return;
+        setIsImporting(true);
+        const form = new FormData();
+        Array.from(files).forEach(file => form.append("files", file));
         try {
-            await api.request("/api/library/reload", { method: "POST" });
+            await api.request("/api/fish/import", { method: "POST", body: form });
             onRefresh();
-        } catch (e) {
-            console.error("[Library] reload error:", e);
         } finally {
-            setIsReloading(false);
+            setIsImporting(false);
         }
     };
 
-    const addFromGallery = async (entry: GalleryEntry) => {
-        const type = entry.meta?.type ?? "swimmer";
-        const scale = entry.meta?.scale ?? 1.0;
-        const speed = entry.meta?.speed ?? 1.0;
-        const author = entry.meta?.author ?? "anonymous";
-        const url = entry.url;
+    const exportFish = async () => {
+        const response = await api.request("/api/fish/export");
+        const blob = await response.blob();
+        const now = new Date();
+        const stamp = [now.getFullYear(), String(now.getMonth() + 1).padStart(2, "0"), String(now.getDate()).padStart(2, "0")].join("-")
+            + `-${String(now.getHours()).padStart(2, "0")}-${String(now.getMinutes()).padStart(2, "0")}`;
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `お絵描き水族館-${stamp}.zip`;
+        link.click();
+        URL.revokeObjectURL(link.href);
+    };
 
-        try {
-            const scanRes = await api.request("/api/scan", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ deviceId: "demo-gallery", imageUrl: url, imageLocalPath: url })
-            });
-            const scanData = await scanRes.json() as { fish?: { id: string; imageUrl: string }; fishId?: string; error?: string };
-
-            const fishId = scanData.fish?.id ?? scanData.fishId;
-            const textureUrl = scanData.fish?.imageUrl ?? url;
-
-            if (!fishId) {
-                console.error("[addFromGallery] scan API失敗:", scanData);
-                return;
-            }
-
-            const releaseRes = await api.request("/api/release", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    id: fishId, type, textureUrl, author,
-                    userParams: { scale, speed, rotationOffset: 0 }
-                })
-            });
-            if (!releaseRes.ok) return;
-            onRefresh();
-        } catch (e) {
-            console.error("[addFromGallery] Error:", e);
-        }
+    const updateFishLayers = async (layers: LayerConfig[]) => {
+        await api.request("/api/fish-layers", {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ layers }),
+        });
+        onRefresh();
     };
 
     const updateFish = async (id: string, updates: Record<string, unknown>) => {
@@ -408,15 +386,16 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                 description={`登録済み ${activeFish.length}匹。表示中の魚を確認し、必要に応じて編集します。`}
                 actions={
                     <>
-                    <Button
-                        variant="outline"
-                        onClick={reloadFromDisk}
-                        disabled={isReloading}
-                        className="bg-white gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
-                    >
-                        {isReloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                        保存データを再読み込み
+                    <Button variant="outline" onClick={() => setShowBulk(true)} className="bg-white gap-1.5"><Gauge className="h-4 w-4" />一括調整</Button>
+                    <Button variant="outline" className="relative bg-white gap-1.5" disabled={isImporting}>
+                        <Upload className="h-4 w-4" />{isImporting ? "インポート中" : "画像・zipをインポート"}
+                        <input type="file" multiple accept="image/png,image/jpeg,image/webp,.zip" className="absolute inset-0 cursor-pointer opacity-0" onChange={event => void importFish(event.target.files)} />
                     </Button>
+                    <Button variant="outline" className="relative bg-white gap-1.5">
+                        <Upload className="h-4 w-4" />フォルダをインポート
+                        <input type="file" multiple className="absolute inset-0 cursor-pointer opacity-0" {...({ webkitdirectory: "", directory: "" } as React.InputHTMLAttributes<HTMLInputElement>)} onChange={event => void importFish(event.target.files)} />
+                    </Button>
+                    <Button variant="outline" onClick={() => void exportFish()} className="bg-white gap-1.5"><Download className="h-4 w-4" />エクスポート</Button>
                     <Button
                         variant="outline"
                         onClick={async () => {
@@ -428,25 +407,33 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                         <Shuffle className="h-4 w-4" /> 全魚を再配置
                     </Button>
 
-                    <Button variant="outline" onClick={() => setIsGalleryOpen(!isGalleryOpen)} className="bg-white">
-                        <Images className="h-4 w-4" /> {isGalleryOpen ? "ギャラリーを閉じる" : "ギャラリーから追加"}
-                    </Button>
                     </>
                 }
             />
 
-            <BulkMultiplierSection
-                scale={bulkScaleMultiplier}
-                speed={bulkSpeedMultiplier}
-                onScaleChange={setBulkScaleMultiplier}
-                onSpeedChange={setBulkSpeedMultiplier}
-            />
-
-            {/* --- ギャラリー表示エリア --- */}
-            {isGalleryOpen && <FishGallerySection entries={galleryImages} onSelect={addFromGallery} />}
-
             {/* --- レイヤー所属状況の視覚化 --- */}
-            <LayerOccupancySection activeFish={activeFish} />
+            <LayerOccupancySection activeFish={activeFish} configs={fishLayers} />
+
+            <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                    <div>
+                        <h3 className="text-sm font-bold text-slate-700">魚レイヤー設定</h3>
+                        <p className="mt-1 text-[10px] text-slate-400">定員と速度は水槽内の魚へ即時反映されます。</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => void updateFishLayers([...fishLayers, { id: fishLayers.length, maxCount: 20, scale: 0.5, opacity: 0.7, speedFactor: 0.5, zIndex: Math.max(0, 100 - fishLayers.length * 30) }])}><Plus className="mr-1 h-4 w-4" />レイヤー追加</Button>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-2 xl:grid-cols-3">
+                    {fishLayers.map((layer, index) => (
+                        <div key={layer.id} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+                            <div className="mb-3 flex items-center justify-between text-xs font-bold text-slate-700"><span>Lyr {index}</span>{fishLayers.length > 1 && <button className="text-rose-500" onClick={() => void updateFishLayers(fishLayers.filter((_, i) => i !== index))}>削除</button>}</div>
+                            <div className="grid grid-cols-2 gap-3">
+                                <label className="text-[10px] font-bold text-slate-500">定員<Input type="number" min={1} value={layer.maxCount} onChange={event => void updateFishLayers(fishLayers.map((item, i) => i === index ? { ...item, maxCount: Number(event.target.value) || 1 } : item))} className="mt-1 h-8 bg-white text-xs" /></label>
+                                <label className="text-[10px] font-bold text-slate-500">速度倍率<Input type="number" min={0.05} max={3} step={0.05} value={layer.speedFactor} onChange={event => void updateFishLayers(fishLayers.map((item, i) => i === index ? { ...item, speedFactor: Number(event.target.value) || 0.05 } : item))} className="mt-1 h-8 bg-white text-xs" /></label>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </div>
 
             <FishTable
                 activeFish={activeFish}
@@ -466,7 +453,16 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                     onDelete={deleteFish}
                     onDuplicate={duplicateFish}
                     onClose={() => setSelectedFish(null)}
+                    layerCount={fishLayers.length}
                 />
+            )}
+            {showBulk && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={event => { if (event.target === event.currentTarget) setShowBulk(false); }}>
+                    <div className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-2xl">
+                        <BulkMultiplierSection scale={bulkScaleMultiplier} speed={bulkSpeedMultiplier} onScaleChange={setBulkScaleMultiplier} onSpeedChange={setBulkSpeedMultiplier} />
+                        <div className="mt-4 flex justify-end"><Button variant="outline" onClick={() => setShowBulk(false)}>閉じる</Button></div>
+                    </div>
+                </div>
             )}
         </div>
     );

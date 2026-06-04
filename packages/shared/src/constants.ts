@@ -42,6 +42,21 @@ export const LAYER_CONFIG: LayerConfig[] = [
   },
 ];
 
+export function replaceLayerConfig(next: LayerConfig[]): void {
+  const normalized = next
+    .filter(layer => Number.isFinite(layer.maxCount) && layer.maxCount > 0)
+    .map((layer, index) => ({
+      id: index,
+      maxCount: Math.max(1, Math.round(layer.maxCount)),
+      scale: Math.max(0.1, Math.min(layer.scale, 3)),
+      opacity: Math.max(0, Math.min(layer.opacity, 1)),
+      speedFactor: Math.max(0.05, Math.min(layer.speedFactor, 3)),
+      zIndex: Number.isFinite(layer.zIndex) ? layer.zIndex : 100 - index * 30,
+    }));
+  if (normalized.length === 0) return;
+  LAYER_CONFIG.splice(0, LAYER_CONFIG.length, ...normalized);
+}
+
 // ============================================================
 // 仮想水槽のデフォルトサイズ。接続クライアントの解像度とは独立して管理する。
 // ============================================================

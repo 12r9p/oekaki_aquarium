@@ -15,8 +15,8 @@
       "scale": 1
     },
     "display:main": {
-      "x": 967.0167410714286,
-      "y": 2673.1170280612246,
+      "x": 854.3968431122448,
+      "y": 2732.706154336735,
       "width": 1368.506390738246,
       "height": 949,
       "scale": 0.9878326252783936
@@ -27,16 +27,14 @@
   "world": {
     "width": 1572,
     "height": 1038,
-    "forbiddenZones": [
+    "forbiddenZones": [],
+    "spawnPoints": [
       {
-        "id": "fz_1780590991520_aoxk6q5tazd",
-        "x": 238,
-        "y": 122,
-        "width": 439,
-        "height": 551
+        "id": "sp_1780592286214",
+        "x": 786,
+        "y": 519
       }
     ],
-    "spawnPoints": [],
     "layers": [
       {
         "id": "layer_system",
@@ -58,13 +56,21 @@
         "id": "layer_fish_1",
         "name": "Lyr 1 (魚レイヤー)",
         "type": "fish",
-        "zIndex": 50,
+        "zIndex": 10,
         "visible": true,
         "opacity": 1
       },
       {
         "id": "layer_fish_2",
         "name": "Lyr 2 (魚レイヤー)",
+        "type": "fish",
+        "zIndex": 50,
+        "visible": true,
+        "opacity": 1
+      },
+      {
+        "id": "layer_fish_3",
+        "name": "Lyr 3 (魚レイヤー)",
         "type": "fish",
         "zIndex": 10,
         "visible": true,
@@ -73,5 +79,39 @@
     ],
     "horizontalBoundaryMode": "wrap",
     "fishSpeedMultiplier": 1
-  }
+  },
+  "fishLayers": [
+    {
+      "id": 0,
+      "maxCount": 10,
+      "scale": 1,
+      "opacity": 1,
+      "speedFactor": 1,
+      "zIndex": 100
+    },
+    {
+      "id": 1,
+      "maxCount": 20,
+      "scale": 0.7,
+      "opacity": 0.8,
+      "speedFactor": 0.6,
+      "zIndex": 50
+    },
+    {
+      "id": 2,
+      "maxCount": 50,
+      "scale": 0.4,
+      "opacity": 0.4,
+      "speedFactor": 0.3,
+      "zIndex": 10
+    },
+    {
+      "id": 3,
+      "maxCount": 20,
+      "scale": 0.5,
+      "opacity": 0.7,
+      "speedFactor": 0.5,
+      "zIndex": 10
+    }
+  ]
 }

@@ -25,6 +25,10 @@ export const ws = createWsClient(`display:${DISPLAY_ID}`);
 
 export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) {
   ws.onMessage((msg: WsServerMessage) => {
+    if (msg.event === "reload_images") {
+      location.reload();
+      return;
+    }
     // Viewport設定・更新
     if (msg.event === "config") {
       updateStateVP(msg.viewport);

@@ -12,6 +12,7 @@ import { LAYER_CONFIG } from "@aquarium/shared";
 // ============================================================
 
 export function updateFishLayers(allFish: ActiveFish[]): void {
+  if (LAYER_CONFIG.length === 0) return;
   // ピン留め済みと一般に分離
   const pinnedFish = allFish.filter((f) => f.isPinned);
   const normalFish = allFish
@@ -24,7 +25,7 @@ export function updateFishLayers(allFish: ActiveFish[]): void {
 
   for (const fish of normalFish) {
     // 現レイヤーが満員なら次のレイヤーへ
-    if (countInLayer >= LAYER_CONFIG[layerIdx].maxCount) {
+    if (countInLayer >= LAYER_CONFIG[layerIdx]!.maxCount) {
       layerIdx = Math.min(layerIdx + 1, LAYER_CONFIG.length - 1);
       countInLayer = 0;
     }
@@ -49,7 +50,8 @@ export function getFishLayerCounts(allFish: ActiveFish[]): number[] {
 
 /** レイヤー設定値を魚オブジェクトに反映する */
 function applyLayerProps(fish: ActiveFish, layerIdx: number): void {
-  const config = LAYER_CONFIG[layerIdx];
+  const config = LAYER_CONFIG[layerIdx] ?? LAYER_CONFIG[0];
+  if (!config) return;
   fish.layerIndex = layerIdx;
   // これらの目標値に向かってクライアントが Lerp で補間する
   fish.targetScale = fish.userParams.scale * config.scale;

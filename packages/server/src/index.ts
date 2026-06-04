@@ -2,9 +2,12 @@ import { Hono } from "hono";
 import { serve } from "bun";
 import { cors } from "hono/cors";
 import { join } from "node:path";
-import { mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
 import { Buffer } from "node:buffer";
-import { PORTS } from "@aquarium/shared";
+import { LAYER_CONFIG, PORTS } from "@aquarium/shared";
+import type { FishConfig, FishType, LayerConfig } from "@aquarium/shared";
+import sharp from "sharp";
+import { unzipSync, zipSync } from "fflate";
 import { startGameLoop } from "./game-loop";
 import { resetAquariumMotionPosition } from "./physics/aquarium-motion";
 import {
@@ -39,10 +42,11 @@ import {
   duplicateFish,
   redistributeFish,
 } from "./fish-manager";
-import { getWorld } from "./world";
+import { getWorld, updateFishLayerConfig } from "./world";
 import { loadFishLibrary, getLibraryFileBuffer, DATA_FISH_DIR } from "./fish-library";
 import { readFishMeta, writeFishMeta, DEFAULT_FISH_META } from "./png-metadata";
-import type { FishConfig, FishType } from "@aquarium/shared";
+import { updatePersistedSettings } from "./settings-store";
+import { updateFishLayers } from "./layer-manager";
 
 // ============================================================
 // サーバーエントリーポイント（Bun 単一ポート統合版）
@@ -121,6 +125,87 @@ app.post("/api/fish/:id/duplicate", (c) => {
 app.post("/api/fish/redistribute", (c) => {
   const count = redistributeFish();
   return c.json({ success: true, redistributed: count });
+});
+
+app.put("/api/fish-layers", async (c) => {
+  const { layers } = await c.req.json<{ layers: LayerConfig[] }>();
+  updateFishLayerConfig(layers);
+  updateFishLayers(getAllActiveFish());
+  updatePersistedSettings({ fishLayers: LAYER_CONFIG });
+  pushClientListToManagers();
+  return c.json({ success: true, layers: LAYER_CONFIG });
+});
+
+app.post("/api/fish/import", async (c) => {
+  const form = await c.req.formData();
+  const uploads = form.getAll("files").filter((value): value is File => value instanceof File);
+  const imageFiles: Array<{ name: string; data: Uint8Array }> = [];
+  for (const upload of uploads) {
+    const data = new Uint8Array(await upload.arrayBuffer());
+    if (upload.name.toLowerCase().endsWith(".zip")) {
+      for (const [name, contents] of Object.entries(unzipSync(data))) {
+        if (/\.(png|jpe?g|webp)$/i.test(name)) imageFiles.push({ name, data: contents });
+      }
+    } else if (/\.(png|jpe?g|webp)$/i.test(upload.name)) {
+      imageFiles.push({ name: upload.name, data });
+    }
+  }
+
+  const imported: string[] = [];
+  for (const image of imageFiles) {
+    const png = await sharp(image.data).png().toBuffer();
+    const meta = image.name.toLowerCase().endsWith(".png") ? readFishMeta(Buffer.from(image.data)) : undefined;
+    const tempName = `import_${crypto.randomUUID()}.png`;
+    const tempPath = join(PUBLIC_IMAGES_DIR, tempName);
+    await Bun.write(tempPath, png);
+    const pending = addToPending(`/images/${tempName}`, meta ?? undefined);
+    const world = getWorld();
+    const spawn = world.spawnPoints[0] ?? { x: world.width / 2, y: world.height / 2 };
+    const config: FishConfig = {
+      id: pending.id,
+      type: meta?.type ?? "swimmer",
+      textureUrl: pending.imageUrl,
+      author: meta?.author ?? image.name.replace(/\.[^.]+$/, ""),
+      fishMeta: meta ?? undefined,
+      userParams: {
+        scale: meta?.scale ?? 1,
+        speed: meta?.speed ?? 1,
+        rotationOffset: 0,
+        direction: meta?.direction ?? "auto",
+      },
+      isPinned: meta?.pinnedLayerId !== null && meta?.pinnedLayerId !== undefined,
+      pinnedLayerId: meta?.pinnedLayerId ?? undefined,
+    };
+    const fish = releaseFish(config, spawn);
+    imported.push(fish.id);
+    if (await Bun.file(tempPath).exists()) unlinkSync(tempPath);
+  }
+  pushClientListToManagers();
+  broadcastToAll({ event: "reload" });
+  return c.json({ success: true, imported: imported.length });
+});
+
+app.get("/api/fish/export", (c) => {
+  const files: Record<string, Uint8Array> = {};
+  for (const fish of getAllActiveFish().filter(item => !item.isArchived)) {
+    const path = join(DATA_FISH_DIR, `${fish.id}.png`);
+    try {
+      files[`${fish.id}.png`] = new Uint8Array(readFileSync(path));
+    } catch {
+      // Skip fish whose persisted image is unavailable.
+    }
+  }
+  return new Response(zipSync(files, { level: 6 }), {
+    headers: {
+      "Content-Type": "application/zip",
+      "Content-Disposition": 'attachment; filename="aquarium-fish.zip"',
+    },
+  });
+});
+
+app.post("/api/clients/reload-images", (c) => {
+  broadcastToAll({ event: "reload_images" });
+  return c.json({ success: true });
 });
 
 // 待機中（Pending）魚の削除
@@ -332,6 +417,7 @@ app.get("/api/state", (c) => {
     forbiddenZones: w.forbiddenZones,
     spawnPoints: w.spawnPoints,
     layers:      w.layers,
+    fishLayers:  LAYER_CONFIG,
     horizontalBoundaryMode: w.horizontalBoundaryMode,
     fishSpeedMultiplier: w.fishSpeedMultiplier,
   });

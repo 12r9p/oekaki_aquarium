@@ -1,5 +1,5 @@
 import type { ClientConfig, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
-import { DEFAULT_WORLD, LAYER_CONFIG } from "@aquarium/shared";
+import { DEFAULT_WORLD, LAYER_CONFIG, replaceLayerConfig } from "@aquarium/shared";
 
 // ============================================================
 // WorldConfig: 全クライアントのViewportを統合した仮想水槽
@@ -111,6 +111,24 @@ export function restoreWorldSettings(settings: Partial<Omit<WorldConfig, "validZ
   if (settings.spawnPoints) updateSpawnPoints(settings.spawnPoints);
   if (settings.layers) updateLayers(settings.layers);
   updateWorldMotionSettings(settings.horizontalBoundaryMode, settings.fishSpeedMultiplier);
+}
+
+export function updateFishLayerConfig(layers: import("@aquarium/shared").LayerConfig[]): void {
+  replaceLayerConfig(layers);
+  updateFishLayersInAppLayers();
+}
+
+function updateFishLayersInAppLayers(): void {
+  const nonFishLayers = world.layers.filter(layer => layer.type !== "fish");
+  const fishLayers: AppLayerConfig[] = LAYER_CONFIG.map(layer => ({
+    id: `layer_fish_${layer.id}`,
+    name: `Lyr ${layer.id} (魚レイヤー)`,
+    type: "fish",
+    zIndex: layer.zIndex,
+    visible: true,
+    opacity: 1,
+  }));
+  world.layers = [...nonFishLayers, ...fishLayers];
 }
 
 /** クライアントが切断したときに ValidZone を削除する */

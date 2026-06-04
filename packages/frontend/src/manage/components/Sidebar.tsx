@@ -42,8 +42,6 @@ interface SidebarProps {
     onUpdateLayers: (layers: AppLayerConfig[]) => void;
     horizontalBoundaryMode: HorizontalBoundaryMode;
     onUpdateHorizontalBoundaryMode: (mode: HorizontalBoundaryMode) => void;
-    fishSpeedMultiplier: number;
-    onUpdateFishSpeedMultiplier: (speed: number) => void;
 
     // 追加: 選択中レイヤーのIDとその更新関数
     activeLayerId?: string;
@@ -54,7 +52,7 @@ export function Sidebar({
     displays, selectedDisplayIds, onTestPattern, worldW, worldH, onSaveViewport,
     onUpdateWorldSize, bgUrl, onUpdateBgUrl, forbiddenZones, onUpdateForbiddenZones,
     spawnPoints, onUpdateSpawnPoints, layers, onUpdateLayers,
-    horizontalBoundaryMode, onUpdateHorizontalBoundaryMode, fishSpeedMultiplier, onUpdateFishSpeedMultiplier,
+    horizontalBoundaryMode, onUpdateHorizontalBoundaryMode,
     activeLayerId, onSetActiveLayerId
 }: SidebarProps) {
 
@@ -107,7 +105,7 @@ export function Sidebar({
                 <TabsList className="w-full flex h-12 rounded-none border-b border-slate-200 bg-slate-50 p-0">
                     <TabsTrigger value="list" className="flex-1 rounded-none data-[state=active]:bg-white data-[state=active]:border-b-2 data-[state=active]:border-sky-500 data-[state=active]:shadow-none data-[state=active]:text-sky-600 focus-visible:ring-0">
                         <List className="w-4 h-4 mr-2" />
-                        一覧 ({displays.length})
+                        モニター ({displays.length})
                     </TabsTrigger>
                     <TabsTrigger value="layers" className="flex-1 rounded-none data-[state=active]:bg-white data-[state=active]:border-b-2 data-[state=active]:border-sky-500 data-[state=active]:shadow-none data-[state=active]:text-sky-600 focus-visible:ring-0">
                         <Layers className="w-4 h-4 mr-2" />
@@ -158,10 +156,10 @@ export function Sidebar({
                                                     <span className="font-mono">{d.screenW}×{d.screenH}</span>
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-slate-400 mb-0.5 tracking-wide text-[10px]">通信状態</span>
+                                                    <span className="font-semibold text-slate-400 mb-0.5 tracking-wide text-[10px]">最終通信</span>
                                                     <span className={`font-mono flex items-center gap-1 ${d.disconnectedAt ? 'text-rose-500' : 'text-emerald-600'}`}>
                                                         <div className={`w-1.5 h-1.5 rounded-full ${d.disconnectedAt ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
-                                                        {d.disconnectedAt ? "通信切断中" : (d.ping !== undefined ? `${Math.max(0, d.ping)}ms` : "<1ms")}
+                                                        {d.disconnectedAt ? "通信切断中" : (d.ping !== undefined ? `${(Math.max(0, d.ping) / 1000).toFixed(1)}秒前` : "通信中")}
                                                     </span>
                                                 </div>
                                             </div>
@@ -212,7 +210,7 @@ export function Sidebar({
 
                         {displays.length === 0 && (
                             <div className="text-center p-8 text-sm text-slate-400 border-2 border-dashed border-slate-200 rounded-lg">
-                                接続されている<br />ディスプレイはありません
+                                接続されている<br />モニターはありません
                             </div>
                         )}
                     </Accordion>
@@ -437,19 +435,6 @@ export function Sidebar({
                                 <option value="bounce">壁で折り返す</option>
                             </select>
                         </div>
-                        <div className="flex flex-col gap-2">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-xs text-slate-500">魚の全体速度</Label>
-                                <span className="font-mono text-xs text-slate-600">×{fishSpeedMultiplier.toFixed(2)}</span>
-                            </div>
-                            <Slider
-                                value={[fishSpeedMultiplier]}
-                                onValueChange={value => onUpdateFishSpeedMultiplier(value[0])}
-                                min={0.1}
-                                max={3}
-                                step={0.05}
-                            />
-                        </div>
                         <div className="flex flex-col gap-1.5">
                             <Label htmlFor="background-url" className="text-xs text-slate-500">水槽背景画像</Label>
                             <div className="flex gap-2">
@@ -472,54 +457,6 @@ export function Sidebar({
                             </div>
                         </div>
 
-                    </div>
-
-                    {/* Viewport Transform (Targeting Selected Display) */}
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                            <LocateFixed className="w-4 h-4 text-violet-500" />
-                            <h3 className="text-sm font-bold text-slate-800">選択中の表示端末</h3>
-                        </div>
-
-                        {selectedDisplayIds.length > 0 ? (
-                            displays.filter(d => selectedDisplayIds.includes(d.uuid)).map(d => {
-                                const vp = d.viewport;
-                                if (!vp) return (
-                                    <div key={d.uuid} className="text-sm text-amber-600 bg-amber-50 p-3 rounded border border-amber-200">
-                                        Viewportが未設定です。左の画面でドラッグして初期化してください。
-                                    </div>
-                                );
-                                return (
-                                    <div key={d.uuid} className="grid grid-cols-2 gap-3">
-                                        <div className="flex flex-col gap-1.5">
-                                            <Label className="text-xs text-slate-500">X (Left)</Label>
-                                            <Input type="number" value={Math.round(vp.x)} onChange={(e) => onSaveViewport(d.uuid, { ...vp, x: Number(e.target.value) })} className="font-mono h-8" />
-                                        </div>
-                                        <div className="flex flex-col gap-1.5">
-                                            <Label className="text-xs text-slate-500">Y (Top)</Label>
-                                            <Input type="number" value={Math.round(vp.y)} onChange={(e) => onSaveViewport(d.uuid, { ...vp, y: Number(e.target.value) })} className="font-mono h-8" />
-                                        </div>
-                                        <div className="flex flex-col gap-1.5">
-                                            <Label className="text-xs text-slate-500">Width</Label>
-                                            <Input type="number" value={Math.round(vp.width)} onChange={(e) => onSaveViewport(d.uuid, { ...vp, width: Number(e.target.value) })} className="font-mono h-8" />
-                                        </div>
-                                        <div className="flex flex-col gap-1.5">
-                                            <Label className="text-xs text-slate-500">Height</Label>
-                                            <Input type="number" value={Math.round(vp.height)} onChange={(e) => onSaveViewport(d.uuid, { ...vp, height: Number(e.target.value) })} className="font-mono h-8" />
-                                        </div>
-                                        <div className="flex flex-col gap-1.5 col-span-2">
-                                            <Label className="text-xs text-slate-500">Scale (Render Resolution)</Label>
-                                            <Input type="number" step="0.01" value={vp.scale.toFixed(2)} onChange={(e) => onSaveViewport(d.uuid, { ...vp, scale: Number(e.target.value) })} className="font-mono h-8 bg-slate-50 text-sky-700 font-semibold" />
-                                            <p className="text-[10px] text-slate-400 tracking-tight">値が大きいほどディスプレイ側で高解像度でレンダリングされます。</p>
-                                        </div>
-                                    </div>
-                                )
-                            })
-                        ) : (
-                            <div className="text-sm text-slate-400 p-4 border border-slate-100 bg-slate-50 rounded text-center">
-                                キャンバス上で<br />ディスプレイを選択してください
-                            </div>
-                        )}
                     </div>
 
                     {/* Global Actions */}

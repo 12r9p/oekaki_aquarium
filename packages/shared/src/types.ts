@@ -241,10 +241,12 @@ export type WsServerMessage =
       forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
       spawnPoints: { id: string; x: number; y: number }[];
       layers?: AppLayerConfig[];
+      fishLayers?: LayerConfig[];
       horizontalBoundaryMode?: HorizontalBoundaryMode;
       fishSpeedMultiplier?: number;
     }
   | { event: "reload" }
+  | { event: "reload_images" }
   | { event: "fish_added"; fish: PendingFish }
   | { event: "fish_locked"; fishId: string; lockedBy: string }
   | { event: "fish_released"; fish: ActiveFish }
@@ -262,6 +264,7 @@ export type WsServerMessage =
       forbiddenZones?: { id: string; x: number; y: number; width: number; height: number }[];
       spawnPoints?: { id: string; x: number; y: number }[];
       layers?: AppLayerConfig[];
+      fishLayers?: LayerConfig[];
       horizontalBoundaryMode?: HorizontalBoundaryMode;
       fishSpeedMultiplier?: number;
     }
