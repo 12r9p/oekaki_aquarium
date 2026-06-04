@@ -1,20 +1,16 @@
 import React from "react";
-import type { DisplayClientInfo, ActiveFish, PendingFish, TestPattern } from "@aquarium/shared";
-import { Button } from "@/components/ui/button";
-import { Slider } from "@/components/ui/slider";
-import {
-    DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
-import { MonitorPlay, Layers, Paintbrush, Locate, Square, CheckSquare, Maximize, PlusCircle, ChevronDown, Fish } from "lucide-react";
-import { ws } from "../main";
+import type { DisplayClientInfo, ActiveFish, PendingFish } from "@aquarium/shared";
+import { CircleGauge, Fish, Layers, Monitor, Settings, Send } from "lucide-react";
+
+export type ManagePage = "dashboard" | "layout" | "fish" | "pending" | "clients" | "settings";
 
 interface ToolbarProps {
     displays: DisplayClientInfo[];
     activeFish: ActiveFish[];
     pendingFish: PendingFish[];
     connected: boolean;
-    tab: "layout" | "fish" | "pending";
-    setTab: (t: "layout" | "fish" | "pending") => void;
+    tab: ManagePage;
+    setTab: (t: ManagePage) => void;
 }
 
 export function Toolbar({
@@ -22,51 +18,40 @@ export function Toolbar({
     tab, setTab
 }: ToolbarProps): React.ReactElement {
     return (
-        <div className="flex items-center justify-between px-6 py-2 bg-white border-b border-slate-200 h-14 flex-shrink-0 z-50">
-            {/* Left: Branding & Tabs */}
-            <div className="flex items-center gap-8 h-full">
-                <div className="font-bold text-lg text-slate-800 flex items-center gap-2">
-                    <div className="w-2.5 h-2.5 rounded-full bg-sky-500 shadow-[0_0_8px_rgba(14,165,233,0.8)]" />
-                    Aquarium Manage
-                </div>
-
-                <div className="flex gap-1 h-full items-end">
-                    <button
-                        className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === "layout" ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                        onClick={() => setTab("layout")}
-                    >
-                        <Layers className="w-4 h-4 inline-block mr-1.5 align-text-bottom" /> Layout
-                    </button>
-                    <button
-                        className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === "fish" ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                        onClick={() => setTab("fish")}
-                    >
-                        🐟 Fish Data
-                    </button>
-                    <button
-                        className={`px-4 py-2 text-sm font-semibold border-b-2 transition-colors ${tab === "pending" ? 'border-sky-500 text-sky-600' : 'border-transparent text-slate-500 hover:text-slate-700'}`}
-                        onClick={() => setTab("pending")}
-                    >
-                        📥 Pending
-                    </button>
+        <aside className="flex w-60 flex-shrink-0 flex-col border-r border-slate-200 bg-slate-950 text-slate-200">
+            <div className="flex h-16 items-center gap-3 border-b border-slate-800 px-5">
+                <div className="h-3 w-3 rounded-full bg-sky-400 shadow-[0_0_10px_rgba(56,189,248,0.75)]" />
+                <div>
+                    <div className="text-sm font-bold text-white">お絵かき水族館</div>
+                    <div className="text-[10px] font-medium text-slate-400">運用管理</div>
                 </div>
             </div>
-
-            <div className="flex items-center gap-6">
-                <div className="flex items-center gap-4">
-                    <div className="text-xs font-semibold text-slate-500 flex gap-4">
-                        <span className="flex items-center gap-1.5"><MonitorPlay className="w-3.5 h-3.5" /> Disps: {displays.length}</span>
-                        <span>🐟 Appr: {activeFish.length}</span>
-                        <span>📥 Pend: {pendingFish.length}</span>
-                    </div>
-
-                    <div className={`px-2.5 py-1 rounded-full text-[10px] font-bold tracking-wider uppercase border
-                        ${connected ? 'bg-emerald-50 text-emerald-600 border-emerald-200' : 'bg-red-50 text-red-600 border-red-200'}`}
-                    >
-                        {connected ? "Connected" : "Disconnected"}
-                    </div>
+            <nav className="flex flex-1 flex-col gap-1 p-3">
+                {([
+                    ["dashboard", "現在の状態", CircleGauge],
+                    ["fish", "魚", Fish],
+                    ["pending", "承認待ち", Send],
+                    ["layout", "水槽レイアウト", Layers],
+                    ["clients", "表示端末", Monitor],
+                    ["settings", "設定", Settings],
+                ] as const).map(([value, label, Icon]) => (
+                    <button key={value} onClick={() => setTab(value)} className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-left text-sm font-semibold transition-colors ${tab === value ? "bg-sky-500 text-white" : "text-slate-300 hover:bg-slate-900 hover:text-white"}`}>
+                        <Icon className="h-4 w-4" />
+                        <span className="flex-1">{label}</span>
+                        {value === "pending" && pendingFish.length > 0 && <span className="rounded-full bg-amber-400 px-2 py-0.5 text-[10px] font-bold text-amber-950">{pendingFish.length}</span>}
+                    </button>
+                ))}
+            </nav>
+            <div className="border-t border-slate-800 p-4">
+                <div className="grid grid-cols-2 gap-2 text-center">
+                    <div className="rounded-lg bg-slate-900 p-2"><div className="text-lg font-bold text-white">{displays.length}</div><div className="text-[10px] text-slate-400">端末</div></div>
+                    <div className="rounded-lg bg-slate-900 p-2"><div className="text-lg font-bold text-white">{activeFish.length}</div><div className="text-[10px] text-slate-400">魚</div></div>
+                </div>
+                <div className={`mt-3 flex items-center gap-2 text-xs font-bold ${connected ? "text-emerald-400" : "text-rose-400"}`}>
+                    <span className={`h-2 w-2 rounded-full ${connected ? "bg-emerald-400" : "bg-rose-400"}`} />
+                    {connected ? "サーバー接続中" : "サーバー切断中"}
                 </div>
             </div>
-        </div>
+        </aside>
     );
 }

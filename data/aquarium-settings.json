@@ -15,18 +15,18 @@
       "scale": 1
     },
     "display:main": {
-      "x": 0,
-      "y": 0,
-      "width": 1385.3626168224298,
+      "x": 199,
+      "y": 14,
+      "width": 1368.506390738246,
       "height": 949,
-      "scale": 1
+      "scale": 0.9878326252783936
     }
   },
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 1971,
-    "height": 949,
+    "width": 1572,
+    "height": 1038,
     "forbiddenZones": [],
     "spawnPoints": [],
     "layers": [

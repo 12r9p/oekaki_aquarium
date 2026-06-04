@@ -8,9 +8,13 @@ import "../styles/global.css";
 // コンポーネント群をimport
 import { Sidebar } from "./components/Sidebar";
 import { ViewportCanvas } from "./components/ViewportCanvas";
-import { Toolbar } from "./components/Toolbar";
+import { Toolbar, type ManagePage } from "./components/Toolbar";
 import { FishTab } from "./components/FishTab";
 import { PendingTab } from "./components/PendingTab";
+import { DashboardPage } from "./components/DashboardPage";
+import { ClientsPage } from "./components/ClientsPage";
+import { SettingsPage } from "./components/SettingsPage";
+import { PageHeader } from "./components/PageHeader";
 // ============================================================
 // manage/main.tsx — SaaS グレード管理画面
 // ============================================================
@@ -18,7 +22,7 @@ import { PendingTab } from "./components/PendingTab";
 export const ws = createWsClient("manage");
 
 function ManageApp(): React.ReactElement {
-    const [tab, setTab] = useState<"layout" | "fish" | "pending">("layout");
+    const [tab, setTab] = useState<ManagePage>("dashboard");
     const [worldW, setWorldW] = useState(3840);
     const [worldH, setWorldH] = useState(1080);
     const [displays, setDisplays] = useState<DisplayClientInfo[]>([]);
@@ -40,9 +44,6 @@ function ManageApp(): React.ReactElement {
 
     const [toasts, setToasts] = useState<{ id: number; msg: string }[]>([]);
     const toastIdCounter = useRef(0);
-    // 全魚削除の確認モード
-    const [confirmAllFishDelete, setConfirmAllFishDelete] = useState(false);
-
     const showAlert = (msg: string): void => {
         const id = toastIdCounter.current++;
         setToasts((prev) => [...prev, { id, msg }]);
@@ -158,7 +159,6 @@ function ManageApp(): React.ReactElement {
     };
 
     const removeAllFish = async (): Promise<void> => {
-        setConfirmAllFishDelete(false);
         await api.request("/api/fish/all", { method: "DELETE" });
         void poll();
         showAlert("全ての魚を削除しました");
@@ -236,7 +236,7 @@ function ManageApp(): React.ReactElement {
     }, [displays]);
 
     const layoutTabState = {
-        displays, activeFish, pendingFish, sendRateSetting, setSendRateSetting,
+        displays, activeFish, pendingFish, sendRateSetting,
         worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints,
         layers, setLayers, horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier,
@@ -246,7 +246,7 @@ function ManageApp(): React.ReactElement {
     };
 
     return (
-        <div className="flex flex-col h-screen w-full bg-slate-50 overflow-hidden font-sans text-slate-800">
+        <div className="flex h-screen w-full overflow-hidden bg-slate-50 font-sans text-slate-800">
             {alert && <div className="manage-toast">{alert}</div>}
 
             <Toolbar
@@ -254,12 +254,24 @@ function ManageApp(): React.ReactElement {
                 connected={connected} tab={tab} setTab={setTab}
             />
 
-            <main className="flex flex-1 overflow-hidden relative">
+            <main className="relative flex flex-1 overflow-hidden">
+                {tab === "dashboard" && (
+                    <DashboardPage
+                        connected={connected}
+                        displays={displays}
+                        activeFish={activeFish}
+                        pendingFish={pendingFish}
+                        worldW={worldW}
+                        worldH={worldH}
+                        bgUrl={bgUrl}
+                        sendRateSetting={sendRateSetting}
+                        onNavigate={setTab}
+                    />
+                )}
                 {tab === "layout" && (
                     <LayoutTab
                         state={layoutTabState}
                         connected={connected}
-                        onAddDemoFish={addDemoFish}
                         onSaveViewport={saveViewport}
                         onTestPattern={sendTestPattern}
                         onUpdateWorldSize={(w, h) => {
@@ -274,6 +286,17 @@ function ManageApp(): React.ReactElement {
                 )}
                 {tab === "pending" && (
                     <PendingTab pendingFish={pendingFish} onRefresh={poll} />
+                )}
+                {tab === "clients" && (
+                    <ClientsPage displays={displays} onTestPattern={sendTestPattern} onOpenLayout={() => setTab("layout")} />
+                )}
+                {tab === "settings" && (
+                    <SettingsPage
+                        sendRateSetting={sendRateSetting}
+                        setSendRateSetting={setSendRateSetting}
+                        onAddDemoFish={() => void addDemoFish()}
+                        onRemoveAllFish={removeAllFish}
+                    />
                 )}
             </main>
 
@@ -301,7 +324,6 @@ interface LayoutTabProps {
         activeFish: ActiveFish[];
         pendingFish: PendingFish[];
         sendRateSetting: number;
-        setSendRateSetting: React.Dispatch<React.SetStateAction<number>>;
         worldW: number;
         setWorldW: React.Dispatch<React.SetStateAction<number>>;
         worldH: number;
@@ -333,15 +355,14 @@ interface LayoutTabProps {
         snapshotViewports: () => { uuid: string; viewport: NonNullable<DisplayClientInfo["viewport"]> }[];
     };
     connected: boolean;
-    onAddDemoFish: () => void;
     onSaveViewport: (uuid: string, vp: NonNullable<DisplayClientInfo["viewport"]>) => Promise<void>;
     onTestPattern: (pattern: TestPattern, uuid?: string) => Promise<void>;
     onUpdateWorldSize: (w: number, h: number) => void;
 }
 
 // ====== タブ 1: レイアウト管理 ======
-function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPattern, onUpdateWorldSize }: LayoutTabProps) {
-    const { displays, sendRateSetting, setSendRateSetting, worldW, setWorldW, worldH, setWorldH,
+function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWorldSize }: LayoutTabProps) {
+    const { displays, sendRateSetting, worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints, layers, setLayers,
         horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier,
         selectedDisplay, setSelectedDisplay, activeLayerId, setActiveLayerId, arLocked, setArLocked,
@@ -381,7 +402,10 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
     };
 
     return (
-        <div className="flex flex-col h-full w-full">
+        <div className="flex h-full w-full flex-col bg-slate-50">
+            <div className="border-b border-slate-200 bg-white px-6 py-4">
+                <PageHeader title="水槽レイアウト" description="表示範囲、禁止エリア、放流ポイント、画像レイヤーを調整します。" />
+            </div>
             <div className="flex flex-1 overflow-hidden relative">
                 {/* ---------- Right: Sidebar Properties ---------- */}
                 <Sidebar
@@ -390,10 +414,7 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                     onTestPattern={onTestPattern}
                     worldW={worldW}
                     worldH={worldH}
-                    onAddDemoFish={onAddDemoFish}
                     onSaveViewport={onSaveViewport}
-                    sendRateSetting={sendRateSetting}
-                    setSendRateSetting={setSendRateSetting}
                     onUpdateWorldSize={onUpdateWorldSize}
                     bgUrl={bgUrl}
                     onUpdateBgUrl={onUpdateBgUrl}
@@ -455,18 +476,18 @@ function LayoutTab({ state, connected, onAddDemoFish, onSaveViewport, onTestPatt
                 />
             </div>
 
-            <div className="flex items-center justify-between p-2 bg-gray-700 text-white text-sm">
+            <div className="flex items-center justify-between border-t border-slate-200 bg-white px-4 py-2 text-sm text-slate-600">
                 <div className="flex gap-2">
                     <label className="flex items-center gap-1 cursor-pointer">
                         <input type="checkbox" checked={arLocked} onChange={e => setArLocked(e.target.checked)} className="form-checkbox text-blue-500" />
-                        AR固定 (Aspect Ratio)
+                        縦横比を固定
                     </label>
                 </div>
                 <div style={{ flex: 1 }}></div>
-                <button className="btn btn-sm btn-secondary" onClick={() => {
+                <button className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-400" disabled onClick={() => {
                     // TODO: undo実装移動による補完
-                }}>↶ Undo</button>
-                <button className="btn btn-sm btn-secondary" onClick={() => { }}>↷ Redo</button>
+                }}>元に戻す</button>
+                <button className="rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-400" disabled onClick={() => { }}>やり直す</button>
             </div>
         </div>
     );

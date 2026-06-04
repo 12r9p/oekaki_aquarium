@@ -21,7 +21,7 @@ import {
 import {
     Monitor, MonitorPlay, Settings, Layers, Trash2, Eye, EyeOff, PlusCircle,
     ImageIcon, KeySquare, Upload, HelpCircle, Ban, Sparkles, AlertTriangle, Play, ChevronUp, ChevronDown, CheckCircle2,
-    LayoutTemplate, MonitorSmartphone, LocateFixed, Map as MapIcon, Target, Palette, LayoutGrid, MonitorOff, List, Copy, ExternalLink, WifiOff
+    LayoutTemplate, MonitorSmartphone, LocateFixed, Map as MapIcon, Target, Palette, LayoutGrid, MonitorOff, List, Copy, ExternalLink
 } from "lucide-react";
 
 interface SidebarProps {
@@ -30,10 +30,7 @@ interface SidebarProps {
     onTestPattern: (pattern: TestPattern, uuid?: string) => Promise<void>;
     worldW: number;
     worldH: number;
-    onAddDemoFish: () => void;
     onSaveViewport: (uuid: string, vp: NonNullable<DisplayClientInfo["viewport"]>) => Promise<void>;
-    sendRateSetting: number;
-    setSendRateSetting: (rate: number) => void;
     onUpdateWorldSize: (w: number, h: number) => void;
     bgUrl: string;
     onUpdateBgUrl: (url: string) => void;
@@ -54,8 +51,8 @@ interface SidebarProps {
 }
 
 export function Sidebar({
-    displays, selectedDisplayIds, onTestPattern, worldW, worldH, onAddDemoFish, onSaveViewport,
-    sendRateSetting, setSendRateSetting, onUpdateWorldSize, bgUrl, onUpdateBgUrl, forbiddenZones, onUpdateForbiddenZones,
+    displays, selectedDisplayIds, onTestPattern, worldW, worldH, onSaveViewport,
+    onUpdateWorldSize, bgUrl, onUpdateBgUrl, forbiddenZones, onUpdateForbiddenZones,
     spawnPoints, onUpdateSpawnPoints, layers, onUpdateLayers,
     horizontalBoundaryMode, onUpdateHorizontalBoundaryMode, fishSpeedMultiplier, onUpdateFishSpeedMultiplier,
     activeLayerId, onSetActiveLayerId
@@ -157,11 +154,11 @@ export function Sidebar({
                                             {/* Hardware Info */}
                                             <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-white p-2.5 rounded border border-slate-200 shadow-sm">
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-slate-400 mb-0.5 uppercase tracking-wide text-[10px]">Hardware res</span>
+                                                    <span className="font-semibold text-slate-400 mb-0.5 tracking-wide text-[10px]">画面解像度</span>
                                                     <span className="font-mono">{d.screenW}×{d.screenH}</span>
                                                 </div>
                                                 <div className="flex flex-col">
-                                                    <span className="font-semibold text-slate-400 mb-0.5 uppercase tracking-wide text-[10px]">Ping / Status</span>
+                                                    <span className="font-semibold text-slate-400 mb-0.5 tracking-wide text-[10px]">通信状態</span>
                                                     <span className={`font-mono flex items-center gap-1 ${d.disconnectedAt ? 'text-rose-500' : 'text-emerald-600'}`}>
                                                         <div className={`w-1.5 h-1.5 rounded-full ${d.disconnectedAt ? 'bg-rose-500 animate-pulse' : 'bg-emerald-500'}`} />
                                                         {d.disconnectedAt ? "通信切断中" : (d.ping !== undefined ? `${Math.max(0, d.ping)}ms` : "<1ms")}
@@ -172,7 +169,7 @@ export function Sidebar({
                                             {/* Viewport Editor */}
                                             {vp && (
                                                 <div className="flex flex-col gap-2 p-2.5 rounded border border-slate-200 bg-white shadow-sm">
-                                                    <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Viewport Manual Edit</div>
+                                                    <div className="text-[10px] font-bold text-slate-400 tracking-wider">表示範囲</div>
                                                     <div className="grid grid-cols-4 gap-2">
                                                         <div className="flex flex-col gap-1">
                                                             <span className="text-[9px] text-slate-500">X</span>
@@ -196,7 +193,7 @@ export function Sidebar({
 
                                             {/* Individual Pattern Control */}
                                             <div>
-                                                <div className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mb-2">Test Pattern</div>
+                                                <div className="text-[10px] font-bold text-slate-400 tracking-wider mb-2">テスト表示</div>
                                                 <div className="grid grid-cols-2 gap-2">
                                                     <Button variant={d.testPattern === "identify" ? "default" : "outline"} size="sm" onClick={() => onTestPattern("identify", d.uuid)} className="h-8 text-xs font-semibold justify-start"><Monitor className="w-3.5 h-3.5 mr-2" /> Identify</Button>
                                                     <Button variant={d.testPattern === "gradient" ? "default" : "outline"} size="sm" onClick={() => onTestPattern("gradient", d.uuid)} className="h-8 text-xs font-semibold justify-start"><Palette className="w-3.5 h-3.5 mr-2" /> Gradient</Button>
@@ -416,15 +413,15 @@ export function Sidebar({
                     <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
                             <KeySquare className="w-4 h-4 text-sky-500" />
-                            <h3 className="text-sm font-bold text-slate-800">キャンバス全体設定 (World)</h3>
+                            <h3 className="text-sm font-bold text-slate-800">水槽全体</h3>
                         </div>
                         <div className="grid grid-cols-2 gap-3">
                             <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="world-width" className="text-xs text-slate-500">World Width</Label>
+                                <Label htmlFor="world-width" className="text-xs text-slate-500">水槽の幅</Label>
                                 <Input key={`world-width-${worldW}`} id="world-width" type="number" min={100} defaultValue={worldW} onBlur={e => onUpdateWorldSize(Math.max(100, Number(e.target.value) || worldW), worldH)} className="font-mono bg-white text-slate-800 h-8 focus:ring-1 focus:ring-sky-500" />
                             </div>
                             <div className="flex flex-col gap-1.5">
-                                <Label htmlFor="world-height" className="text-xs text-slate-500">World Height</Label>
+                                <Label htmlFor="world-height" className="text-xs text-slate-500">水槽の高さ</Label>
                                 <Input key={`world-height-${worldH}`} id="world-height" type="number" min={100} defaultValue={worldH} onBlur={e => onUpdateWorldSize(worldW, Math.max(100, Number(e.target.value) || worldH))} className="font-mono bg-white text-slate-800 h-8 focus:ring-1 focus:ring-sky-500" />
                             </div>
                         </div>
@@ -477,32 +474,11 @@ export function Sidebar({
 
                     </div>
 
-                    {/* Sync Rate Setting */}
-                    <div className="flex flex-col gap-3">
-                        <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
-                            <Settings className="w-4 h-4 text-emerald-500" />
-                            <h3 className="text-sm font-bold text-slate-800">通信設定 (Sync Rate)</h3>
-                        </div>
-                        <div className="flex flex-col gap-3">
-                            <div className="flex items-center justify-between">
-                                <Label className="text-xs text-slate-500">Update Interval</Label>
-                                <span className="font-mono text-xs text-slate-600 font-semibold bg-slate-100 px-2 py-0.5 rounded">{sendRateSetting}ms</span>
-                            </div>
-                            <Slider
-                                value={[sendRateSetting]}
-                                onValueChange={val => setSendRateSetting(val[0])}
-                                min={16} max={500} step={1}
-                                className="w-full"
-                            />
-                            <p className="text-[10px] text-slate-400 tracking-tight">ドラッグ時やホバー時のバックエンドへの送信間隔を調整します。小さいほど滑らかになりますが負荷が上がります。</p>
-                        </div>
-                    </div>
-
                     {/* Viewport Transform (Targeting Selected Display) */}
                     <div className="flex flex-col gap-3">
                         <div className="flex items-center gap-2 pb-2 border-b border-slate-100">
                             <LocateFixed className="w-4 h-4 text-violet-500" />
-                            <h3 className="text-sm font-bold text-slate-800">Viewport (選択中ディスプレイ)</h3>
+                            <h3 className="text-sm font-bold text-slate-800">選択中の表示端末</h3>
                         </div>
 
                         {selectedDisplayIds.length > 0 ? (

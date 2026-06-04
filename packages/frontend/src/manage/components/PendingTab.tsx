@@ -1,8 +1,9 @@
-import React from "react";
+import React, { useState } from "react";
 import type { PendingFish } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { api } from "@/shared/api";
-import { Check, Trash2 } from "lucide-react";
+import { Check, Trash2, Upload } from "lucide-react";
+import { PageHeader } from "./PageHeader";
 
 import {
     Table,
@@ -19,6 +20,7 @@ interface PendingTabProps {
 }
 
 export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
+    const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const uploadFiles = async (files: FileList | File[]) => {
         for (const file of Array.from(files)) {
             if (file.type !== "image/png") continue;
@@ -43,20 +45,18 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
     };
 
     const deletePending = async (id: string) => {
-        if (!confirm("この待機中の魚を削除（拒否）しますか？")) return;
         await api.request(`/api/pending/${encodeURIComponent(id)}`, { method: "DELETE" });
+        setPendingDeleteId(null);
         onRefresh();
     };
 
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50">
-            <div className="flex items-center justify-between mb-4">
-                <h2 className="text-xl font-bold text-slate-800">待機中の魚一覧 ({pendingFish.length}匹)</h2>
-                <label className="cursor-pointer rounded-md bg-sky-500 px-4 py-2 text-sm font-bold text-white">
-                    PNGを追加
-                    <input type="file" accept="image/png" multiple hidden onChange={e => e.target.files && void uploadFiles(e.target.files)} />
-                </label>
-            </div>
+            <PageHeader
+                title="承認待ち"
+                description={`${pendingFish.length}匹が未処理です。画像を確認して放流または却下します。`}
+                actions={<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-sky-500 px-4 text-sm font-bold text-white hover:bg-sky-600"><Upload className="h-4 w-4" />PNGを追加<input type="file" accept="image/png" multiple hidden onChange={e => e.target.files && void uploadFiles(e.target.files)} /></label>}
+            />
             <div className="mb-4 rounded-xl border-2 border-dashed border-sky-200 bg-sky-50 p-4 text-center text-sm text-sky-700"
                 onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void uploadFiles(e.dataTransfer.files); }}>
                 パラメーター入りPNGをドロップすると待機リストへ追加します
@@ -85,6 +85,14 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
                                 </TableCell>
                                 <TableCell className="text-right align-middle">
                                     <div className="flex justify-end gap-2">
+                                        {pendingDeleteId === f.id ? (
+                                            <>
+                                                <span className="self-center text-xs font-bold text-rose-700">却下しますか？</span>
+                                                <Button variant="outline" className="h-8 px-3 text-xs" onClick={() => setPendingDeleteId(null)}>キャンセル</Button>
+                                                <Button variant="destructive" className="h-8 px-3 text-xs" onClick={() => void deletePending(f.id)}>却下</Button>
+                                            </>
+                                        ) : (
+                                            <>
                                         <Button
                                             variant="default"
                                             className="bg-emerald-500 hover:bg-emerald-600 text-white font-bold h-8 px-3 text-xs"
@@ -95,10 +103,13 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
                                         <Button
                                             variant="outline"
                                             className="h-8 w-8 p-0 text-slate-500 hover:text-red-500 hover:bg-red-50 border-slate-300"
-                                            onClick={() => deletePending(f.id)}
+                                            onClick={() => setPendingDeleteId(f.id)}
+                                            title="却下"
                                         >
                                             <Trash2 className="w-4 h-4" />
                                         </Button>
+                                            </>
+                                        )}
                                     </div>
                                 </TableCell>
                             </TableRow>

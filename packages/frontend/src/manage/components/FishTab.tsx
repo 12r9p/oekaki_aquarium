@@ -4,12 +4,13 @@ import { LAYER_CONFIG } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { api } from "@/shared/api";
-import { Trash2, Pin, Archive, CopyPlus, Loader2, RefreshCw, X } from "lucide-react";
+import { Trash2, Pin, Archive, CopyPlus, Loader2, RefreshCw, X, Shuffle, Images } from "lucide-react";
 import { BulkMultiplierSection } from "./fish/BulkMultiplierSection";
 import { FishGallerySection } from "./fish/FishGallerySection";
 import { FishTable } from "./fish/FishTable";
 import { LayerOccupancySection } from "./fish/LayerOccupancySection";
 import type { GalleryEntry } from "./fish/types";
+import { PageHeader } from "./PageHeader";
 interface FishTabProps {
     activeFish: ActiveFish[];
     onRefresh: () => void;
@@ -22,14 +23,12 @@ function FishConfigPopup({
     onDelete,
     onDuplicate,
     onClose,
-    confirmMode,
 }: {
     fish: ActiveFish;
     onUpdate: (id: string, updates: Record<string, unknown>) => void;
     onDelete: (id: string) => void;
     onDuplicate: (id: string) => void;
     onClose: () => void;
-    confirmMode: boolean;
 }) {
     const [scale, setScale] = useState(fish.userParams.scale);
     const [speed, setSpeed] = useState(fish.userParams.speed);
@@ -109,7 +108,7 @@ function FishConfigPopup({
                     <div className="flex-1 min-w-0">
                         <div className="text-xs font-mono text-slate-400 truncate">{fish.id}</div>
                         <div className="text-sm font-bold text-slate-800 truncate">{fish.author ?? "anonymous"}</div>
-                        <div className="text-[10px] text-slate-400">Layer: {fish.layerIndex} {fish.isPinned && <span className="text-sky-500">📌 Pinned</span>}</div>
+                        <div className="text-[10px] text-slate-400">レイヤー: {fish.layerIndex} {fish.isPinned && <span className="text-sky-500">固定中</span>}</div>
                     </div>
                     <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0">
                         <X className="w-5 h-5" />
@@ -172,7 +171,7 @@ function FishConfigPopup({
                     {/* 数値入力 */}
                     <div className="grid grid-cols-2 gap-3">
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] text-slate-500 font-bold uppercase">Scale (数値入力)</label>
+                            <label className="text-[10px] text-slate-500 font-bold">大きさ（数値入力）</label>
                             <Input type="number" step="0.05" min="0.1" max="3.0"
                                 value={scale}
                                 onChange={e => handleScale(Number(e.target.value))}
@@ -180,7 +179,7 @@ function FishConfigPopup({
                             />
                         </div>
                         <div className="flex flex-col gap-1">
-                            <label className="text-[10px] text-slate-500 font-bold uppercase">Speed (数値入力)</label>
+                            <label className="text-[10px] text-slate-500 font-bold">速度（数値入力）</label>
                             <Input type="number" step="0.05" min="0" max="5.0"
                                 value={speed}
                                 onChange={e => handleSpeed(Number(e.target.value))}
@@ -219,7 +218,7 @@ function FishConfigPopup({
                         </label>
                         {isPinned && (
                             <div className="flex items-center gap-2 ml-6">
-                                <label className="text-xs text-slate-500 w-16">Layer ID</label>
+                                <label className="text-xs text-slate-500 w-16">レイヤー番号</label>
                                 <Input
                                     type="number" min="0" max={LAYER_CONFIG.length - 1}
                                     value={pinnedLayerId}
@@ -280,13 +279,7 @@ function FishConfigPopup({
                             <Button
                                 variant="ghost" size="sm"
                                 className="text-red-500 hover:text-red-600 hover:bg-red-50 gap-1.5"
-                                onClick={() => {
-                                    if (confirmMode) {
-                                        setShowDeleteConfirm(true);
-                                    } else {
-                                        onDelete(fish.id); onClose();
-                                    }
-                                }}
+                                onClick={() => setShowDeleteConfirm(true)}
                             >
                                 <Trash2 className="w-4 h-4" /> 削除
                             </Button>
@@ -314,8 +307,6 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
     const [bulkSpeedMultiplier, setBulkSpeedMultiplier] = useState(1);
     const lastBulkValues = React.useRef({ scale: 1, speed: 1 });
     const bulkTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
-    // 削除確認モード（true = 削除前に確認する）
-    const [confirmMode, setConfirmMode] = useState(true);
 
     React.useEffect(() => {
         api.request("/api/gallery").then(res => res.json()).then(data => {
@@ -412,25 +403,11 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
 
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col gap-6">
-            {/* ヘッダー */}
-            <div className="flex items-center justify-between">
-                <h2 className="text-xl font-bold text-slate-800">水槽の魚一覧 ({activeFish.length}匹)</h2>
-                <div className="flex gap-2">
-                    {/* 削除確認モードトグル */}
-                    <button
-                        onClick={() => setConfirmMode(m => !m)}
-                        title={confirmMode ? "削除時に確認あり" : "削除時に確認なし"}
-                        className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all ${confirmMode
-                            ? "bg-white border-slate-200 text-slate-600 hover:border-slate-300"
-                            : "bg-red-50 border-red-200 text-red-600 hover:bg-red-100"
-                            }`}
-                    >
-                        {confirmMode ? (
-                            <><span className="text-base">🛡️</span> 確認あり</>
-                        ) : (
-                            <><span className="text-base">⚡</span> 確認なし</>
-                        )}
-                    </button>
+            <PageHeader
+                title="魚"
+                description={`登録済み ${activeFish.length}匹。表示中の魚を確認し、必要に応じて編集します。`}
+                actions={
+                    <>
                     <Button
                         variant="outline"
                         onClick={reloadFromDisk}
@@ -438,7 +415,7 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                         className="bg-white gap-1.5 border-amber-300 text-amber-700 hover:bg-amber-50"
                     >
                         {isReloading ? <Loader2 className="w-4 h-4 animate-spin" /> : <RefreshCw className="w-4 h-4" />}
-                        /data/fish 再読み込み
+                        保存データを再読み込み
                     </Button>
                     <Button
                         variant="outline"
@@ -448,14 +425,15 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                         className="bg-white gap-1.5 border-emerald-300 text-emerald-700 hover:bg-emerald-50"
                         title="worldサイズ変更後に魚が偏った場合、全体に再均等配置します"
                     >
-                        🌊 全魚を再配置
+                        <Shuffle className="h-4 w-4" /> 全魚を再配置
                     </Button>
 
                     <Button variant="outline" onClick={() => setIsGalleryOpen(!isGalleryOpen)} className="bg-white">
-                        {isGalleryOpen ? "ギャラリーを閉じる" : "ギャラリーから追加"}
+                        <Images className="h-4 w-4" /> {isGalleryOpen ? "ギャラリーを閉じる" : "ギャラリーから追加"}
                     </Button>
-                </div>
-            </div>
+                    </>
+                }
+            />
 
             <BulkMultiplierSection
                 scale={bulkScaleMultiplier}
@@ -472,7 +450,6 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
 
             <FishTable
                 activeFish={activeFish}
-                confirmMode={confirmMode}
                 onEdit={setSelectedFish}
                 onDuplicate={duplicateFish}
                 onDelete={deleteFish}
@@ -489,7 +466,6 @@ export function FishTab({ activeFish, onRefresh }: FishTabProps) {
                     onDelete={deleteFish}
                     onDuplicate={duplicateFish}
                     onClose={() => setSelectedFish(null)}
-                    confirmMode={confirmMode}
                 />
             )}
         </div>
