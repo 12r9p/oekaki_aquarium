@@ -1,19 +1,30 @@
 import React, { useState } from "react";
-import type { ActiveFish, LayerConfig } from "@aquarium/shared";
+import type { ActiveFish, FishType, LayerConfig } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { api } from "@/shared/api";
-import { Trash2, Pin, Archive, CopyPlus, X, Shuffle, Upload, Download, Gauge } from "lucide-react";
+import { Trash2, Pin, Archive, CopyPlus, X, Shuffle, Upload, Download, Gauge, FlipHorizontal2, Save } from "lucide-react";
 import { BulkMultiplierSection } from "./fish/BulkMultiplierSection";
 import { FishTable } from "./fish/FishTable";
 import { LayerOccupancySection } from "./fish/LayerOccupancySection";
 import { PageHeader } from "./PageHeader";
+import { MotionPreview } from "./MotionPage";
 interface FishTabProps {
     activeFish: ActiveFish[];
     fishLayers: LayerConfig[];
     fishScaleMultiplier: number;
     onRefresh: () => void;
 }
+
+const DEFAULT_FISH_CUSTOM_CODE = `function update(fish, t, api) {
+  const state = fish.__custom ??= { phase: api.noise(1) * Math.PI * 2, dir: api.noise(2) < 0.5 ? -1 : 1 };
+  state.phase += 0.04 * api.speed;
+  fish.physics.vel.x = api.lerp(fish.physics.vel.x, 2.0 * api.speed * state.dir, 0.08);
+  fish.physics.vel.y = api.lerp(fish.physics.vel.y, Math.sin(state.phase) * api.verticalSpread, 0.08);
+  fish.physics.pos.x += fish.physics.vel.x;
+  fish.physics.pos.y += fish.physics.vel.y;
+}`;
 
 /** 魚コンフィグポップアップ */
 function FishConfigPopup({
@@ -33,11 +44,15 @@ function FishConfigPopup({
 }) {
     const [scale, setScale] = useState(fish.userParams.scale);
     const [speed, setSpeed] = useState(fish.userParams.speed);
+    const [opacity, setOpacity] = useState(fish.userParams.opacity ?? 1);
+    const [flipX, setFlipX] = useState(fish.userParams.flipX ?? false);
     const [pinnedLayerId, setPinnedLayerId] = useState(fish.pinnedLayerId ?? 0);
     const [isPinned, setIsPinned] = useState(fish.isPinned);
     const [isArchived, setIsArchived] = useState(!!fish.isArchived);
     const [type, setType] = useState(fish.type);
     const [direction, setDirection] = useState(fish.userParams.direction ?? "auto");
+    const [customName, setCustomName] = useState(fish.customMotion?.name ?? "この魚のカスタム");
+    const [customCode, setCustomCode] = useState(fish.customMotion?.code ?? DEFAULT_FISH_CUSTOM_CODE);
     // 削除確認インラインUIの表示状態
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
@@ -45,11 +60,15 @@ function FishConfigPopup({
     React.useEffect(() => {
         setScale(fish.userParams.scale);
         setSpeed(fish.userParams.speed);
+        setOpacity(fish.userParams.opacity ?? 1);
+        setFlipX(fish.userParams.flipX ?? false);
         setPinnedLayerId(fish.pinnedLayerId ?? 0);
         setIsPinned(fish.isPinned);
         setIsArchived(!!fish.isArchived);
         setType(fish.type);
         setDirection(fish.userParams.direction ?? "auto");
+        setCustomName(fish.customMotion?.name ?? "この魚のカスタム");
+        setCustomCode(fish.customMotion?.code ?? DEFAULT_FISH_CUSTOM_CODE);
         setShowDeleteConfirm(false);
     }, [fish.id]);
 
@@ -63,7 +82,7 @@ function FishConfigPopup({
     };
 
     const handleType = (val: string) => {
-        setType(val as typeof type);
+        setType(val as FishType);
         onUpdate(fish.id, { type: val });
     };
     const handleScale = (val: number) => {
@@ -73,6 +92,15 @@ function FishConfigPopup({
     const handleSpeed = (val: number) => {
         setSpeed(val);
         debouncedUpdate({ speed: val });
+    };
+    const handleOpacity = (val: number) => {
+        setOpacity(val);
+        debouncedUpdate({ opacity: val });
+    };
+    const handleFlipX = () => {
+        const next = !flipX;
+        setFlipX(next);
+        onUpdate(fish.id, { flipX: next });
     };
     const handleDirection = (val: "auto" | "left" | "right") => {
         setDirection(val);
@@ -104,7 +132,7 @@ function FishConfigPopup({
                 {/* ヘッダー */}
                 <div className="flex items-center gap-3 px-5 py-4 border-b border-slate-100">
                     <div className="w-14 h-14 rounded-xl overflow-hidden border border-slate-200 bg-slate-50 flex items-center justify-center flex-shrink-0">
-                        <img src={fish.textureUrl} alt="fish" className="max-w-full max-h-full object-contain" />
+                        <img src={fish.textureUrl} alt="fish" className="max-w-full max-h-full object-contain" style={{ transform: flipX ? "scaleX(-1)" : undefined }} />
                     </div>
                     <div className="flex-1 min-w-0">
                         <div className="text-xs font-mono text-slate-400 truncate">{fish.id}</div>
@@ -118,18 +146,19 @@ function FishConfigPopup({
 
                 {/* フォーム */}
                 <div className="p-5 flex flex-col gap-5 overflow-y-auto">
+                    <MotionPreview mode={type} />
                     {/* 動きタイプ */}
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">動きタイプ</label>
                         <div className="grid grid-cols-3 gap-1.5">
                             {[
-                                { val: "tuna", label: "🐟 マグロ" },
-                                { val: "school", label: "🐠 イワシ群れ" },
-                                { val: "squid", label: "🦑 イカ" },
-                                { val: "jellyfish", label: "🪼 クラゲ" },
-                                { val: "shark", label: "🦈 サメ" },
-                                { val: "custom", label: "⚙ カスタム" },
-                                { val: "anchor", label: "🌿 固定" },
+                                { val: "school", label: "横に移動" },
+                                { val: "jellyfish", label: "浮遊主体" },
+                                { val: "anchor", label: "固定" },
+                                { val: "tuna", label: "高速" },
+                                { val: "squid", label: "パルス" },
+                                { val: "shark", label: "大きな弧" },
+                                { val: "custom", label: "カスタム" },
                             ].map(({ val, label }) => (
                                 <button
                                     key={val}
@@ -143,7 +172,7 @@ function FishConfigPopup({
                     </div>
 
                     {/* スライダー系 */}
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-3 gap-4">
                         <div className="flex flex-col gap-1.5">
                             <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">スケール <span className="font-mono text-sky-600">{scale.toFixed(2)}</span></label>
                             <input
@@ -168,10 +197,22 @@ function FishConfigPopup({
                                 <span>0</span><span>1.0</span><span>5.0</span>
                             </div>
                         </div>
+                        <div className="flex flex-col gap-1.5">
+                            <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">透明度 <span className="font-mono text-cyan-600">{Math.round(opacity * 100)}%</span></label>
+                            <input
+                                type="range" min="0" max="1" step="0.01"
+                                value={opacity}
+                                onChange={e => handleOpacity(Number(e.target.value))}
+                                className="w-full accent-cyan-500"
+                            />
+                            <div className="flex justify-between text-[10px] text-slate-400">
+                                <span>0</span><span>100</span>
+                            </div>
+                        </div>
                     </div>
 
                     {/* 数値入力 */}
-                    <div className="grid grid-cols-2 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                         <div className="flex flex-col gap-1">
                             <label className="text-[10px] text-slate-500 font-bold">大きさ（数値入力）</label>
                             <Input type="number" step="0.05" min="0.1" max="3.0"
@@ -188,13 +229,25 @@ function FishConfigPopup({
                                 className="h-8 text-xs text-right font-mono"
                             />
                         </div>
+                        <div className="flex flex-col gap-1">
+                            <label className="text-[10px] text-slate-500 font-bold">透明度</label>
+                            <Input type="number" step="0.01" min="0" max="1"
+                                value={opacity}
+                                onChange={e => handleOpacity(Number(e.target.value))}
+                                className="h-8 text-xs text-right font-mono"
+                            />
+                        </div>
                     </div>
+
+                    <Button variant="outline" onClick={handleFlipX} className="gap-1.5">
+                        <FlipHorizontal2 className="h-4 w-4" />画像を左右反転
+                    </Button>
 
                     <div className="flex flex-col gap-1.5">
                         <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">泳ぐ向き</label>
                         <div className="grid grid-cols-3 gap-1.5">
+                            <div className={`text-center text-xs py-1.5 px-2 rounded-lg border font-medium ${direction === "auto" ? "bg-slate-100 text-slate-500 border-slate-300" : "bg-slate-50 text-slate-400 border-slate-200"}`}>自動</div>
                             {([
-                                ["auto", "自動"],
                                 ["left", "← 左"],
                                 ["right", "右 →"],
                             ] as const).map(([value, label]) => (
@@ -205,6 +258,15 @@ function FishConfigPopup({
                             ))}
                         </div>
                     </div>
+
+                    {type === "custom" && (
+                        <div className="grid gap-2 rounded-xl border border-slate-100 bg-slate-50 p-3">
+                            <div className="flex items-center gap-2 text-sm font-bold text-slate-700"><Save className="h-4 w-4 text-slate-500" />この魚だけの動き</div>
+                            <Input value={customName} onChange={event => setCustomName(event.target.value)} className="h-8 text-xs" />
+                            <Textarea value={customCode} onChange={event => setCustomCode(event.target.value)} spellCheck={false} className="min-h-40 font-mono text-xs" />
+                            <Button size="sm" onClick={() => onUpdate(fish.id, { customMotion: { name: customName.trim() || "この魚のカスタム", code: customCode } })}>保存</Button>
+                        </div>
+                    )}
 
                     {/* ピン留め */}
                     <div className="flex flex-col gap-2 bg-slate-50 rounded-xl p-3 border border-slate-100">

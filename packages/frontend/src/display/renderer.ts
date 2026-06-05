@@ -15,6 +15,7 @@ export interface FishEntry {
   layerIndex: number;
   desiredScale: number;
   facing: 1 | -1;
+  flipSign: 1 | -1;
   targetBeat: number;
   targetX: number; targetY: number;
   targetRotation: number; targetScale: number;
@@ -33,6 +34,7 @@ let displayNumber: number | undefined;
 // レイヤー管理用
 const fishLayerContainers = new Map<number, Container>();
 const imageLayerSprites = new Map<string, Sprite>();
+const colorLayerGraphics = new Map<string, Graphics>();
 const FISH_BASE_SIZE = 48;
 let rendererApp: Application | null = null;
 
@@ -64,6 +66,7 @@ export function updateFishTargets(
     ensureFishLayerContainer(layerIndex)?.addChild(entry.sprite);
   }
   entry.facing = fd.d ?? entry.facing;
+  entry.flipSign = fd.fx ? -1 : 1;
   entry.targetBeat = fd.b ?? 0;
   const wrapJumpThreshold = STATE.WORLD_W * STATE.scaleX * 0.5;
   if (Math.abs(screenX - entry.targetX) > wrapJumpThreshold) {
@@ -72,7 +75,7 @@ export function updateFishTargets(
   entry.targetX = screenX;
   entry.targetY = screenY;
   entry.targetRotation = fd.r;
-  entry.targetScale = normalizedFishScale(entry.sprite.texture, desiredScale) * entry.facing;
+  entry.targetScale = normalizedFishScale(entry.sprite.texture, desiredScale) * entry.facing * entry.flipSign;
   entry.targetAlpha = fd.o;
   entry.targetZIndex = fd.z;
 }
@@ -188,10 +191,34 @@ export function updateLayersView(app: Application): void {
     container.visible = fishLayer?.visible ?? true;
   }
 
-  // 画像レイヤーの更新・追加
+  // 画像・色レイヤーの更新・追加
   const currentImageLayerIds = new Set<string>();
+  const currentColorLayerIds = new Set<string>();
   
   for (const layer of layers) {
+    if (layer.type === "color") {
+      currentColorLayerIds.add(layer.id);
+      let graphic = colorLayerGraphics.get(layer.id);
+      if (!graphic) {
+        graphic = new Graphics();
+        app.stage.addChild(graphic);
+        colorLayerGraphics.set(layer.id, graphic);
+      }
+      const imgX = layer.x ?? 0;
+      const imgY = layer.y ?? 0;
+      const imgW = layer.width ?? STATE.WORLD_W;
+      const imgH = layer.height ?? STATE.WORLD_H;
+      const sx = (imgX - STATE.VP.x) * STATE.scaleX;
+      const sy = (imgY - STATE.VP.y) * STATE.scaleY;
+      const parsedColor = parseInt((layer.color ?? "#38bdf8").replace("#", ""), 16);
+      graphic.clear();
+      graphic.rect(sx, sy, imgW * STATE.scaleX, imgH * STATE.scaleY).fill({ color: Number.isFinite(parsedColor) ? parsedColor : 0x38bdf8 });
+      graphic.zIndex = layer.zIndex;
+      graphic.alpha = layer.opacity;
+      graphic.visible = layer.visible;
+      continue;
+    }
+
     if (layer.type !== "image") continue;
     currentImageLayerIds.add(layer.id);
 
@@ -235,6 +262,12 @@ export function updateLayersView(app: Application): void {
     if (!currentImageLayerIds.has(id)) {
       sprite.destroy();
       imageLayerSprites.delete(id);
+    }
+  }
+  for (const [id, graphic] of colorLayerGraphics.entries()) {
+    if (!currentColorLayerIds.has(id)) {
+      graphic.destroy();
+      colorLayerGraphics.delete(id);
     }
   }
 }
@@ -553,8 +586,9 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
   sprite.rotation = fd.r;
   // vx < 0 のとき（左向き移動）は scaleX を反転して画像を左向きにする
   const facing = fd.d ?? 1;
+  const flipSign = fd.fx ? -1 : 1;
   const initialScale = normalizedFishScale(texture, appliedScale);
-  sprite.scale.set(initialScale * facing, initialScale);
+  sprite.scale.set(initialScale * facing * flipSign, initialScale);
   sprite.alpha = fd.o;
   sprite.zIndex = fd.z;
   const layerIndex = fd.l ?? 0;
@@ -566,11 +600,12 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
     layerIndex,
     desiredScale: appliedScale,
     facing,
+    flipSign,
     targetBeat: fd.b ?? 0,
     targetX: sx,
     targetY: sy,
     targetRotation: fd.r,
-    targetScale: initialScale * facing,
+    targetScale: initialScale * facing * flipSign,
     targetAlpha: fd.o,
     targetZIndex: fd.z,
   };
@@ -600,7 +635,7 @@ export function updateFishTexture(id: string, textureUrl: string, fishMap: Map<s
       if (!current || current.textureUrl !== textureUrl) return;
       current.sprite.texture = texture;
       current.textureReady = true;
-      current.targetScale = normalizedFishScale(texture, current.desiredScale) * current.facing;
+      current.targetScale = normalizedFishScale(texture, current.desiredScale) * current.facing * current.flipSign;
     })
     .catch(() => undefined);
 }

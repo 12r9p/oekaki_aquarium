@@ -75,6 +75,7 @@ function tick(): void {
         l: fish.layerIndex,
         u: fish.textureUrl,
         d: facing,
+        fx: fish.userParams.flipX ?? false,
         vx,
         b: beat,
       };

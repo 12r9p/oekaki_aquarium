@@ -192,6 +192,8 @@ export function drawViewportCanvas({
     layers.forEach(layer => {
         if (layer.type === "image" && layer.url) {
             drawObjects.push({ type: "image", zIndex: layer.zIndex, layerId: layer.id, data: layer });
+        } else if (layer.type === "color") {
+            drawObjects.push({ type: "color", zIndex: layer.zIndex, layerId: layer.id, data: layer });
         } else if (layer.type === "fish" && frameFish?.f) {
             frameFish.f.forEach((fish: any) => {
                 if (fish.z === layer.zIndex) {
@@ -210,7 +212,20 @@ export function drawViewportCanvas({
     for (const obj of drawObjects) {
         const zIndexGroup = Math.floor(obj.zIndex / 10);
 
-        if (obj.type === "image") {
+        if (obj.type === "color") {
+            const layer = obj.data;
+            const imgX = layer.x ?? 0;
+            const imgY = layer.y ?? 0;
+            const imgW = layer.width ?? wDraw;
+            const imgH = layer.height ?? hDraw;
+            const p1 = worldToCanvas(imgX, imgY);
+            const p2 = worldToCanvas(imgX + imgW, imgY + imgH);
+            ctx.save();
+            ctx.globalAlpha = layer.opacity ?? 0.35;
+            ctx.fillStyle = layer.color ?? "#38bdf8";
+            ctx.fillRect(p1.x, p1.y, p2.x - p1.x, p2.y - p1.y);
+            ctx.restore();
+        } else if (obj.type === "image") {
             const layer = obj.data;
             const img = loadLayerImage(layer.url);
             if (img.complete && img.naturalWidth > 0) {

@@ -24,6 +24,12 @@ export interface FishMeta {
   isArchived?: boolean;
   /** 水平方向の固定。auto は泳ぎ方に任せる。 */
   direction?: FishDirection;
+  /** 元画像を左右反転して描画する。泳ぐ向きとは独立した画像補正。 */
+  flipX?: boolean;
+  /** 魚単体の透明度。未指定時は 1.0。 */
+  opacity?: number;
+  /** 魚単体に保存したカスタム泳ぎ。 */
+  customMotion?: FishCustomMotion;
   createdAt?: number;
   releasedAt?: number;
   archivedAt?: number;
@@ -64,7 +70,13 @@ export interface FishConfig {
     rotationOffset: number;
     /** 泳ぐ水平方向。未指定は auto。 */
     direction?: FishDirection;
+    /** 元画像を左右反転して描画する。 */
+    flipX?: boolean;
+    /** 魚単体の透明度。デフォルトは 1.0。 */
+    opacity?: number;
   };
+  /** この魚だけに適用するカスタム泳ぎ。 */
+  customMotion?: FishCustomMotion;
   /** Type B/C 用: 手描きモーションパス */
   motionPath?: Vector2[];
   /** レイヤー移動を無効化して常に最前面に固定する */
@@ -155,13 +167,14 @@ export interface LayerConfig {
 // -------------------------------------------------------
 // アプリ全体のレイヤー管理定義 (背景画像や配置オブジェクト)
 // -------------------------------------------------------
-export type AppLayerType = "image" | "fish" | "foreground";
+export type AppLayerType = "image" | "color" | "fish" | "foreground";
 
 export interface AppLayerConfig {
   id: string;        // UUID
   name: string;      // 表示名
   type: AppLayerType;
   url?: string;      // image用
+  color?: string;    // color用 (#RRGGBB)
   x?: number;        // 画像レイヤーのワールドX座標 (未指定時は 0)
   y?: number;        // 画像レイヤーのワールドY座標 (未指定時は 0)
   width?: number;    // 画像レイヤーの幅 (未指定時は WorldW)
@@ -205,6 +218,8 @@ export interface UdpFishData {
   u?: string;
   /** 安定化済みの進行方向。負なら左向き。 */
   d?: 1 | -1;
+  /** 元画像の左右反転。泳ぐ向き d と乗算して使う。 */
+  fx?: boolean;
   /** X方向速度（デバッグ・後方互換用） */
   vx?: number;
   /** 尾びれの拍動に使う -1..1 の位相値 */
@@ -218,6 +233,17 @@ export interface MotionSettings {
   turnStrength: number;
   typeProfiles?: Partial<Record<FishType, MotionTypeProfile>>;
   customCode?: string;
+  customPresets?: MotionCustomPreset[];
+  currentCustomPresetId?: string;
+}
+
+export interface FishCustomMotion {
+  name: string;
+  code: string;
+}
+
+export interface MotionCustomPreset extends FishCustomMotion {
+  id: string;
 }
 
 export interface MotionTypeProfile {

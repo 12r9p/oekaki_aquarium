@@ -275,6 +275,12 @@ export function Sidebar({
                         }}>
                             <ImageIcon className="w-3.5 h-3.5 mr-1.5" /> 画像を追加
                         </Button>
+                        <Button variant="outline" size="sm" className="flex-1 text-xs" onClick={() => {
+                            const newZ = layers.length > 0 ? Math.max(...layers.map(l => l.zIndex)) + 1 : 0;
+                            onUpdateLayers([{ id: "C_" + Date.now(), name: "半透明レイヤー", type: "color", color: "#38bdf8", x: 0, y: 0, width: worldW, height: worldH, zIndex: newZ, visible: true, opacity: 0.35 }, ...layers]);
+                        }}>
+                            <Palette className="w-3.5 h-3.5 mr-1.5" /> 色を追加
+                        </Button>
                     </div>
 
                     <div className="flex flex-col gap-3">
@@ -330,8 +336,8 @@ export function Sidebar({
                                             </Button>
 
                                             {isActive && <CheckCircle2 className="w-4 h-4 text-sky-500" />}
-                                            <div className={`p-1 rounded ${layer.type === 'fish' ? 'bg-sky-100 text-sky-600' : layer.type === 'image' ? 'bg-fuchsia-100 text-fuchsia-600' : 'bg-emerald-100 text-emerald-600'}`}>
-                                                {layer.type === 'fish' ? <Layers className="w-3.5 h-3.5" /> : layer.type === 'image' ? <ImageIcon className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
+                                            <div className={`p-1 rounded ${layer.type === 'fish' ? 'bg-sky-100 text-sky-600' : layer.type === 'image' ? 'bg-fuchsia-100 text-fuchsia-600' : layer.type === 'color' ? 'bg-cyan-100 text-cyan-700' : 'bg-emerald-100 text-emerald-600'}`}>
+                                                {layer.type === 'fish' ? <Layers className="w-3.5 h-3.5" /> : layer.type === 'image' ? <ImageIcon className="w-3.5 h-3.5" /> : layer.type === 'color' ? <Palette className="w-3.5 h-3.5" /> : <Monitor className="w-3.5 h-3.5" />}
                                             </div>
                                             <Input
                                                 value={layer.name}
@@ -340,7 +346,7 @@ export function Sidebar({
                                                 className="h-7 text-xs font-semibold px-2 flex-1 outline-none border-transparent focus-visible:ring-1 bg-transparent hover:bg-slate-50"
                                             />
                                         </div>
-                                        {layer.type === "image" ? (
+                                        {layer.type === "image" || layer.type === "color" ? (
                                             <Button variant="ghost" size="icon" className="w-6 h-6 text-rose-400 hover:text-rose-600 hover:bg-rose-50" onClick={(e) => {
                                                 e.stopPropagation();
                                                 onUpdateLayers(layers.filter(l => l.id !== layer.id));
@@ -394,6 +400,15 @@ export function Sidebar({
                                                         />
                                                         比率を固定してリサイズ
                                                     </label>
+                                                </div>
+                                            </>
+                                        )}
+                                        {layer.type === "color" && (
+                                            <>
+                                                <span className="text-slate-500 text-[10px] font-mono tracking-wider">COLOR</span>
+                                                <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                                                    <Input type="color" value={layer.color ?? "#38bdf8"} onChange={e => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, color: e.target.value } : l))} className="h-7 w-12 p-1" />
+                                                    <Input value={layer.color ?? "#38bdf8"} onChange={e => onUpdateLayers(layers.map(l => l.id === layer.id ? { ...l, color: e.target.value } : l))} className="h-7 text-xs font-mono" />
                                                 </div>
                                             </>
                                         )}

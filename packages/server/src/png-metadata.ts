@@ -6,7 +6,7 @@
 // ============================================================
 
 import { Buffer } from "node:buffer";
-import type { FishDirection, FishType } from "@aquarium/shared";
+import type { FishCustomMotion, FishDirection, FishType } from "@aquarium/shared";
 
 // PNG ファイルシグネチャ (8バイト)
 const PNG_SIG = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
@@ -35,6 +35,9 @@ export interface FishMeta {
   /** アーカイブ状態 */
   isArchived?: boolean;
   direction?: FishDirection;
+  flipX?: boolean;
+  opacity?: number;
+  customMotion?: FishCustomMotion;
   createdAt?: number;
   releasedAt?: number;
   archivedAt?: number;
@@ -50,6 +53,8 @@ export const DEFAULT_FISH_META: FishMeta = {
   tags: [],
   isArchived: false,
   direction: "auto",
+  flipX: false,
+  opacity: 1,
 };
 
 // ============================================================

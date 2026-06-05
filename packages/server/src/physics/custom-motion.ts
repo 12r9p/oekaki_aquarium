@@ -17,12 +17,11 @@ interface CustomMotionApi {
   cos(value: number): number;
 }
 
-let compiledSource = "";
-let compiledUpdate: CustomUpdate | null = null;
+const compiledUpdates = new Map<string, CustomUpdate | null>();
 let lastCompileErrorAt = 0;
 
 export function applyCustomMotion(fish: ActiveFish): void {
-  const code = getWorld().motionSettings.customCode?.trim();
+  const code = (fish.customMotion?.code ?? getWorld().motionSettings.customCode)?.trim();
   if (!code) {
     applyDefaultCustomMotion(fish);
     return;
@@ -49,9 +48,8 @@ export function applyCustomMotion(fish: ActiveFish): void {
 }
 
 function compileCustomMotion(code: string): CustomUpdate | null {
-  if (code === compiledSource) return compiledUpdate;
-  compiledSource = code;
-  compiledUpdate = null;
+  if (compiledUpdates.has(code)) return compiledUpdates.get(code) ?? null;
+  let compiledUpdate: CustomUpdate | null = null;
   try {
     const normalized = code
       .replace(/^\s*export\s+default\s+function\s+update\s*\(/m, "function update(")
@@ -62,6 +60,7 @@ function compileCustomMotion(code: string): CustomUpdate | null {
   } catch (error) {
     logCustomMotionError(error);
   }
+  compiledUpdates.set(code, compiledUpdate);
   return compiledUpdate;
 }
 

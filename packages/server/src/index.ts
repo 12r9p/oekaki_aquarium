@@ -185,7 +185,10 @@ app.post("/api/fish/import", async (c) => {
         speed: meta?.speed ?? 1,
         rotationOffset: 0,
         direction: meta?.direction ?? "auto",
+        flipX: meta?.flipX ?? false,
+        opacity: meta?.opacity ?? 1,
       },
+      customMotion: meta?.customMotion,
       isPinned: meta?.pinnedLayerId !== null && meta?.pinnedLayerId !== undefined,
       pinnedLayerId: meta?.pinnedLayerId ?? undefined,
     };
@@ -387,7 +390,10 @@ app.post("/api/library/:filename/release", async (c) => {
       speed: meta?.speed ?? 1.0,
       rotationOffset: 0,
       direction: meta?.direction ?? "auto",
+      flipX: meta?.flipX ?? false,
+      opacity: meta?.opacity ?? 1,
     },
+    customMotion: meta?.customMotion,
     isPinned: meta?.pinnedLayerId !== null && meta?.pinnedLayerId !== undefined,
     pinnedLayerId: meta?.pinnedLayerId ?? undefined,
   };

@@ -54,6 +54,9 @@ function saveActiveFishToDisk(fish: ActiveFish) {
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
       direction: fish.userParams.direction ?? "auto",
+      flipX: fish.userParams.flipX ?? false,
+      opacity: fish.userParams.opacity ?? 1,
+      customMotion: fish.customMotion,
       createdAt: fish.createdAt,
       releasedAt: fish.releasedAt,
       archivedAt: fish.archivedAt,
@@ -84,6 +87,9 @@ function updateActiveFishOnDisk(fish: ActiveFish) {
       tags: fish.fishMeta?.tags || [],
       isArchived: fish.isArchived ?? false,
       direction: fish.userParams.direction ?? "auto",
+      flipX: fish.userParams.flipX ?? false,
+      opacity: fish.userParams.opacity ?? 1,
+      customMotion: fish.customMotion,
       createdAt: fish.createdAt,
       releasedAt: fish.releasedAt,
       archivedAt: fish.archivedAt,
@@ -213,7 +219,7 @@ export function releaseFish(
     },
     layerIndex: 0,
     targetScale: config.userParams.scale,
-    targetOpacity: 1.0,
+    targetOpacity: Math.max(0, Math.min(config.userParams.opacity ?? 1, 1)),
   };
 
   activePool.set(fish.id, fish);
@@ -252,13 +258,20 @@ export function setPinned(
 /** 魚のプロパティを更新する */
 export function updateFishParams(
   fishId: string,
-  updates: Partial<{ scale: number; speed: number; direction: "auto" | "left" | "right"; isPinned: boolean; pinnedLayerId: number; type: FishType; isArchived: boolean }>
+  updates: Partial<{ scale: number; speed: number; direction: "auto" | "left" | "right"; flipX: boolean; opacity: number; customMotion: ActiveFish["customMotion"]; isPinned: boolean; pinnedLayerId: number; type: FishType; isArchived: boolean }>
 ): boolean {
   const fish = activePool.get(fishId);
   if (!fish) return false;
   if (updates.scale !== undefined) fish.userParams.scale = updates.scale;
   if (updates.speed !== undefined) fish.userParams.speed = updates.speed;
   if (updates.direction !== undefined) fish.userParams.direction = updates.direction;
+  if (updates.flipX !== undefined) fish.userParams.flipX = updates.flipX;
+  if (updates.opacity !== undefined) fish.userParams.opacity = Math.max(0, Math.min(updates.opacity, 1));
+  if (updates.customMotion !== undefined) {
+    const name = typeof updates.customMotion?.name === "string" ? updates.customMotion.name.slice(0, 80) : "";
+    const code = typeof updates.customMotion?.code === "string" ? updates.customMotion.code.slice(0, 20_000) : "";
+    fish.customMotion = name && code ? { name, code } : undefined;
+  }
   if (updates.isPinned !== undefined) fish.isPinned = updates.isPinned;
   if (updates.isPinned === false) fish.pinnedLayerId = undefined;
   if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
@@ -416,7 +429,10 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
             speed: meta.speed,
             rotationOffset: 0,
             direction: meta.direction ?? "auto",
+            flipX: meta.flipX ?? false,
+            opacity: meta.opacity ?? 1,
           },
+          customMotion: meta.customMotion,
           physics: {
             pos: { x: sp.x, y: sp.y },
             vel: initialVelForType(normalizeFishType(meta.type)),
@@ -424,7 +440,7 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           },
           layerIndex: 0,
           targetScale: meta.scale,
-          targetOpacity: 1.0,
+          targetOpacity: Math.max(0, Math.min(meta.opacity ?? 1, 1)),
           isPinned: meta.pinnedLayerId !== null && meta.pinnedLayerId !== undefined,
           pinnedLayerId: meta.pinnedLayerId ?? undefined,
           isArchived: meta.isArchived ?? false,

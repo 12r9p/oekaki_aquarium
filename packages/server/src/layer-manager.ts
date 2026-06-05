@@ -63,7 +63,7 @@ function applyLayerProps(fish: ActiveFish, layerIdx: number): void {
   fish.layerIndex = layerIdx;
   // これらの目標値に向かってクライアントが Lerp で補間する
   fish.targetScale = fish.userParams.scale * config.scale * globalScale;
-  fish.targetOpacity = config.opacity;
+  fish.targetOpacity = config.opacity * Math.max(0, Math.min(fish.userParams.opacity ?? 1, 1));
   // 遠くの魚は遅く動かす（パララックス効果）
   fish.physics.speedMultiplier = config.speedFactor;
 }

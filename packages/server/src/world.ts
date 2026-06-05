@@ -121,6 +121,14 @@ export function updateWorldMotionSettings(
       turnStrength: Math.max(0.2, Math.min(motionSettings.turnStrength, 2)),
       typeProfiles: normalizeMotionTypeProfiles(motionSettings.typeProfiles),
       customCode: typeof motionSettings.customCode === "string" ? motionSettings.customCode.slice(0, 20_000) : undefined,
+      customPresets: Array.isArray(motionSettings.customPresets)
+        ? motionSettings.customPresets.slice(0, 50).map((preset, index) => ({
+            id: typeof preset.id === "string" && preset.id ? preset.id.slice(0, 80) : `custom_${index}`,
+            name: typeof preset.name === "string" && preset.name ? preset.name.slice(0, 80) : `カスタム ${index + 1}`,
+            code: typeof preset.code === "string" ? preset.code.slice(0, 20_000) : "",
+          })).filter(preset => preset.code.trim().length > 0)
+        : undefined,
+      currentCustomPresetId: typeof motionSettings.currentCustomPresetId === "string" ? motionSettings.currentCustomPresetId.slice(0, 80) : undefined,
     };
   }
 }
