@@ -5,12 +5,14 @@ import { initDepthBehavior, resetDepthBehavior, updateDepthBehavior, type DepthB
 import { motionProfileFor, movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
-// squid.ts — イカ型: ホバリング + Sin波パルス推進
+// squid.ts — イカ型: ホバリング + Sin波パルス推進 (相対座標・滑らかな物理)
 //
 // 動作原理:
 //   - 「休止 → パルス推進 → 休止」サイクルを繰り返す
-//   - Y方向は緩やかなSin波でふわふわホバリング
-//   - 壁でUターン
+//   - Y方向は絶対目標位置への引き寄せを廃止。
+//   - 初回位置をベースに緩やかなランダムドリフトと壁反発で baseY を決定し、
+//     そこを基準にふわふわホバリングする。
+//   - Y方向の速度は位置差分を直接代入せず、力学的な補間（スプリング力）に修正。
 // ============================================================
 
 const squidState = new Map<string, {
@@ -18,8 +20,6 @@ const squidState = new Map<string, {
   dir: 1 | -1;     // 現在の向き
   baseY: number;   // Y基準
   phase: number;
-  laneTargetY: number;
-  framesUntilLaneChange: number;
   turnCooldown: number;
   depth: DepthBehaviorState;
 }>();
@@ -35,8 +35,6 @@ export function applySquid(fish: ActiveFish): void {
       dir: Math.random() < 0.5 ? 1 : -1,
       baseY: fish.physics.pos.y,
       phase: Math.random() * Math.PI * 2,
-      laneTargetY: fish.physics.pos.y,
-      framesUntilLaneChange: 120 + Math.floor(Math.random() * 360),
       turnCooldown: 0,
       depth: initDepthBehavior(fish),
     });
@@ -45,13 +43,7 @@ export function applySquid(fish: ActiveFish): void {
   const profile = motionProfileFor(fish);
   state.frame = (state.frame + 1) % CYCLE;
   state.turnCooldown = Math.max(0, state.turnCooldown - 1);
-  state.framesUntilLaneChange--;
-  if (state.framesUntilLaneChange <= 0) {
-    const spread = verticalSpreadForFish(fish);
-    const marginRatio = Math.max(0.05, 0.18 / spread);
-    state.laneTargetY = world.height * (marginRatio + Math.random() * (1 - marginRatio * 2));
-    state.framesUntilLaneChange = 180 + Math.floor(Math.random() * 420);
-  }
+
   const margin = PHYSICS.WALL_MARGIN * 1.5;
   if (world.horizontalBoundaryMode === "bounce" && state.turnCooldown === 0) {
     if (fish.physics.pos.x > world.width - margin && state.dir === 1) {
@@ -63,35 +55,66 @@ export function applySquid(fish: ActiveFish): void {
       state.turnCooldown = 75;
     }
   }
-  state.baseY += (state.laneTargetY - state.baseY) * 0.004 * turnStrengthForFish(fish);
-  state.baseY = Math.max(margin, Math.min(world.height - margin, state.baseY));
 
-  // X方向: パルスか巡航か
+  // --- X方向: パルス推進 ---
   const isJetting = state.frame < PHYSICS.SQUID_PULSE_FRAMES;
   const targetVX = isJetting
     ? PHYSICS.SQUID_PULSE_SPEED * state.dir * movementScale(fish) * Math.max(0.55, profile.tailBeat)
     : PHYSICS.SQUID_CRUISE_SPEED * state.dir * movementScale(fish);
 
-  // 速度を滑らかに補間
   const turning = fish.physics.vel.x * state.dir < 0;
   const accel = turning ? 0.045 / Math.max(0.45, profile.glide) : (isJetting ? 0.2 : 0.065 / Math.max(0.45, profile.glide));
   fish.physics.vel.x += (targetVX - fish.physics.vel.x) * accel;
   fish.physics.pos.x += fish.physics.vel.x;
 
-  // Y方向: sin波ホバリング
+  // --- Y方向: ホバリング & 相対ベースラインドリフト ---
+  // 1. baseY の緩やかな相対ドリフト
+  state.baseY += (Math.random() - 0.5) * 0.4 * verticalSpreadForFish(fish);
+
+  // 2. 壁からの反発で baseY をクランプ・補正
+  const WALL_REPULSE = 180;
+  const WALL_FORCE_BASE = 1.0;
+  if (state.baseY < WALL_REPULSE) {
+    state.baseY += WALL_FORCE_BASE * (1 - state.baseY / WALL_REPULSE);
+  }
+  if (state.baseY > world.height - WALL_REPULSE) {
+    state.baseY -= WALL_FORCE_BASE * (1 - (world.height - state.baseY) / WALL_REPULSE);
+  }
+
+  // 禁止エリアからの反発で baseY を押し戻す
+  for (const fz of world.forbiddenZones) {
+    const cy = fz.y + fz.height / 2;
+    const halfH = fz.height / 2 + WALL_REPULSE;
+    const dyBase = state.baseY - cy;
+    if (Math.abs(fish.physics.pos.x - (fz.x + fz.width / 2)) < fz.width / 2 + WALL_REPULSE) {
+      if (Math.abs(dyBase) < halfH) {
+        state.baseY += Math.sign(dyBase) * WALL_FORCE_BASE * ((halfH - Math.abs(dyBase)) / WALL_REPULSE);
+      }
+    }
+  }
+
+  // 3. ホバリング (Sin波) の計算
   const t = state.phase + (Date.now() / 1000) * (Math.PI * 2 / (PHYSICS.SQUID_HOVER_PERIOD / 60)) * Math.max(0.55, profile.tailBeat);
-  const targetY = state.baseY + Math.sin(t) * PHYSICS.SQUID_HOVER_AMP * verticalSpreadForFish(fish);
-  const dy = (targetY - fish.physics.pos.y) * (0.022 + 0.02 * turnStrengthForFish(fish))
-    + updateDepthBehavior(fish, state.depth, 0.007) * 8;
-  fish.physics.vel.y = dy;
-  fish.physics.pos.y += dy;
+  const hoverOffset = Math.sin(t) * PHYSICS.SQUID_HOVER_AMP * verticalSpreadForFish(fish);
+
+  const targetY = state.baseY + hoverOffset;
+  const depthForce = updateDepthBehavior(fish, state.depth, 0.007) * 8;
+
+  // 位置差分に基づくスプリング力を速度に加算 (直接代入ではなく滑らかに追従)
+  const springForce = (targetY - fish.physics.pos.y) * 0.02 * (1 + turnStrengthForFish(fish) * 0.5);
+  fish.physics.vel.y = (fish.physics.vel.y + springForce + depthForce) * 0.88;
+
+  // 最大速度のクランプ
+  const maxVY = PHYSICS.SQUID_PULSE_SPEED * 0.5 * verticalSpreadForFish(fish);
+  fish.physics.vel.y = Math.max(-maxVY, Math.min(maxVY, fish.physics.vel.y));
+
+  fish.physics.pos.y += fish.physics.vel.y;
 }
 
 export function resetSquidState(fishId: string, newY: number): void {
   const state = squidState.get(fishId);
   if (state) {
     state.baseY = newY;
-    state.laneTargetY = newY;
     resetDepthBehavior(state.depth, newY);
   }
 }

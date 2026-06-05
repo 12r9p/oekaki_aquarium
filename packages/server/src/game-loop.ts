@@ -63,7 +63,7 @@ function tick(): void {
         : vx * previousFacing < -0.45 ? (vx < 0 ? -1 : 1) : previousFacing;
       fishFacing.set(fish.id, facing);
       // 左右は反転、回転は上下の傾きだけに分け、二重反転を防ぐ。
-      const rawRotation = Math.max(-0.45, Math.min(0.45, Math.atan2(Math.abs(vy) < 0.025 ? 0 : vy * 0.42, Math.max(Math.abs(vx), 0.35))));
+      const rawRotation = Math.max(-0.55, Math.min(0.55, Math.atan2(vy, Math.max(Math.abs(vx), 0.25))));
       const previousRotation = fishRenderRotation.get(fish.id) ?? rawRotation;
       const r = previousRotation + (rawRotation - previousRotation) * 0.18;
       fishRenderRotation.set(fish.id, r);

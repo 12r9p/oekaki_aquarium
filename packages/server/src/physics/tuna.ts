@@ -5,20 +5,17 @@ import { initDepthBehavior, resetDepthBehavior, updateDepthBehavior, type DepthB
 import { motionProfileFor, movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
-// tuna.ts — マグロ型: 高速直線往復
+// tuna.ts — マグロ型: 高速直線往復 (相対座標・滑らかな縦移動)
 //
 // 動作原理:
 //   - 一定の高速で横方向に移動し続ける
-//   - ワールド境界に近づいたら向きを反転する（スムーズなUターン）
-//   - Y方向はごく小さなサイン波ドリフトのみ
+//   - ワールド境界や進入禁止エリアに近づいたら向きを反転する (Uターン)
+//   - Y方向の絶対目標位置への引き寄せを廃止し、相対的な力学ドリフトと壁反発で動く
 // ============================================================
 
 const tunaState = new Map<string, {
   dir: 1 | -1;     // 現在の進行方向（+1=右, -1=左）
   frame: number;   // 全体フレームカウント
-  baseY: number;   // Y基準座標
-  laneTargetY: number;
-  framesUntilLaneChange: number;
   speedFactor: number;
   burstPhase: number;
   turnCooldown: number;
@@ -34,10 +31,7 @@ export function applyTuna(fish: ActiveFish): void {
     // 初回: 初期方向をランダムに決定
     tunaState.set(fish.id, {
       dir: Math.random() < 0.5 ? 1 : -1,
-      frame: Math.floor(Math.random() * 360), // フレームオフセット（全員一斉動作防止）
-      baseY: fish.physics.pos.y,
-      laneTargetY: fish.physics.pos.y,
-      framesUntilLaneChange: 120 + Math.floor(Math.random() * 500),
+      frame: Math.floor(Math.random() * 360),
       speedFactor: 0.82 + Math.random() * 0.36,
       burstPhase: Math.random() * Math.PI * 2,
       turnCooldown: 0,
@@ -49,14 +43,6 @@ export function applyTuna(fish: ActiveFish): void {
   state.frame++;
   state.turnCooldown = Math.max(0, state.turnCooldown - 1);
   state.burstPhase += 0.018 * Math.max(0.5, profile.tailBeat);
-  state.framesUntilLaneChange--;
-  if (state.framesUntilLaneChange <= 0) {
-    const spread = verticalSpreadForFish(fish);
-    const marginRatio = Math.max(0.04, 0.18 / spread);
-    state.laneTargetY = world.height * (marginRatio + Math.random() * (1 - marginRatio * 2));
-    state.framesUntilLaneChange = 180 + Math.floor(Math.random() * 480);
-  }
-  state.baseY += (state.laneTargetY - state.baseY) * 0.003 * turnStrengthForFish(fish);
 
   // 壁および禁止エリアに近づいたら向きを反転
   let shouldTurnLeft = false;
@@ -71,7 +57,6 @@ export function applyTuna(fish: ActiveFish): void {
   // 2. 進入禁止エリアの判定
   if (!shouldTurnLeft && !shouldTurnRight) {
     for (const fz of world.forbiddenZones) {
-      // 魚の予想進行先に禁止エリアがあるかチェック
       if (
         fish.physics.pos.y > fz.y - margin &&
         fish.physics.pos.y < fz.y + fz.height + margin
@@ -88,16 +73,14 @@ export function applyTuna(fish: ActiveFish): void {
 
   if (state.turnCooldown === 0 && shouldTurnLeft && state.dir === 1) {
     state.dir = -1;
-    state.baseY = fish.physics.pos.y; // Uターン時にY基準を更新
     state.turnCooldown = 90;
   }
   if (state.turnCooldown === 0 && shouldTurnRight && state.dir === -1) {
     state.dir = 1;
-    state.baseY = fish.physics.pos.y;
     state.turnCooldown = 90;
   }
 
-  // X: 一定速度
+  // --- X方向: 一定速度巡航 ---
   const burst = 1 + Math.sin(state.burstPhase) * 0.08 * Math.max(0.4, profile.tailBeat);
   const targetVX = speed * state.speedFactor * burst * state.dir;
   const turning = fish.physics.vel.x * state.dir < 0;
@@ -107,28 +90,51 @@ export function applyTuna(fish: ActiveFish): void {
   fish.physics.vel.x += (targetVX - fish.physics.vel.x) * accel;
   fish.physics.pos.x += fish.physics.vel.x;
 
-  // Y: sin波でごくわずかにドリフト（ほぼ水平）
-  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT * Math.max(0.5, profile.tailBeat)) * 42 * verticalSpreadForFish(fish);
-  const targetY = state.baseY + driftY;
-  const depthForce = updateDepthBehavior(fish, state.depth, 0.0045) * 12;
-  const dy = (targetY - fish.physics.pos.y) * (0.024 + 0.014 * turnStrengthForFish(fish)) + depthForce;
-  fish.physics.vel.y = dy;
-  fish.physics.pos.y += dy;
+  // --- Y方向: 加速度・力学的なランダムドリフトと相対壁反発 ---
+  // 1. 微小なランダム加速度
+  let ay = (Math.random() - 0.5) * 0.03 * verticalSpreadForFish(fish);
+  // 2. 緩やかなSin波のうねり
+  ay += Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 0.015 * verticalSpreadForFish(fish);
+
+  // 3. 上下の壁からの反発（相対）
+  const WALL_REPULSE = 180;
+  const WALL_FORCE = 0.25;
+  if (fish.physics.pos.y < WALL_REPULSE) {
+    ay += WALL_FORCE * (1 - fish.physics.pos.y / WALL_REPULSE);
+  }
+  if (fish.physics.pos.y > world.height - WALL_REPULSE) {
+    ay -= WALL_FORCE * (1 - (world.height - fish.physics.pos.y) / WALL_REPULSE);
+  }
+
+  // 4. 禁止エリアからの反発（相対）
+  for (const fz of world.forbiddenZones) {
+    const cy = fz.y + fz.height / 2;
+    const halfH = fz.height / 2 + WALL_REPULSE;
+    const dy = fish.physics.pos.y - cy;
+    if (Math.abs(fish.physics.pos.x - (fz.x + fz.width / 2)) < fz.width / 2 + WALL_REPULSE) {
+      if (Math.abs(dy) < halfH) {
+        ay += Math.sign(dy) * WALL_FORCE * ((halfH - Math.abs(dy)) / WALL_REPULSE);
+      }
+    }
+  }
+
+  const depthForce = updateDepthBehavior(fish, state.depth, 0.0045) * 0.5;
+  ay += depthForce;
+
+  // Y速度の更新
+  fish.physics.vel.y = (fish.physics.vel.y + ay) * 0.94;
+  
+  // マグロは基本水平を維持するため、縦の最大速度を厳しく制限
+  const maxVY = speed * 0.22 * verticalSpreadForFish(fish);
+  fish.physics.vel.y = Math.max(-maxVY, Math.min(maxVY, fish.physics.vel.y));
+
+  fish.physics.pos.y += fish.physics.vel.y;
 }
 
-/**
- * 魚の再配置後にbaseYを新位置に合わせてリセットする。
- * これを呼ばないと再配置後も古いbaseYに向かって引き戻される。
- */
 export function resetTunaState(fishId: string, newY: number): void {
   const state = tunaState.get(fishId);
   if (state) {
-    state.baseY = newY;
-    state.laneTargetY = newY;
     resetDepthBehavior(state.depth, newY);
-    state.frame = Math.floor(Math.random() * 360); // フレームも乱数リセット
-  } else {
-    // stateがない場合は次のフレームで初期化されるが、baseYはpos.yから自然に取得される
-    // noop: applyTunaの初回初期化で新pos.yが使われる
+    state.frame = Math.floor(Math.random() * 360);
   }
 }

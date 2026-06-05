@@ -78,8 +78,8 @@
       "scale": 1
     },
     "display:tab-c1aded82": {
-      "x": 76.69578503081237,
-      "y": 43.153183156518665,
+      "x": 100.3397634319581,
+      "y": 145.68016914378777,
       "width": 1130,
       "height": 1381,
       "scale": 1
@@ -130,9 +130,24 @@
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 1345,
-    "height": 1504,
-    "forbiddenZones": [],
+    "width": 1373,
+    "height": 1757,
+    "forbiddenZones": [
+      {
+        "id": "fz_1780692409279",
+        "x": -14,
+        "y": 1572,
+        "width": 1414,
+        "height": 400
+      },
+      {
+        "id": "fz_1780692453826",
+        "x": -151,
+        "y": -297,
+        "width": 1699,
+        "height": 400
+      }
+    ],
     "spawnPoints": [
       {
         "id": "sp_1780592286214",
@@ -191,7 +206,7 @@
       }
     ],
     "horizontalBoundaryMode": "wrap",
-    "fishSpeedMultiplier": 0.8,
+    "fishSpeedMultiplier": 0.95,
     "fishScaleMultiplier": 1,
     "motionSettings": {
       "verticalSpread": 2,

@@ -5,13 +5,12 @@ import { initDepthBehavior, updateDepthBehavior, type DepthBehaviorState } from 
 import { motionProfileFor, movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
-// shark.ts — サメ型: 大弧単独回遊（優雅な旋回）
+// shark.ts — サメ型: 大弧単独回遊 (相対回避・滑らかな物理)
 //
 // 動作原理:
 //   - 常にゆっくりと一定の曲率で弧を描いて回遊する
-//   - 弧の半径は大きく（旋回周期が長い）
-//   - 縦移動を強く抑制して横移動を基本とした楕円軌道を描く
-//   - 他の魚に干渉せず単独行動
+//   - 壁や禁止エリアに近づいたときは、絶対座標（中央）を向くのをやめ、
+//     壁の法線（壁から離れる方向ベクトル）を合成して回避する。
 // ============================================================
 
 const sharkState = new Map<string, {
@@ -54,22 +53,58 @@ export function applyShark(fish: ActiveFish): void {
   while (targetDiff < -Math.PI) targetDiff += Math.PI * 2;
   state.angle += Math.max(-state.turnRate, Math.min(state.turnRate, targetDiff * 0.015)) * turnStrengthForFish(fish);
   state.angle += state.turnRate * state.turnDir * 0.25 * turnStrengthForFish(fish);
+
+  // --- 相対的な壁・禁止エリア回避 ---
   const margin = PHYSICS.WALL_MARGIN * 2.5;
-  if (
-    (world.horizontalBoundaryMode === "bounce" && fish.physics.pos.x < margin) ||
-    (world.horizontalBoundaryMode === "bounce" && fish.physics.pos.x > world.width - margin) ||
-    fish.physics.pos.y < margin ||
-    fish.physics.pos.y > world.height - margin
-  ) {
-    const inwardAngle = Math.atan2(
-      world.height / 2 - fish.physics.pos.y,
-      world.width / 2 - fish.physics.pos.x,
-    );
+  let avoidX = 0;
+  let avoidY = 0;
+  let isNearWall = false;
+
+  if (world.horizontalBoundaryMode === "bounce") {
+    if (fish.physics.pos.x < margin) {
+      avoidX += (1 - fish.physics.pos.x / margin);
+      isNearWall = true;
+    }
+    if (fish.physics.pos.x > world.width - margin) {
+      avoidX -= (1 - (world.width - fish.physics.pos.x) / margin);
+      isNearWall = true;
+    }
+  }
+  if (fish.physics.pos.y < margin) {
+    avoidY += (1 - fish.physics.pos.y / margin);
+    isNearWall = true;
+  }
+  if (fish.physics.pos.y > world.height - margin) {
+    avoidY -= (1 - (world.height - fish.physics.pos.y) / margin);
+    isNearWall = true;
+  }
+
+  // 進入禁止エリアからの相対的回避ベクトル
+  for (const fz of world.forbiddenZones) {
+    const halfW = fz.width / 2 + margin;
+    const halfH = fz.height / 2 + margin;
+    const dx = fish.physics.pos.x - (fz.x + fz.width / 2);
+    const dy = fish.physics.pos.y - (fz.y + fz.height / 2);
+    if (Math.abs(dx) < halfW && Math.abs(dy) < halfH) {
+      const overlapX = halfW - Math.abs(dx);
+      const overlapY = halfH - Math.abs(dy);
+      if (overlapX < overlapY) {
+        avoidX += Math.sign(dx) * (overlapX / margin);
+      } else {
+        avoidY += Math.sign(dy) * (overlapY / margin);
+      }
+      isNearWall = true;
+    }
+  }
+
+  if (isNearWall) {
+    // 回避ベクトルの方向に向くように徐々に角度を合わせる
+    const inwardAngle = Math.atan2(avoidY, avoidX);
     state.targetAngle = inwardAngle;
     let diff = inwardAngle - state.angle;
     while (diff > Math.PI) diff -= Math.PI * 2;
     while (diff < -Math.PI) diff += Math.PI * 2;
-    state.angle += Math.max(-0.055, Math.min(0.055, diff)) * turnStrengthForFish(fish);
+    state.angle += Math.max(-0.065, Math.min(0.065, diff)) * turnStrengthForFish(fish);
   }
 
   const speed = PHYSICS.SHARK_SPEED * movementScale(fish) * (0.92 + Math.sin(state.frame * 0.011) * 0.08);
