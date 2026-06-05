@@ -80,9 +80,11 @@ export function applyTuna(fish: ActiveFish): void {
     state.turnCooldown = 90;
   }
 
-  // --- X方向: 一定速度巡航 ---
-  const burst = 1 + Math.sin(state.burstPhase) * 0.08 * Math.max(0.4, profile.tailBeat);
-  const targetVX = speed * state.speedFactor * burst * state.dir;
+  // --- X方向: Kick-and-Glide 推進 (尾鰭の振りに同期したパルス加減速) ---
+  const cosPhase = Math.cos(state.burstPhase);
+  const kickPulse = cosPhase * cosPhase; // ゼロクロス付近で 1.0、端で 0.0
+  const kickFactor = 0.91 + kickPulse * 0.18 * Math.max(0.4, profile.tailBeat);
+  const targetVX = speed * state.speedFactor * kickFactor * state.dir;
   const turning = fish.physics.vel.x * state.dir < 0;
   const accel = turning
     ? Math.max(0.018, Math.min(0.08, 0.045 / Math.max(0.45, profile.glide)))

@@ -5,28 +5,29 @@ import { initDepthBehavior, updateDepthBehavior, type DepthBehaviorState } from 
 import { motionProfileFor, movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
-// shark.ts — サメ型: 大弧単独回遊 (相対回避・滑らかな物理)
+// shark.ts — サメ型: 大弧単独回遊 (角速度慣性による優雅な旋回)
 //
-// 動作原理:
-//   - 常にゆっくりと一定の曲率で弧を描いて回遊する
-//   - 壁や禁止エリアに近づいたときは、絶対座標（中央）を向くのをやめ、
-//     壁の法線（壁から離れる方向ベクトル）を合成して回避する。
+// 改善点:
+//   - サメの進行方向角度 `angle` の更新に「角速度の慣性モデル (angularVelocity)」を導入。
+//     急激な角度変化を物理的に不可能にし、常に滑らかで大きな弧を描いて泳ぐように改善。
+//   - 壁や禁止エリアの回避時も、角速度の慣性を経て緩やかに向きを変えるため、
+//     衝突回避が非常に優雅になりました。
 // ============================================================
 
 const sharkState = new Map<string, {
-  angle: number;     // 現在の進行方向角 (radian)
-  turnDir: 1 | -1;  // 旋回方向（常に一定）
+  angle: number;            // 現在の進行方向角 (radian)
+  turnDir: 1 | -1;          // 旋回方向
   frame: number;
   turnRate: number;
   framesUntilTurnChange: number;
   targetAngle: number;
+  angularVelocity: number;  // 角速度 (慣性用)
   depth: DepthBehaviorState;
 }>();
 
 export function applyShark(fish: ActiveFish): void {
   const world = getWorld();
   if (!sharkState.has(fish.id)) {
-    // 初回: 進行方向をランダムに設定、旋回方向もランダム
     sharkState.set(fish.id, {
       angle: Math.random() * Math.PI * 2,
       turnDir: Math.random() < 0.5 ? 1 : -1,
@@ -34,6 +35,7 @@ export function applyShark(fish: ActiveFish): void {
       turnRate: PHYSICS.SHARK_TURN_RATE * (0.35 + Math.random() * 0.65),
       framesUntilTurnChange: 240 + Math.floor(Math.random() * 600),
       targetAngle: Math.random() * Math.PI * 2,
+      angularVelocity: 0,
       depth: initDepthBehavior(fish),
     });
   }
@@ -48,13 +50,7 @@ export function applyShark(fish: ActiveFish): void {
     state.framesUntilTurnChange = 300 + Math.floor(Math.random() * 700);
   }
 
-  let targetDiff = state.targetAngle - state.angle;
-  while (targetDiff > Math.PI) targetDiff -= Math.PI * 2;
-  while (targetDiff < -Math.PI) targetDiff += Math.PI * 2;
-  state.angle += Math.max(-state.turnRate, Math.min(state.turnRate, targetDiff * 0.015)) * turnStrengthForFish(fish);
-  state.angle += state.turnRate * state.turnDir * 0.25 * turnStrengthForFish(fish);
-
-  // --- 相対的な壁・禁止エリア回避 ---
+  // --- 相対的な壁・禁止エリア回避ベクトルの計算 ---
   const margin = PHYSICS.WALL_MARGIN * 2.5;
   let avoidX = 0;
   let avoidY = 0;
@@ -98,20 +94,38 @@ export function applyShark(fish: ActiveFish): void {
   }
 
   if (isNearWall) {
-    // 回避ベクトルの方向に向くように徐々に角度を合わせる
-    const inwardAngle = Math.atan2(avoidY, avoidX);
-    state.targetAngle = inwardAngle;
-    let diff = inwardAngle - state.angle;
-    while (diff > Math.PI) diff -= Math.PI * 2;
-    while (diff < -Math.PI) diff += Math.PI * 2;
-    state.angle += Math.max(-0.065, Math.min(0.065, diff)) * turnStrengthForFish(fish);
+    // 壁付近では回避方向ベクトルを目標角度に設定
+    state.targetAngle = Math.atan2(avoidY, avoidX);
   }
+
+  // --- 角速度慣性モデルによる角度の更新 ---
+  let targetDiff = state.targetAngle - state.angle;
+  while (targetDiff > Math.PI) targetDiff -= Math.PI * 2;
+  while (targetDiff < -Math.PI) targetDiff += Math.PI * 2;
+
+  // 通常巡航による緩やかな旋回
+  const normalTurn = state.turnRate * state.turnDir * 0.22;
+  // 目標方向への操舵旋回
+  // 壁回避時はより早く向きを変えるため、感度を高める
+  const sensitivity = isNearWall ? 0.024 : 0.012;
+  const steerTurn = Math.max(-state.turnRate, Math.min(state.turnRate, targetDiff * sensitivity));
+  
+  const desiredAngularVel = (steerTurn + normalTurn) * turnStrengthForFish(fish);
+
+  // 前フレームの角速度を90%維持し、滑らかに加速・減衰させる (角加速度の制限)
+  state.angularVelocity += (desiredAngularVel - state.angularVelocity) * 0.10;
+  
+  // 最大角速度を厳しく制限 (急旋回の防止)
+  const maxAngVel = PHYSICS.SHARK_TURN_RATE * 1.3 * turnStrengthForFish(fish);
+  state.angularVelocity = Math.max(-maxAngVel, Math.min(maxAngVel, state.angularVelocity));
+
+  state.angle += state.angularVelocity;
 
   const speed = PHYSICS.SHARK_SPEED * movementScale(fish) * (0.92 + Math.sin(state.frame * 0.011) * 0.08);
 
-  // 速度ベクトル計算（縦成分を抑制）
+  // 速度ベクトル計算（サメらしく縦成分を強く抑制）
   const targetVX = Math.cos(state.angle) * speed;
-  const targetVY = Math.sin(state.angle) * speed * PHYSICS.SHARK_VERTICAL_DAMPING * verticalSpreadForFish(fish)
+  const targetVY = Math.sin(state.angle) * speed * PHYSICS.SHARK_VERTICAL_DAMPING * 0.85 * verticalSpreadForFish(fish)
     + updateDepthBehavior(fish, state.depth, 0.004) * 16;
   const accel = Math.max(0.025, Math.min(0.16, 0.08 / Math.max(0.45, profile.glide)));
   fish.physics.vel.x += (targetVX - fish.physics.vel.x) * accel;

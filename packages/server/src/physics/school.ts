@@ -5,13 +5,14 @@ import { initDepthBehavior, resetDepthBehavior, updateDepthBehavior, type DepthB
 import { motionProfileFor, movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
-// school.ts — イワシ群れ型: 相対的なBoidsと相対壁反発のみで動作
+// school.ts — イワシ群れ型: 視野制限 (FOV) による追従ストリーム群れ
 //
 // 改善点:
-//   - ワールド中央 (絶対位置) への引き寄せを完全に廃止。
-//   - 代わりに、各個体がゆっくり進行方向を変える Wander 推進力をベースとする。
-//   - これにより、放流直後に画面中央へダッシュする現象を解決。
-//   - 壁や禁止エリアからの反発は距離に基づく相対的な力として加算。
+//   - 視野角制限 (FOV: Field of View) を導入。
+//     進行方向から背後120度以上 (内積 < -0.5) にいる他の魚を無視することで、
+//     前の魚に追従し、自然な「帯状のストリーム」を形成するように改善。
+//   - アライメント (整列) の重みを最適化し、群れ全体の進行同調性を向上。
+//   - Wander（ランダム角度変更）の変動幅を適度に抑制し、推進方向の安定性を向上。
 // ============================================================
 
 function limit(v: Vector2, max: number): Vector2 {
@@ -31,9 +32,8 @@ function steer(desired: Vector2, current: Vector2): Vector2 {
   );
 }
 
-// 壁反発パラメータ
-const WALL_REPULSE    = 180;    // 壁・禁止エリアの反発開始距離(px)
-const WALL_FORCE      = 0.35;   // 壁反発力
+const WALL_REPULSE    = 180;
+const WALL_FORCE      = 0.35;
 
 interface SchoolState {
   group: number;
@@ -80,8 +80,9 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   state.framesUntilTurn--;
   if (state.framesUntilTurn <= 0) {
     const currentAngle = Math.hypot(vel.x, vel.y) > 0.01 ? Math.atan2(vel.y, vel.x) : state.desiredAngle;
-    state.desiredAngle = currentAngle + (Math.random() - 0.5) * Math.PI * 0.8;
-    state.turnRate = 0.008 + Math.random() * 0.015;
+    // 変動幅を π*0.48 に絞り、ストリームとしての直進安定性を強化
+    state.desiredAngle = currentAngle + (Math.random() - 0.5) * Math.PI * 0.48;
+    state.turnRate = 0.006 + Math.random() * 0.012;
     state.framesUntilTurn = 90 + Math.floor(Math.random() * 180);
   }
 
@@ -98,10 +99,15 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   let fx = Math.cos(newAngle) * cruiseSpeed * 0.15;
   let fy = Math.sin(newAngle) * cruiseSpeed * 0.10 * verticalSpreadForFish(fish);
 
-  // --- 2. Boids 力 (分離・整列・結合) ---
+  // --- 2. Boids 力 (視野角制限付き) ---
   let sepX = 0, sepY = 0, sepCount = 0;
   let aliX = 0, aliY = 0, aliCount = 0;
   let cohX = 0, cohY = 0, cohCount = 0;
+
+  // 視野角判定の準備 (進行方向ベクトル)
+  const hasHeading = curLen > 0.05;
+  const hx = hasHeading ? vel.x / curLen : Math.cos(state.desiredAngle);
+  const hy = hasHeading ? vel.y / curLen : Math.sin(state.desiredAngle);
 
   for (const other of allFish) {
     if (
@@ -110,20 +116,22 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
       other.isAutoHidden ||
       other.type === "anchor"
     ) continue;
-    let dx = pos.x - other.physics.pos.x;
-    let dy = pos.y - other.physics.pos.y;
-    let dist = Math.hypot(dx, dy);
-    if (dist < 0.001) {
-      const angle = (groupForFish(fish.id + other.id) / 8) * Math.PI * 2;
-      dx = Math.cos(angle);
-      dy = Math.sin(angle);
-      dist = 1;
-    }
 
+    const toOtherX = other.physics.pos.x - pos.x;
+    const toOtherY = other.physics.pos.y - pos.y;
+    let dist = Math.hypot(toOtherX, toOtherY);
+    if (dist < 0.001) continue;
+
+    // --- 視野制限 (FOV) ---
+    // 背後120度（cos(120) = -0.5）にいる他魚は無視することで、帯状のストリームが形成される
+    const dot = (toOtherX / dist) * hx + (toOtherY / dist) * hy;
+    if (dot < -0.5) continue;
+
+    // 分離ベクトルは pos - other (元のコードの極性を維持)
     const separationRadius = PHYSICS.BOIDS_SEPARATION_RADIUS * 1.05;
     if (dist < separationRadius) {
-      sepX += (dx / dist) / dist;
-      sepY += (dy / dist) / dist;
+      sepX += (-toOtherX / dist) / dist;
+      sepY += (-toOtherY / dist) / dist;
       sepCount++;
     }
     if (other.type === "school" && groupForFish(other.id) === state.group && dist < PHYSICS.BOIDS_ALIGNMENT_RADIUS * 1.15) {
@@ -147,8 +155,9 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   if (aliCount > 0) {
     const aliDesired = normalize({ x: aliX / aliCount, y: aliY / aliCount });
     const a = steer({ x: aliDesired.x * baseSpeed, y: aliDesired.y * baseSpeed }, vel);
-    fx += a.x * PHYSICS.BOIDS_ALIGNMENT_WEIGHT * 0.55;
-    fy += a.y * PHYSICS.BOIDS_ALIGNMENT_WEIGHT * 0.18 * vdamp;
+    // アライメントの同調力を高め、群れの向きを揃えやすくする
+    fx += a.x * PHYSICS.BOIDS_ALIGNMENT_WEIGHT * 0.85;
+    fy += a.y * PHYSICS.BOIDS_ALIGNMENT_WEIGHT * 0.28 * vdamp;
   }
   if (cohCount > 0) {
     const tx = cohX / cohCount, ty = cohY / cohCount;
@@ -168,13 +177,11 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   const ww = world.width;
   const wh = world.height;
 
-  // 外壁反発
   if (pos.x < WALL_REPULSE)       fx += WALL_FORCE * (1 - pos.x / WALL_REPULSE);
   if (pos.x > ww - WALL_REPULSE) fx -= WALL_FORCE * (1 - (ww - pos.x) / WALL_REPULSE);
   if (pos.y < WALL_REPULSE)       fy += WALL_FORCE * (1 - pos.y / WALL_REPULSE);
   if (pos.y > wh - WALL_REPULSE) fy -= WALL_FORCE * (1 - (wh - pos.y) / WALL_REPULSE);
 
-  // 禁止エリア反発
   for (const fz of world.forbiddenZones) {
     const cx = fz.x + fz.width / 2;
     const cy = fz.y + fz.height / 2;

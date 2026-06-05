@@ -78,11 +78,11 @@
       "scale": 1
     },
     "display:tab-c1aded82": {
-      "x": 100.3397634319581,
-      "y": 145.68016914378777,
-      "width": 1130,
-      "height": 1381,
-      "scale": 1
+      "x": 138.25066718385466,
+      "y": 79.85943134538523,
+      "width": 1186.791444248455,
+      "height": 1449.9570967454758,
+      "scale": 1.0502579152641196
     },
     "display:tab-60e3b01e": {
       "x": 157.01446280991735,
@@ -130,24 +130,9 @@
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 1373,
-    "height": 1757,
-    "forbiddenZones": [
-      {
-        "id": "fz_1780692409279",
-        "x": -14,
-        "y": 1572,
-        "width": 1414,
-        "height": 400
-      },
-      {
-        "id": "fz_1780692453826",
-        "x": -151,
-        "y": -297,
-        "width": 1699,
-        "height": 400
-      }
-    ],
+    "width": 1479,
+    "height": 1630,
+    "forbiddenZones": [],
     "spawnPoints": [
       {
         "id": "sp_1780592286214",
@@ -195,14 +180,6 @@
         "zIndex": 10,
         "visible": true,
         "opacity": 1
-      },
-      {
-        "id": "layer_fish_4",
-        "name": "Lyr 4 (魚レイヤー)",
-        "type": "fish",
-        "zIndex": 0,
-        "visible": true,
-        "opacity": 1
       }
     ],
     "horizontalBoundaryMode": "wrap",
@@ -214,14 +191,14 @@
       "typeProfiles": {
         "squid": {
           "speedMultiplier": 1,
-          "verticalSpread": 0.3,
+          "verticalSpread": 0.2,
           "turnStrength": 1,
           "tailBeat": 1,
           "glide": 1
         },
         "jellyfish": {
           "speedMultiplier": 1,
-          "verticalSpread": 0.3,
+          "verticalSpread": 0.2,
           "turnStrength": 1,
           "tailBeat": 1,
           "glide": 1
@@ -247,42 +224,34 @@
     {
       "id": 0,
       "maxCount": 10,
-      "scale": 1.8,
+      "scale": 1.9,
       "opacity": 1,
-      "speedFactor": 1.05,
+      "speedFactor": 1.1,
       "zIndex": 100
     },
     {
       "id": 1,
       "maxCount": 20,
       "scale": 1.2,
-      "opacity": 0.75,
-      "speedFactor": 0.7,
+      "opacity": 0.79,
+      "speedFactor": 0.55,
       "zIndex": 70
     },
     {
       "id": 2,
       "maxCount": 100,
       "scale": 0.68,
-      "opacity": 0.4,
-      "speedFactor": 0.6,
+      "opacity": 0.27,
+      "speedFactor": 0.3,
       "zIndex": 40
     },
     {
       "id": 3,
       "maxCount": 100,
       "scale": 0.51,
-      "opacity": 0.18,
-      "speedFactor": 0.6,
+      "opacity": 0.27,
+      "speedFactor": 0.3,
       "zIndex": 10
-    },
-    {
-      "id": 4,
-      "maxCount": 100,
-      "scale": 0.35,
-      "opacity": 0.18,
-      "speedFactor": 0.6,
-      "zIndex": 0
     }
   ]
 }

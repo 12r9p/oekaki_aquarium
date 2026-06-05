@@ -56,14 +56,28 @@ export function applySquid(fish: ActiveFish): void {
     }
   }
 
-  // --- X方向: パルス推進 ---
+  // --- X方向: パルス推進 (漏斗噴射) ---
   const isJetting = state.frame < PHYSICS.SQUID_PULSE_FRAMES;
   const targetVX = isJetting
     ? PHYSICS.SQUID_PULSE_SPEED * state.dir * movementScale(fish) * Math.max(0.55, profile.tailBeat)
     : PHYSICS.SQUID_CRUISE_SPEED * state.dir * movementScale(fish);
 
   const turning = fish.physics.vel.x * state.dir < 0;
-  const accel = turning ? 0.045 / Math.max(0.45, profile.glide) : (isJetting ? 0.2 : 0.065 / Math.max(0.45, profile.glide));
+  let accel = 0.06;
+  if (turning) {
+    accel = 0.045 / Math.max(0.45, profile.glide);
+  } else if (isJetting) {
+    accel = 0.28; // 噴射時の急加速
+  } else {
+    // 噴射直後、巡航目標速度より現在の速度が大きいときは、急速に減速(ドラッグ)させる
+    const currentSpeed = Math.abs(fish.physics.vel.x);
+    const targetSpeed = Math.abs(targetVX);
+    if (currentSpeed > targetSpeed) {
+      accel = 0.18 / Math.max(0.45, profile.glide);
+    } else {
+      accel = 0.065 / Math.max(0.45, profile.glide);
+    }
+  }
   fish.physics.vel.x += (targetVX - fish.physics.vel.x) * accel;
   fish.physics.pos.x += fish.physics.vel.x;
 
