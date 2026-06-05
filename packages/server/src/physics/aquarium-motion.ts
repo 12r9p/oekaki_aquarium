@@ -1,14 +1,13 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { applyAnchor } from "./anchor";
 import { applyBoundaries } from "./boundaries";
+import { applyCustomMotion } from "./custom-motion";
 import { applyJellyfish, resetJellyfishState } from "./jellyfish";
-import { applyLooper } from "./looper";
 import { applySchool } from "./school";
 import { applyShark } from "./shark";
+import { applyFishSwimmingDynamics, resetSwimDynamics } from "./swim-dynamics";
 import { applySquid, resetSquidState } from "./squid";
 import { applyTuna, resetTunaState } from "./tuna";
-import { applyWander } from "./wander";
-import { getWorld } from "../world";
 
 /**
  * 魚種ごとの固有モーションを適用する。
@@ -21,9 +20,7 @@ export function updateAquariumMotion(fish: ActiveFish, allFish: ActiveFish[]): v
       applyTuna(fish);
       break;
     case "school":
-    case "swimmer":
       applySchool(fish, allFish);
-      applyWander(fish);
       break;
     case "squid":
       applySquid(fish);
@@ -34,9 +31,8 @@ export function updateAquariumMotion(fish: ActiveFish, allFish: ActiveFish[]): v
     case "shark":
       applyShark(fish);
       break;
-    case "looper":
-      applyLooper(fish, getWorld().width);
-      applyWander(fish);
+    case "custom":
+      applyCustomMotion(fish);
       break;
     case "anchor":
       applyAnchor(fish);
@@ -50,6 +46,7 @@ export function updateAquariumMotion(fish: ActiveFish, allFish: ActiveFish[]): v
     if (movedX * sign < 0) fish.physics.pos.x = previousX - movedX;
     fish.physics.vel.x = Math.abs(fish.physics.vel.x) * sign;
   }
+  applyFishSwimmingDynamics(fish);
   applyBoundaries(fish);
 }
 
@@ -58,4 +55,5 @@ export function resetAquariumMotionPosition(fish: ActiveFish): void {
   resetTunaState(fish.id, fish.physics.pos.y);
   resetSquidState(fish.id, fish.physics.pos.y);
   resetJellyfishState(fish.id, fish.physics.pos.y);
+  resetSwimDynamics(fish.id);
 }

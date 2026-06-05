@@ -36,7 +36,7 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
                 id: fish.id,
-                type: "swimmer",
+                type: "school",
                 textureUrl: fish.imageUrl,
                 userParams: { scale: 0.8, speed: 1.0, rotationOffset: 0 }
             }),

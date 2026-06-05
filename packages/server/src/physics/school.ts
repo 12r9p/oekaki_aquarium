@@ -4,12 +4,11 @@ import { getWorld } from "../world";
 import { movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
-// school.ts — イワシ群れ型: 改良Boids（横バイアス・縦抑制）
+// school.ts — イワシ群れ型: 横巡航を主軸にしたBoids
 //
-// 旧 swimmer (Boids) の改良版:
-//   - Y方向の速度を SCHOOL_VERTICAL_DAMPING 倍に抑制（横移動中心）
-//   - 群れに属さない孤立魚は画面中央へ向かう引力を加算
-//   - 向きがランダムにバラけないよう初期速度に横バイアスを付与
+//   - 個体ごとの巡航レーンをゆっくり変える
+//   - 群れの整列・分離は横方向を強め、縦方向は尾振り程度に抑える
+//   - 進行方向が急に反転しないよう、レーン巡航とBoids力を合成する
 // ============================================================
 
 function limit(v: Vector2, max: number): Vector2 {
@@ -63,13 +62,10 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   let aliX = 0, aliY = 0, aliCount = 0;
   let cohX = 0, cohY = 0, cohCount = 0;
 
-  // schoolとswimmerを同一群れとして扱う（互換維持）
-  const schoolTypes = new Set(["school", "swimmer"]);
-
   for (const other of allFish) {
     if (
       other.id === fish.id ||
-      !schoolTypes.has(other.type) ||
+      other.type !== "school" ||
       groupForFish(other.id) !== state.group
     ) continue;
     const dx = fish.physics.pos.x - other.physics.pos.x;

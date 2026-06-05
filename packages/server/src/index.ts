@@ -176,7 +176,7 @@ app.post("/api/fish/import", async (c) => {
     const spawn = world.spawnPoints[0] ?? { x: world.width / 2, y: world.height / 2 };
     const config: FishConfig = {
       id: pending.id,
-      type: meta?.type ?? "swimmer",
+      type: meta?.type ?? "school",
       textureUrl: pending.imageUrl,
       author: meta?.author ?? image.name.replace(/\.[^.]+$/, ""),
       fishMeta: meta ?? undefined,
@@ -378,7 +378,7 @@ app.post("/api/library/:filename/release", async (c) => {
 
   const config: FishConfig = {
     id: pending.id,
-    type: (meta?.type ?? "swimmer") as FishType,
+    type: (meta?.type ?? "school") as FishType,
     textureUrl: imageUrl,
     author: meta?.author,
     fishMeta: meta ?? undefined,

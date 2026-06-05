@@ -136,6 +136,8 @@ function normalizeMotionTypeProfiles(
       speedMultiplier: Math.max(0.1, Math.min(profile.speedMultiplier ?? 1, 5)),
       verticalSpread: Math.max(0.1, Math.min(profile.verticalSpread ?? 1, 5)),
       turnStrength: Math.max(0.1, Math.min(profile.turnStrength ?? 1, 5)),
+      tailBeat: Math.max(0.1, Math.min(profile.tailBeat ?? 1, 5)),
+      glide: Math.max(0.1, Math.min(profile.glide ?? 1, 5)),
     };
   }
   return normalized;

@@ -34,16 +34,14 @@ export type FishDirection = "auto" | "left" | "right";
 // -------------------------------------------------------
 // 魚の挙動タイプ (= 動きプリセット)
 // -------------------------------------------------------
-/** 現行も互换のために残す; swimmer=school, looper=tuna のエイリアス */
 export type FishType =
-  | "swimmer"    // @deprecated → school
-  | "looper"     // @deprecated → tuna
   | "anchor"     // 床固定（海草・サンゴ等）
   | "tuna"       // マグロ: 高速直線往復、絶対止まらない
   | "school"     // イワシ群れ: Boids群れ（横バイアス・縦抑制）
   | "squid"      // イカ: ホバリング＋Sin波パルス推進
   | "jellyfish"  // クラゲ: 締め縮めパルス上下浮遊＋横流れ
-  | "shark";     // サメ: 大弧単独回遊
+  | "shark"      // サメ: 大弧単独回遊
+  | "custom";    // 管理者用: MotionSettings.customCode で定義
 
 // -------------------------------------------------------
 // 放流時に iPad から送られる設定データ
@@ -209,6 +207,8 @@ export interface UdpFishData {
   d?: 1 | -1;
   /** X方向速度（デバッグ・後方互換用） */
   vx?: number;
+  /** 尾びれの拍動に使う -1..1 の位相値 */
+  b?: number;
 }
 
 export type HorizontalBoundaryMode = "bounce" | "wrap";
@@ -224,6 +224,8 @@ export interface MotionTypeProfile {
   speedMultiplier: number;
   verticalSpread: number;
   turnStrength: number;
+  tailBeat: number;
+  glide: number;
 }
 
 export interface SystemMetricSample {

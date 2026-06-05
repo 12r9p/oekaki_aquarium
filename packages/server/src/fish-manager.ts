@@ -14,6 +14,15 @@ import { resetTunaState } from "./physics/tuna";
 import { removeWanderState } from "./physics/wander";
 import { updateFishLayers } from "./layer-manager";
 
+function normalizeFishType(type: unknown): FishType {
+  if (type === "swimmer") return "school";
+  if (type === "looper") return "custom";
+  if (type === "tuna" || type === "school" || type === "squid" || type === "jellyfish" || type === "shark" || type === "anchor" || type === "custom") {
+    return type;
+  }
+  return "school";
+}
+
 /** /data/fish/ ディレクトリ（プロジェクトルート基準） */
 export const DATA_FISH_DIR = join(import.meta.dir, "..", "..", "..", "data", "fish");
 /** public/images ディレクトリ */
@@ -159,7 +168,6 @@ function initialVelForType(type: FishType): { x: number; y: number } {
       // 高速・ほぼ水平・左右どちらかにランダム
       return { x: (Math.random() < 0.5 ? 1 : -1) * (4 + Math.random() * 2), y: rnd() * 0.3 };
     case "school":
-    case "swimmer":
       // Boids が引き継ぐので小さな水平乱数でよい
       return { x: (Math.random() < 0.5 ? 1 : -1) * (1 + Math.random()), y: rnd() * 0.5 };
     case "squid":
@@ -171,7 +179,7 @@ function initialVelForType(type: FishType): { x: number; y: number } {
     case "shark":
       // 弧が重ならないよう方向を十分ばらける
       return { x: (Math.random() < 0.5 ? 1 : -1) * (1.5 + Math.random()), y: rnd() * 0.4 };
-    case "looper":
+    case "custom":
       return { x: 0.4 + Math.random() * 0.4, y: rnd() * 0.4 };
     case "anchor":
     default:
@@ -194,12 +202,13 @@ export function releaseFish(
 
   const fish: ActiveFish = {
     ...config,
+    type: normalizeFishType(config.type),
     timestamp: Date.now(),
     createdAt,
     releasedAt: Date.now(),
     physics: {
       pos: { ...spawnPos },
-      vel: initialVelForType(config.type),
+      vel: initialVelForType(normalizeFishType(config.type)),
       speedMultiplier: 1.0, // レイヤーマネージャが後から上書きする
     },
     layerIndex: 0,
@@ -253,7 +262,7 @@ export function updateFishParams(
   if (updates.isPinned !== undefined) fish.isPinned = updates.isPinned;
   if (updates.isPinned === false) fish.pinnedLayerId = undefined;
   if (updates.pinnedLayerId !== undefined) fish.pinnedLayerId = updates.pinnedLayerId;
-  if (updates.type !== undefined) fish.type = updates.type;
+  if (updates.type !== undefined) fish.type = normalizeFishType(updates.type);
   if (updates.isArchived !== undefined) {
     fish.isArchived = updates.isArchived;
     fish.archivedAt = updates.isArchived ? Date.now() : undefined;
@@ -399,7 +408,7 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           createdAt: meta.createdAt ?? Date.now(),
           releasedAt: meta.releasedAt ?? Date.now(),
           archivedAt: meta.archivedAt,
-          type: meta.type,
+          type: normalizeFishType(meta.type),
           author: meta.author,
           fishMeta: meta,
           userParams: {
@@ -410,7 +419,7 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           },
           physics: {
             pos: { x: sp.x, y: sp.y },
-            vel: initialVelForType(meta.type),
+            vel: initialVelForType(normalizeFishType(meta.type)),
             speedMultiplier: 1.0,
           },
           layerIndex: 0,

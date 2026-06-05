@@ -92,7 +92,7 @@ function FishRow({
     const typeLabel: Record<string, string> = {
         tuna: "🐟 マグロ", school: "🐠 イワシ", squid: "🦑 イカ",
         jellyfish: "🪼 クラゲ", shark: "🦈 サメ", anchor: "🌿 固定",
-        swimmer: "swimmer", looper: "looper",
+        custom: "⚙ カスタム",
     };
 
     return (

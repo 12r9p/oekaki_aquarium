@@ -29,11 +29,11 @@
       "scale": 1
     },
     "display:tab-00bd42b4": {
-      "x": 0,
-      "y": 4.361867384865036,
-      "width": 3388,
-      "height": 2302.638132615135,
-      "scale": 2.2358815707346196
+      "x": 55.649948808531434,
+      "y": 29.1631389228265,
+      "width": 1249.3581926802085,
+      "height": 849.1203706495205,
+      "scale": 0.8245032344332911
     },
     "display:tab-52e6b4d9": {
       "x": 1515.2859813084112,
@@ -57,8 +57,8 @@
       "scale": 0.5653991557590983
     },
     "display:tab-be36b44f": {
-      "x": 303.6566222845129,
-      "y": 0,
+      "x": 357.1426230391294,
+      "y": -10.106596975615531,
       "width": 2780.6867554309742,
       "height": 2307,
       "scale": 1
@@ -67,17 +67,31 @@
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 3388,
-    "height": 2307,
+    "width": 1350,
+    "height": 929,
     "forbiddenZones": [],
     "spawnPoints": [
       {
         "id": "sp_1780592286214",
-        "x": 780.3448262117347,
-        "y": 600.7112165178571
+        "x": 1202.7580626563813,
+        "y": 150.18300665818253
       }
     ],
     "layers": [
+      {
+        "id": "L_1780670333925",
+        "name": "海藻.png",
+        "type": "image",
+        "zIndex": 100,
+        "visible": true,
+        "opacity": 1,
+        "url": "/images/scene/03ed4218-2e66-444d-9a1b-85a1ff7f2d02.png",
+        "x": 181,
+        "y": 754,
+        "width": 183,
+        "height": 138,
+        "aspectRatioLocked": true
+      },
       {
         "id": "layer_system",
         "name": "System (モニター・壁)",
@@ -90,7 +104,7 @@
         "id": "layer_fish_0",
         "name": "Lyr 0 (魚レイヤー)",
         "type": "fish",
-        "zIndex": 100,
+        "zIndex": 101,
         "visible": true,
         "opacity": 1
       },
@@ -98,33 +112,47 @@
         "id": "layer_fish_1",
         "name": "Lyr 1 (魚レイヤー)",
         "type": "fish",
-        "zIndex": 50,
-        "visible": true,
-        "opacity": 1
-      },
-      {
-        "id": "layer_fish_2",
-        "name": "Lyr 2 (魚レイヤー)",
-        "type": "fish",
-        "zIndex": 10,
-        "visible": true,
-        "opacity": 1
-      },
-      {
-        "id": "layer_fish_3",
-        "name": "Lyr 3 (魚レイヤー)",
-        "type": "fish",
-        "zIndex": 10,
+        "zIndex": 70,
         "visible": true,
         "opacity": 1
       }
     ],
     "horizontalBoundaryMode": "wrap",
     "fishSpeedMultiplier": 1,
-    "fishScaleMultiplier": 1,
+    "fishScaleMultiplier": 1.05,
     "motionSettings": {
-      "verticalSpread": 2,
-      "turnStrength": 2
+      "verticalSpread": 1.95,
+      "turnStrength": 0.6,
+      "typeProfiles": {
+        "jellyfish": {
+          "speedMultiplier": 1,
+          "verticalSpread": 0.1,
+          "turnStrength": 0.65,
+          "tailBeat": 0.75,
+          "glide": 0.7
+        },
+        "squid": {
+          "speedMultiplier": 1,
+          "verticalSpread": 0.3,
+          "turnStrength": 1,
+          "tailBeat": 1,
+          "glide": 1
+        },
+        "shark": {
+          "speedMultiplier": 1.55,
+          "verticalSpread": 0.3,
+          "turnStrength": 0.95,
+          "tailBeat": 1,
+          "glide": 1
+        },
+        "tuna": {
+          "speedMultiplier": 0.65,
+          "verticalSpread": 1,
+          "turnStrength": 1,
+          "tailBeat": 1,
+          "glide": 1
+        }
+      }
     }
   },
   "fishLayers": [
@@ -133,24 +161,16 @@
       "maxCount": 20,
       "scale": 1,
       "opacity": 1,
-      "speedFactor": 1,
+      "speedFactor": 0.65,
       "zIndex": 100
     },
     {
       "id": 1,
       "maxCount": 50,
-      "scale": 0.45,
-      "opacity": 1,
-      "speedFactor": 0.8,
+      "scale": 0.35,
+      "opacity": 0.42,
+      "speedFactor": 0.28,
       "zIndex": 70
-    },
-    {
-      "id": 2,
-      "maxCount": 100,
-      "scale": 0.3,
-      "opacity": 1,
-      "speedFactor": 0.7,
-      "zIndex": 40
     }
   ]
 }

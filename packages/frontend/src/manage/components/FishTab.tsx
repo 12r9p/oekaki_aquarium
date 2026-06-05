@@ -128,6 +128,7 @@ function FishConfigPopup({
                                 { val: "squid", label: "🦑 イカ" },
                                 { val: "jellyfish", label: "🪼 クラゲ" },
                                 { val: "shark", label: "🦈 サメ" },
+                                { val: "custom", label: "⚙ カスタム" },
                                 { val: "anchor", label: "🌿 固定" },
                             ].map(({ val, label }) => (
                                 <button

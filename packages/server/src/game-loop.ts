@@ -4,6 +4,7 @@ import { getAllActiveFish } from "./fish-manager";
 import { updateFishLayers } from "./layer-manager";
 import { cleanExpiredFood } from "./physics/boundaries";
 import { updateAquariumMotion } from "./physics/aquarium-motion";
+import { tailBeatForFish } from "./physics/swim-dynamics";
 import { broadcastToRenderClients } from "./ws-handler";
 import { getDisplayClientInfoList } from "./ws-handler";
 import { recordSystemMetric } from "./system-metrics";
@@ -62,6 +63,7 @@ function tick(): void {
       fishFacing.set(fish.id, facing);
       // 左右は反転、回転は上下の傾きだけに分け、二重反転を防ぐ。
       const r = Math.atan2(vy * 0.55, Math.max(Math.abs(vx), 0.1));
+      const beat = tailBeatForFish(fish.id);
       return {
         i: fish.id.slice(0, 8),
         x: Math.round(fish.physics.pos.x),
@@ -74,6 +76,7 @@ function tick(): void {
         u: fish.textureUrl,
         d: facing,
         vx,
+        b: beat,
       };
     }),
     e: [],

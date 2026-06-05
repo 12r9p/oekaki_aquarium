@@ -69,7 +69,7 @@ export const DEFAULT_WORLD = {
 // 物理演算パラメータ
 // ============================================================
 export const PHYSICS = {
-  // Boids (school / swimmer 互換)
+  // Boids (school)
   BOIDS_MAX_SPEED: 3.0,
   BOIDS_MAX_FORCE: 0.15,
   BOIDS_SEPARATION_RADIUS: 80,

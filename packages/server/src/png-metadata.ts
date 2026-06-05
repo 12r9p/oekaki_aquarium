@@ -43,7 +43,7 @@ export interface FishMeta {
 export const DEFAULT_FISH_META: FishMeta = {
   version: 1,
   author: "anonymous",
-  type: "swimmer",
+  type: "school",
   speed: 1.0,
   scale: 1.0,
   pinnedLayerId: null,

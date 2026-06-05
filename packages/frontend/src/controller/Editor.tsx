@@ -13,7 +13,7 @@ interface EditorProps {
 }
 
 export function Editor({ fish, onReleased, onCancel }: EditorProps): React.ReactElement {
-    const [fishType, setFishType] = useState<FishType>(fish.fishMeta?.type ?? "school");
+    const [fishType, setFishType] = useState<FishType>(fish.fishMeta?.type === "custom" ? "school" : fish.fishMeta?.type ?? "school");
     const [scale, setScale] = useState(fish.fishMeta?.scale ?? 1.0);
     const [speed, setSpeed] = useState(fish.fishMeta?.speed ?? 1.0);
     const [rotationDeg, setRotationDeg] = useState(0);
@@ -117,8 +117,7 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
         jellyfish: "🪼 クラゲ - 上下浮遊",
         shark: "🦈 サメ - 大弧単独回遊",
         anchor: "🌿 固定 - 床に固定",
-        swimmer: "🐟 自由に泳ぐ (旧)",
-        looper: "🔁 手書きループ (旧)",
+        custom: "カスタム",
     };
     // コントローラーで表示するプリセット順（旧型は末尾に）
     const presetOrder: FishType[] = ["tuna", "school", "squid", "jellyfish", "shark", "anchor"];
@@ -178,7 +177,7 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
                 <Slider value={[speed]} min={0.2} max={3.0} step={0.1} onValueChange={value => setSpeed(value[0] ?? 1)} />
             </section>
 
-            {(fishType === "looper" || fishType === "anchor") && (
+            {fishType === "anchor" && (
                 <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
                     <label className="text-xs font-bold uppercase text-slate-500">動きを手書きで録画</label>
                     <div className="relative mt-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">

@@ -4,7 +4,7 @@ import { Slider } from "@/components/ui/slider";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Code2, RotateCcw } from "lucide-react";
+import { ClipboardCopy, Code2, RotateCcw } from "lucide-react";
 
 const FISH_TYPES: Array<{ type: FishType; label: string; description: string }> = [
     { type: "tuna", label: "マグロ", description: "高速直線往復" },
@@ -12,6 +12,7 @@ const FISH_TYPES: Array<{ type: FishType; label: string; description: string }> 
     { type: "squid", label: "イカ", description: "休止とパルス推進" },
     { type: "jellyfish", label: "クラゲ", description: "上下浮遊と横流れ" },
     { type: "shark", label: "サメ", description: "大きな弧で単独回遊" },
+    { type: "custom", label: "カスタム", description: "管理者コードで定義" },
     { type: "anchor", label: "固定", description: "床や背景に固定" },
 ];
 
@@ -19,18 +20,45 @@ const DEFAULT_PROFILE: MotionTypeProfile = {
     speedMultiplier: 1,
     verticalSpread: 1,
     turnStrength: 1,
+    tailBeat: 1,
+    glide: 1,
 };
 
-const DEFAULT_CUSTOM_CODE = `// 将来のカスタム泳ぎ定義用です。現在は保存のみで実行されません。
-// 入力例:
-// export function update(fish, t, api) {
-//   fish.vel.x += Math.sin(t * 0.01) * 0.2;
-//   fish.vel.y += Math.cos(t * 0.02) * 0.1;
-// }`;
+const CUSTOM_CODE_GUIDE = `お絵描き水族館の管理者用カスタム泳ぎコード仕様:
+- function update(fish, t, api) または export function update(fish, t, api) を定義します。
+- fish.physics.pos.x / y が現在位置、fish.physics.vel.x / y が速度です。
+- 毎フレーム update が呼ばれるので、速度を決めてから pos に加算してください。
+- api.world.width / height で水槽サイズを取得できます。
+- api.speed は管理画面と魚ごとの速度を反映した倍率です。
+- api.verticalSpread, api.turnStrength は管理画面の調整値です。
+- api.clamp(value, min, max), api.lerp(a, b, t), api.noise(seed), api.sin, api.cos が使えます。
+- 例: 横向きに巡航し、sin波で上下し、壁で向きを変える動きを作れます。
+- ユーザーのコントローラーには custom プリセットは表示しません。管理画面で魚のタイプを「カスタム」にした魚だけに適用されます。`;
+
+const DEFAULT_CUSTOM_CODE = `function update(fish, t, api) {
+  const state = fish.__custom ??= {
+    dir: api.noise(1) < 0.5 ? -1 : 1,
+    baseY: fish.physics.pos.y,
+    phase: api.noise(2) * Math.PI * 2,
+  };
+
+  const margin = 120;
+  if (fish.physics.pos.x > api.world.width - margin) state.dir = -1;
+  if (fish.physics.pos.x < margin) state.dir = 1;
+
+  state.phase += 0.045 * api.speed;
+  const cruise = 2.4 * api.speed * state.dir;
+  const targetY = state.baseY + Math.sin(state.phase * 0.55) * 70 * api.verticalSpread;
+
+  fish.physics.vel.x = api.lerp(fish.physics.vel.x, cruise, 0.08);
+  fish.physics.vel.y = api.lerp(fish.physics.vel.y, (targetY - fish.physics.pos.y) * 0.035, 0.12);
+  fish.physics.pos.x += fish.physics.vel.x;
+  fish.physics.pos.y += fish.physics.vel.y;
+}`;
 
 export function MotionPage({ settings, onChange }: { settings: MotionSettings; onChange: (settings: MotionSettings) => void }) {
     const updateProfile = (type: FishType, patch: Partial<MotionTypeProfile>) => {
-        const current = settings.typeProfiles?.[type] ?? DEFAULT_PROFILE;
+        const current = { ...DEFAULT_PROFILE, ...(settings.typeProfiles?.[type] ?? {}) };
         onChange({
             ...settings,
             typeProfiles: {
@@ -65,7 +93,7 @@ export function MotionPage({ settings, onChange }: { settings: MotionSettings; o
 
                     <TabsContent value="types" className="mt-5 grid gap-4 lg:grid-cols-2">
                         {FISH_TYPES.map(({ type, label, description }) => {
-                            const profile = settings.typeProfiles?.[type] ?? DEFAULT_PROFILE;
+                            const profile = { ...DEFAULT_PROFILE, ...(settings.typeProfiles?.[type] ?? {}) };
                             return (
                                 <section key={type} className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                                     <div className="mb-5 flex items-start justify-between gap-4">
@@ -81,19 +109,33 @@ export function MotionPage({ settings, onChange }: { settings: MotionSettings; o
                                         <SettingRow label="速度" value={profile.speedMultiplier} min={0.1} max={5} onChange={speedMultiplier => updateProfile(type, { speedMultiplier })} />
                                         <SettingRow label="縦幅" value={profile.verticalSpread} min={0.1} max={5} onChange={verticalSpread => updateProfile(type, { verticalSpread })} />
                                         <SettingRow label="旋回" value={profile.turnStrength} min={0.1} max={5} onChange={turnStrength => updateProfile(type, { turnStrength })} />
+                                        <SettingRow label="尾振り" value={profile.tailBeat} min={0.1} max={5} onChange={tailBeat => updateProfile(type, { tailBeat })} />
+                                        <SettingRow label="滑走" value={profile.glide} min={0.1} max={5} onChange={glide => updateProfile(type, { glide })} />
                                     </div>
                                 </section>
                             );
                         })}
                     </TabsContent>
 
-                    <TabsContent value="custom" className="mt-5">
+                    <TabsContent value="custom" className="mt-5 grid gap-4">
+                        <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
+                            <div className="mb-3 flex items-start justify-between gap-3">
+                                <div>
+                                    <h2 className="font-bold text-slate-900">AIに渡す説明文</h2>
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">カスタム泳ぎをAIに作らせるとき、この仕様をコピーして一緒に渡します。</p>
+                                </div>
+                                <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(CUSTOM_CODE_GUIDE)} className="gap-1.5">
+                                    <ClipboardCopy className="h-4 w-4" />コピー
+                                </Button>
+                            </div>
+                            <pre className="max-h-56 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 whitespace-pre-wrap text-xs leading-5 text-slate-600">{CUSTOM_CODE_GUIDE}</pre>
+                        </section>
                         <section className="rounded-lg border border-slate-200 bg-white p-5 shadow-sm">
                             <div className="mb-4 flex items-start gap-3">
                                 <div className="rounded-md bg-slate-100 p-2 text-slate-700"><Code2 className="h-4 w-4" /></div>
                                 <div>
                                     <h2 className="font-bold text-slate-900">カスタム泳ぎコード</h2>
-                                    <p className="mt-1 text-xs leading-5 text-slate-500">ここに動き定義を保存できます。安全な実行環境は未接続なので、現在は実行されません。</p>
+                                    <p className="mt-1 text-xs leading-5 text-slate-500">ここに保存した update 関数が、タイプ「カスタム」の魚に毎フレーム適用されます。</p>
                                 </div>
                             </div>
                             <Textarea

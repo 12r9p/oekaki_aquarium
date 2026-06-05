@@ -2,12 +2,14 @@ import { PHYSICS } from "@aquarium/shared";
 import type { ActiveFish } from "@aquarium/shared";
 import { getWorld } from "../world";
 
-export function motionProfileFor(fish: ActiveFish): { speedMultiplier: number; verticalSpread: number; turnStrength: number } {
+export function motionProfileFor(fish: ActiveFish): { speedMultiplier: number; verticalSpread: number; turnStrength: number; tailBeat: number; glide: number } {
   const profile = getWorld().motionSettings.typeProfiles?.[fish.type];
   return {
     speedMultiplier: clamp(profile?.speedMultiplier ?? 1, 0.1, 5),
     verticalSpread: clamp(profile?.verticalSpread ?? 1, 0.1, 5),
     turnStrength: clamp(profile?.turnStrength ?? 1, 0.1, 5),
+    tailBeat: clamp(profile?.tailBeat ?? 1, 0.1, 5),
+    glide: clamp(profile?.glide ?? 1, 0.1, 5),
   };
 }
 
@@ -37,12 +39,11 @@ export function maxSpeedForFish(fish: ActiveFish): number {
       return Math.max(0.8, PHYSICS.JELLYFISH_FLOAT_SPEED * scale * 3);
     case "shark":
       return PHYSICS.SHARK_SPEED * scale * 1.2;
-    case "looper":
-      return PHYSICS.BOIDS_MAX_SPEED * scale;
+    case "custom":
+      return PHYSICS.BOIDS_MAX_SPEED * scale * 2;
     case "anchor":
       return 0;
     case "school":
-    case "swimmer":
     default:
       return PHYSICS.BOIDS_MAX_SPEED * scale;
   }

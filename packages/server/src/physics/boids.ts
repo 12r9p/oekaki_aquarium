@@ -44,7 +44,7 @@ export function applyBoids(fish: ActiveFish, allFish: ActiveFish[]): void {
   let cohX = 0, cohY = 0, cohCount = 0;
 
   for (const other of allFish) {
-    if (other.id === fish.id || other.type !== "swimmer") continue;
+    if (other.id === fish.id || other.type !== "school") continue;
 
     const dx = fish.physics.pos.x - other.physics.pos.x;
     const dy = fish.physics.pos.y - other.physics.pos.y;

@@ -15,6 +15,7 @@ export interface FishEntry {
   layerIndex: number;
   desiredScale: number;
   facing: 1 | -1;
+  targetBeat: number;
   targetX: number; targetY: number;
   targetRotation: number; targetScale: number;
   targetAlpha: number; targetZIndex: number;
@@ -63,6 +64,7 @@ export function updateFishTargets(
     ensureFishLayerContainer(layerIndex)?.addChild(entry.sprite);
   }
   entry.facing = fd.d ?? entry.facing;
+  entry.targetBeat = fd.b ?? 0;
   const wrapJumpThreshold = STATE.WORLD_W * STATE.scaleX * 0.5;
   if (Math.abs(screenX - entry.targetX) > wrapJumpThreshold) {
     entry.sprite.x = screenX;
@@ -564,6 +566,7 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
     layerIndex,
     desiredScale: appliedScale,
     facing,
+    targetBeat: fd.b ?? 0,
     targetX: sx,
     targetY: sy,
     targetRotation: fd.r,
@@ -613,7 +616,9 @@ export function setupRenderLoop(app: Application, fishMap: Map<string, FishEntry
       const sign = e.targetScale < 0 ? -1 : 1;
       const absTarget = Math.abs(e.targetScale);
       const absScale  = Math.abs(s.scale.x);
-      s.scale.set(lerp(absScale, absTarget, 0.05) * sign, lerp(Math.abs(s.scale.y), absTarget, 0.05));
+      const beatSquash = 1 + e.targetBeat * 0.025;
+      s.scale.set(lerp(absScale, absTarget, 0.05) * sign, lerp(Math.abs(s.scale.y), absTarget * beatSquash, 0.08));
+      s.skew.y = lerp(s.skew.y, e.targetBeat * 0.045 * sign, 0.12);
       s.alpha    = lerp(s.alpha, e.targetAlpha, 0.05);
       if (s.zIndex !== e.targetZIndex) s.zIndex = e.targetZIndex;
     }

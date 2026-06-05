@@ -182,7 +182,7 @@ function ManageApp(): React.ReactElement {
         showAlert("全ての魚を削除しました");
     };
 
-    const addDemoFish = async (preset: "swimmer" | "looper" | "anchor" = "swimmer"): Promise<void> => {
+    const addDemoFish = async (preset: "school" | "tuna" | "anchor" = "school"): Promise<void> => {
         // デモ用の魚（絵文字）を投下
         const demos = ["🐟", "🐠", "🐡", "🐙", "🦑", "🦐", "🦈", "🐬", "🐋"];
         const emj = demos[Math.floor(Math.random() * demos.length)];
@@ -218,7 +218,7 @@ function ManageApp(): React.ReactElement {
                     textureUrl: data.fish.imageUrl,
                     userParams: {
                         scale: 1.0,
-                        speed: preset === "looper" ? 2.0 : 1.0,
+                        speed: preset === "tuna" ? 1.4 : 1.0,
                         rotationOffset: 0
                     }
                 })

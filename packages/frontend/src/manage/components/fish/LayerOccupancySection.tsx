@@ -1,12 +1,16 @@
 import type { ActiveFish, LayerConfig } from "@aquarium/shared";
+import { useState } from "react";
 import { LAYER_CONFIG } from "@aquarium/shared";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
-import { EyeOff, Plus, Wand2 } from "lucide-react";
+import { ChevronDown, EyeOff, Plus, Wand2 } from "lucide-react";
 import { getLayerColor } from "./layer-colors";
 
 export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, compact = false, onUpdate }: { activeFish: ActiveFish[]; configs?: LayerConfig[]; compact?: boolean; onUpdate?: (configs: LayerConfig[]) => void }) {
+    const [collapsed, setCollapsed] = useState(false);
+    const visibleCount = activeFish.filter(fish => !fish.isArchived && !fish.isAutoHidden).length;
+    const capacity = configs.reduce((acc, conf) => acc + conf.maxCount, 0);
     const autoTunePerspective = () => {
         if (!onUpdate) return;
         const denominator = Math.max(1, configs.length - 1);
@@ -25,12 +29,23 @@ export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, comp
     return (
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <div className="mb-3 flex items-center justify-between gap-3">
-                <h3 className="text-sm font-bold text-slate-700">レイヤー</h3>
+                <button type="button" className="flex items-center gap-2 text-left" onClick={() => setCollapsed(value => !value)}>
+                    <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
+                    <div>
+                        <h3 className="text-sm font-bold text-slate-700">レイヤー</h3>
+                        <div className="text-[10px] font-medium text-slate-400">{visibleCount}/{capacity}匹 表示中</div>
+                    </div>
+                </button>
                 {onUpdate && <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={autoTunePerspective}><Wand2 className="mr-1 h-4 w-4" />遠近感を自動設定</Button>
                     <Button variant="outline" size="sm" onClick={() => onUpdate([...configs, { id: configs.length, maxCount: 20, scale: 0.5, opacity: 0.7, speedFactor: 0.5, zIndex: Math.max(0, 100 - configs.length * 30) }])}><Plus className="mr-1 h-4 w-4" />追加</Button>
                 </div>}
             </div>
+            {collapsed ? (
+                <div className="h-2.5 overflow-hidden rounded-full border border-slate-200 bg-slate-100">
+                    <div className="h-full bg-sky-500" style={{ width: `${capacity ? Math.min(visibleCount / capacity, 1) * 100 : 0}%` }} />
+                </div>
+            ) : <>
             <div className="flex flex-col gap-3">
                 {configs.map((conf, idx) => {
                     const count = activeFish.filter(f => !f.isPinned && f.layerIndex === idx && !f.isArchived && !f.isAutoHidden).length;
@@ -77,6 +92,7 @@ export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, comp
             {!compact && <div className="mt-3 text-[10px] text-slate-400 leading-snug">
                 ※放流が新しい魚から Lyr0 に入り、いっぱいになると奥のレイヤーへ送られます。全レイヤー定員({configs.reduce((acc, conf) => acc + conf.maxCount, 0)}匹)を超えた魚は自動で非表示へ入ります。
             </div>}
+            </>}
         </div>
     );
 }
