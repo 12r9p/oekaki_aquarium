@@ -78,11 +78,11 @@
       "scale": 1
     },
     "display:tab-c1aded82": {
-      "x": 148.28488131499734,
-      "y": 88.812195121496,
-      "width": 1186.791444248455,
-      "height": 1449.9570967454758,
-      "scale": 1.0502579152641196
+      "x": 114.8819608886711,
+      "y": 110.6170496442367,
+      "width": 1266.054911331385,
+      "height": 1535.1832895958714,
+      "scale": 1.1204025763994558
     },
     "display:tab-60e3b01e": {
       "x": 157.01446280991735,
@@ -125,13 +125,34 @@
       "width": 1352,
       "height": 1230.8453608247423,
       "scale": 1
+    },
+    "display:tab-5f88a0aa": {
+      "x": -304.2021805615403,
+      "y": 0,
+      "width": 2371.3616809227424,
+      "height": 1863.084913087226,
+      "scale": 1.6066136049612074
+    },
+    "display:tab-en28wzfz": {
+      "x": 193.54457262716312,
+      "y": 0,
+      "width": 1088.9108547456738,
+      "height": 1801,
+      "scale": 1
+    },
+    "display:tab-fi5j0uir": {
+      "x": 250.9746136865342,
+      "y": 0,
+      "width": 974.0507726269316,
+      "height": 1801,
+      "scale": 1
     }
   },
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 1479,
-    "height": 1630,
+    "width": 1476,
+    "height": 1801,
     "forbiddenZones": [],
     "spawnPoints": [
       {
@@ -183,7 +204,7 @@
       }
     ],
     "horizontalBoundaryMode": "wrap",
-    "fishSpeedMultiplier": 4.9,
+    "fishSpeedMultiplier": 1,
     "fishScaleMultiplier": 1,
     "motionSettings": {
       "verticalSpread": 2,
@@ -219,17 +240,17 @@
     {
       "id": 0,
       "maxCount": 10,
-      "scale": 2.3,
+      "scale": 2.7,
       "opacity": 1,
-      "speedFactor": 1.1,
+      "speedFactor": 1.85,
       "zIndex": 100
     },
     {
       "id": 1,
       "maxCount": 20,
       "scale": 1.6,
-      "opacity": 0.7,
-      "speedFactor": 0.55,
+      "opacity": 0.79,
+      "speedFactor": 1.1,
       "zIndex": 70
     },
     {
@@ -237,15 +258,15 @@
       "maxCount": 100,
       "scale": 0.8,
       "opacity": 0.51,
-      "speedFactor": 0.3,
+      "speedFactor": 0.65,
       "zIndex": 40
     },
     {
       "id": 3,
       "maxCount": 1000,
-      "scale": 0.55,
-      "opacity": 0.28,
-      "speedFactor": 0.3,
+      "scale": 0.3,
+      "opacity": 0.18,
+      "speedFactor": 0.65,
       "zIndex": 10
     }
   ]

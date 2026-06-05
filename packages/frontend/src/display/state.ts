@@ -1,4 +1,5 @@
 import type { ClientConfig, AppLayerConfig } from "@aquarium/shared";
+import { generateShortId } from "../shared/uuid";
 
 // ============================================================
 // display/state.ts
@@ -15,7 +16,7 @@ function getDisplayId(): string {
   }
   const saved = sessionStorage.getItem("display-id");
   if (saved) return saved;
-  const newId = `tab-${crypto.randomUUID().slice(0, 8)}`;
+  const newId = `tab-${generateShortId()}`;
   sessionStorage.setItem("display-id", newId);
   return newId;
 }

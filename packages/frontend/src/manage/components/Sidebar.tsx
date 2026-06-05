@@ -2,6 +2,7 @@ import React from "react";
 import type { WsServerMessage, DisplayClientInfo, TestPattern, ActiveFish, PendingFish, AppLayerConfig, HorizontalBoundaryMode } from "@aquarium/shared";
 import { Button } from "@/components/ui/button";
 import { api } from "@/shared/api";
+import { generateShortId } from "@/shared/uuid";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
@@ -230,7 +231,7 @@ export function Sidebar({
                                 }}>
                                     <Copy className="w-4 h-4 mr-2" /> URLをクリップボードにコピー
                                 </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => window.open(`/display?id=tab-${crypto.randomUUID().slice(0, 8)}`, "_blank")}>
+                                <DropdownMenuItem onClick={() => window.open(`/display?id=tab-${generateShortId()}`, "_blank")}>
                                     <ExternalLink className="w-4 h-4 mr-2" /> 新しいタブで開く
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
