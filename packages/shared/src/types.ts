@@ -252,7 +252,7 @@ export type WsClientMessage =
   | { event: "update_world_size"; width: number; height: number }
   // -------------------------
   // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; motionSettings?: MotionSettings };
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; fishScaleMultiplier?: number; motionSettings?: MotionSettings };
 
 export type WsServerMessage =
   | {
@@ -268,6 +268,7 @@ export type WsServerMessage =
       fishLayers?: LayerConfig[];
       horizontalBoundaryMode?: HorizontalBoundaryMode;
       fishSpeedMultiplier?: number;
+      fishScaleMultiplier?: number;
       motionSettings?: MotionSettings;
       systemMetrics?: SystemMetrics;
       displayNumber?: number;
@@ -295,11 +296,12 @@ export type WsServerMessage =
       fishLayers?: LayerConfig[];
       horizontalBoundaryMode?: HorizontalBoundaryMode;
       fishSpeedMultiplier?: number;
+      fishScaleMultiplier?: number;
       motionSettings?: MotionSettings;
       systemMetrics?: SystemMetrics;
     }
   /** WebSocketによる背景 / 禁止エリア のブロードキャスト更新通知 */
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; motionSettings?: MotionSettings }
+  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; fishScaleMultiplier?: number; motionSettings?: MotionSettings }
   /** display クライアントへテストパターン表示指示 */
   | { event: "test_pattern"; pattern: TestPattern; targetUuid?: string; displayNumber?: number }
   /** display クライアントの Viewport を更新する */

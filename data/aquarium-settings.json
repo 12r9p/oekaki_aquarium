@@ -30,30 +30,51 @@
     },
     "display:tab-00bd42b4": {
       "x": 0,
-      "y": 20,
+      "y": 4.361867384865036,
+      "width": 3388,
+      "height": 2302.638132615135,
+      "scale": 2.2358815707346196
+    },
+    "display:tab-52e6b4d9": {
+      "x": 1515.2859813084112,
+      "y": 16,
       "width": 1515.2859813084112,
       "height": 1038,
       "scale": 1
     },
-    "display:tab-52e6b4d9": {
-      "x": 1515.2859813084112,
-      "y": 20,
-      "width": 1515.2859813084112,
-      "height": 1038,
+    "display:tab-10d63aa2": {
+      "x": 1045.8079884290166,
+      "y": 935.859375,
+      "width": 3367.7887850467287,
+      "height": 2307,
+      "scale": 1
+    },
+    "display:tab-07b3e43b": {
+      "x": 474.29132408025544,
+      "y": 391.9549973451827,
+      "width": 1904.1449358403795,
+      "height": 1304.3758523362394,
+      "scale": 0.5653991557590983
+    },
+    "display:tab-be36b44f": {
+      "x": 303.6566222845129,
+      "y": 0,
+      "width": 2780.6867554309742,
+      "height": 2307,
       "scale": 1
     }
   },
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 3033,
-    "height": 1054,
+    "width": 3388,
+    "height": 2307,
     "forbiddenZones": [],
     "spawnPoints": [
       {
         "id": "sp_1780592286214",
-        "x": 786,
-        "y": 519
+        "x": 780.3448262117347,
+        "y": 600.7112165178571
       }
     ],
     "layers": [
@@ -77,7 +98,7 @@
         "id": "layer_fish_1",
         "name": "Lyr 1 (魚レイヤー)",
         "type": "fish",
-        "zIndex": 10,
+        "zIndex": 50,
         "visible": true,
         "opacity": 1
       },
@@ -85,7 +106,7 @@
         "id": "layer_fish_2",
         "name": "Lyr 2 (魚レイヤー)",
         "type": "fish",
-        "zIndex": 50,
+        "zIndex": 10,
         "visible": true,
         "opacity": 1
       },
@@ -100,9 +121,10 @@
     ],
     "horizontalBoundaryMode": "wrap",
     "fishSpeedMultiplier": 1,
+    "fishScaleMultiplier": 1,
     "motionSettings": {
-      "verticalSpread": 1,
-      "turnStrength": 1
+      "verticalSpread": 2,
+      "turnStrength": 2
     }
   },
   "fishLayers": [
@@ -111,7 +133,7 @@
       "maxCount": 10,
       "scale": 1,
       "opacity": 1,
-      "speedFactor": 1,
+      "speedFactor": 1.1,
       "zIndex": 100
     },
     {
@@ -119,7 +141,7 @@
       "maxCount": 20,
       "scale": 0.7,
       "opacity": 0.8,
-      "speedFactor": 0.6,
+      "speedFactor": 1,
       "zIndex": 50
     },
     {
@@ -127,16 +149,24 @@
       "maxCount": 50,
       "scale": 0.4,
       "opacity": 0.4,
-      "speedFactor": 0.3,
+      "speedFactor": 0.75,
       "zIndex": 10
     },
     {
       "id": 3,
-      "maxCount": 20,
+      "maxCount": 100,
+      "scale": 0.5,
+      "opacity": 0.7,
+      "speedFactor": 0.45,
+      "zIndex": 10
+    },
+    {
+      "id": 4,
+      "maxCount": 100,
       "scale": 0.5,
       "opacity": 0.7,
       "speedFactor": 0.5,
-      "zIndex": 10
+      "zIndex": 0
     }
   ]
 }

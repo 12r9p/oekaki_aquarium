@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import type { PendingFish } from "@aquarium/shared";
-import "./Gallery.css";
 import { api } from "../shared/api";
+import { Button } from "@/components/ui/button";
+import { Upload } from "lucide-react";
 
 interface GalleryProps {
     onSelect: (fish: PendingFish) => void;
@@ -54,42 +55,50 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
     };
 
     return (
-        <div className="gallery">
-            <header className="gallery-header">
-                <h1>🐟 待合室</h1>
-                <p className="gallery-subtitle">自分の絵をタップして設定しよう！</p>
-                <label className="btn btn--primary">
-                    写真・PNGを追加
+        <div className="min-h-screen bg-slate-50 text-slate-900">
+            <header className="border-b border-slate-200 bg-white px-5 py-4">
+                <div className="mx-auto flex max-w-5xl flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                        <h1 className="text-xl font-bold tracking-tight">待合室</h1>
+                        <p className="mt-1 text-sm text-slate-500">自分の絵を選んで、泳ぎ方を設定します。</p>
+                    </div>
+                    <Button asChild className="gap-2">
+                        <label>
+                    <Upload className="h-4 w-4" />写真・PNGを追加
                     <input type="file" accept="image/png,image/*" capture="environment" multiple hidden
                         onChange={e => e.target.files && void uploadFiles(e.target.files)} />
                 </label>
+                    </Button>
+                </div>
             </header>
-            <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void uploadFiles(e.dataTransfer.files); }}
-                style={{ margin: "0 16px 12px", padding: 12, border: "2px dashed rgba(126,200,227,.5)", borderRadius: 12, textAlign: "center" }}>
+            <div className="mx-auto max-w-5xl px-5 py-5">
+                <div onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void uploadFiles(e.dataTransfer.files); }}
+                className="mb-5 rounded-lg border border-dashed border-slate-300 bg-white px-4 py-4 text-center text-sm text-slate-500">
                 PNGをここへドロップ
             </div>
             {loading ? (
-                <div className="gallery-empty">読み込み中...</div>
+                <div className="rounded-lg border border-slate-200 bg-white p-10 text-center text-sm text-slate-500">読み込み中...</div>
             ) : fishList.length === 0 ? (
-                <div className="gallery-empty">
-                    <p>まだ魚がいません</p>
-                    <p>スキャナーで絵を取り込んでください</p>
+                <div className="rounded-lg border border-slate-200 bg-white p-10 text-center">
+                    <p className="font-semibold text-slate-800">まだ魚がいません</p>
+                    <p className="mt-1 text-sm text-slate-500">スキャナーで絵を取り込んでください</p>
                 </div>
             ) : (
-                <div className="gallery-grid">
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
                     {fishList.map((fish) => (
                         <button
                             key={fish.id}
-                            className={`gallery-card ${fish.lockedBy ? "locked" : ""}`}
+                            className={`relative aspect-square overflow-hidden rounded-lg border bg-white p-3 shadow-sm transition hover:border-sky-300 hover:shadow-md disabled:cursor-not-allowed disabled:opacity-50 ${fish.lockedBy ? "border-amber-200" : "border-slate-200"}`}
                             onClick={() => void handleSelect(fish)}
                             disabled={!!fish.lockedBy}
                         >
-                            <img src={fish.imageUrl} alt="fish" className="gallery-card-image" />
-                            {fish.lockedBy && <div className="gallery-card-lock">編集中</div>}
+                            <img src={fish.imageUrl} alt="fish" className="h-full w-full object-contain" />
+                            {fish.lockedBy && <div className="absolute right-2 top-2 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-700">編集中</div>}
                         </button>
                     ))}
                 </div>
             )}
+            </div>
         </div>
     );
 }

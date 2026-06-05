@@ -1,8 +1,10 @@
 import { useState, useRef, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import type { FishConfig, PendingFish, FishType, Vector2 } from "@aquarium/shared";
-import "./Editor.css";
 import { api } from "../shared/api";
+import { Button } from "@/components/ui/button";
+import { Slider } from "@/components/ui/slider";
+import { ArrowLeft, Download, Waves, X } from "lucide-react";
 
 interface EditorProps {
     fish: PendingFish;
@@ -95,14 +97,15 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
     if (releasedImageUrl) {
         const qrUrl = `${location.origin}/guest`;
         return (
-            <div className="editor editor--released">
-                <div className="released-splash">🎉</div>
-                <h2>泳ぎ出したよ！</h2>
-                <p className="released-desc">エサをあげるなら→QRコードを読み取ってね</p>
-                <div className="qr-container">
+            <div className="flex min-h-screen items-center justify-center bg-slate-50 p-5 text-slate-900">
+                <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+                <h2 className="text-xl font-bold">泳ぎ出しました</h2>
+                <p className="mt-2 text-sm text-slate-500">エサをあげる場合は QR コードを読み取ってください。</p>
+                <div className="mx-auto my-6 flex w-fit rounded-lg border border-slate-200 bg-white p-3">
                     <QRCodeSVG value={qrUrl} size={200} bgColor="#fff" fgColor="#001a3a" />
                 </div>
-                <button className="btn btn--primary" onClick={onReleased}>待合室に戻る</button>
+                <Button onClick={onReleased} className="w-full">待合室に戻る</Button>
+                </div>
             </div>
         );
     }
@@ -121,85 +124,88 @@ export function Editor({ fish, onReleased, onCancel }: EditorProps): React.React
     const presetOrder: FishType[] = ["tuna", "school", "squid", "jellyfish", "shark", "anchor"];
 
     return (
-        <div className="editor">
-            <header className="editor-header">
-                <button className="btn btn--ghost" onClick={onCancel}>← 戻る</button>
-                <h2>魚を設定する</h2>
+        <div className="min-h-screen bg-slate-50 text-slate-900">
+            <header className="sticky top-0 z-10 border-b border-slate-200 bg-white/95 px-4 py-3 backdrop-blur">
+                <div className="mx-auto flex max-w-5xl items-center justify-between gap-3">
+                    <Button variant="ghost" size="sm" onClick={onCancel} className="gap-1.5"><ArrowLeft className="h-4 w-4" />戻る</Button>
+                    <h2 className="text-base font-bold">魚を設定する</h2>
+                    <Button variant="ghost" size="sm" onClick={onCancel} className="h-9 w-9 p-0"><X className="h-4 w-4" /></Button>
+                </div>
             </header>
 
-            <div className="editor-preview">
+            <main className="mx-auto grid max-w-5xl gap-5 px-4 py-5 lg:grid-cols-[minmax(0,1fr)_360px]">
+            <div className="flex min-h-[280px] items-center justify-center rounded-lg border border-slate-200 bg-white p-6 shadow-sm">
                 <img
                     src={fish.imageUrl}
                     alt="fish"
-                    className="editor-preview-image"
+                    className="max-h-[360px] max-w-full object-contain"
                     style={{ transform: `rotate(${rotationDeg}deg)` }}
                 />
             </div>
 
-            <section className="editor-section">
-                <label className="editor-label">泳ぐ向き</label>
-                <div className="editor-type-grid">
+            <div className="flex flex-col gap-4">
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <label className="text-xs font-bold uppercase text-slate-500">泳ぐ向き</label>
+                <div className="mt-3 grid grid-cols-3 gap-2">
                     {([["auto", "自動"], ["left", "← 左向き"], ["right", "右向き →"]] as const).map(([value, label]) => (
-                        <button key={value} className={`editor-type-btn ${direction === value ? "active" : ""}`}
-                            onClick={() => setDirection(value)}>{label}</button>
+                        <Button key={value} variant={direction === value ? "default" : "outline"} size="sm"
+                            onClick={() => setDirection(value)}>{label}</Button>
                     ))}
                 </div>
             </section>
 
-            <section className="editor-section">
-                <label className="editor-label">🔄 回転補正</label>
-                <input type="range" min={-180} max={180} step={1} value={rotationDeg}
-                    onChange={(e) => setRotationDeg(Number(e.target.value))} className="editor-slider" />
-                <span className="editor-value">{rotationDeg}°</span>
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between"><label className="text-xs font-bold uppercase text-slate-500">回転補正</label><span className="font-mono text-sm font-bold text-slate-700">{rotationDeg}°</span></div>
+                <Slider value={[rotationDeg]} min={-180} max={180} step={1} onValueChange={value => setRotationDeg(value[0] ?? 0)} />
             </section>
 
-            <section className="editor-section">
-                <label className="editor-label">🎭 動きのタイプ</label>
-                <div className="editor-type-grid">
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <label className="text-xs font-bold uppercase text-slate-500">動きのタイプ</label>
+                <div className="mt-3 grid grid-cols-2 gap-2">
                     {presetOrder.map((t) => (
-                        <button key={t} className={`editor-type-btn ${fishType === t ? "active" : ""}`}
+                        <Button key={t} variant={fishType === t ? "default" : "outline"} size="sm" className="h-auto justify-start whitespace-normal py-2 text-left"
                             onClick={() => setFishType(t)}>
                             {typeLabels[t]}
-                        </button>
+                        </Button>
                     ))}
                 </div>
             </section>
 
-            <section className="editor-section">
-                <label className="editor-label">📐 大きさ: {scale.toFixed(1)}</label>
-                <input type="range" min={0.3} max={3.0} step={0.1} value={scale}
-                    onChange={(e) => setScale(Number(e.target.value))} className="editor-slider" />
-                <label className="editor-label" style={{ marginTop: 12 }}>⚡ 速さ: {speed.toFixed(1)}</label>
-                <input type="range" min={0.2} max={3.0} step={0.1} value={speed}
-                    onChange={(e) => setSpeed(Number(e.target.value))} className="editor-slider" />
+            <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                <div className="mb-3 flex items-center justify-between"><label className="text-xs font-bold uppercase text-slate-500">大きさ</label><span className="font-mono text-sm font-bold text-slate-700">×{scale.toFixed(1)}</span></div>
+                <Slider value={[scale]} min={0.3} max={3.0} step={0.1} onValueChange={value => setScale(value[0] ?? 1)} />
+                <div className="mb-3 mt-5 flex items-center justify-between"><label className="text-xs font-bold uppercase text-slate-500">速さ</label><span className="font-mono text-sm font-bold text-slate-700">×{speed.toFixed(1)}</span></div>
+                <Slider value={[speed]} min={0.2} max={3.0} step={0.1} onValueChange={value => setSpeed(value[0] ?? 1)} />
             </section>
 
             {(fishType === "looper" || fishType === "anchor") && (
-                <section className="editor-section">
-                    <label className="editor-label">✍️ 動きを手書きで録画</label>
-                    <div className="motion-canvas-wrapper">
-                        <canvas ref={canvasRef} width={280} height={200} className="motion-canvas"
+                <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-sm">
+                    <label className="text-xs font-bold uppercase text-slate-500">動きを手書きで録画</label>
+                    <div className="relative mt-3 overflow-hidden rounded-lg border border-slate-200 bg-slate-50">
+                        <canvas ref={canvasRef} width={280} height={200} className="block h-[200px] w-full touch-none"
                             onPointerDown={() => { setMotionPath([]); setIsRecording(true); }}
                             onPointerMove={handlePointerMove}
                             onPointerUp={stopRecording} onPointerLeave={stopRecording} />
-                        {isRecording && <div className="motion-recording-badge">録画中...</div>}
+                        {isRecording && <div className="absolute right-2 top-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-bold text-red-700">録画中</div>}
                     </div>
-                    <div className="motion-actions">
-                        <span className="editor-value">{motionPath.length}点</span>
-                        <button className="btn btn--ghost" onClick={() => {
+                    <div className="mt-3 flex items-center justify-between">
+                        <span className="font-mono text-xs text-slate-500">{motionPath.length}点</span>
+                        <Button variant="outline" size="sm" onClick={() => {
                             setMotionPath([]);
                             canvasRef.current?.getContext("2d")?.clearRect(0, 0, 280, 200);
-                        }}>クリア</button>
+                        }}>クリア</Button>
                     </div>
                 </section>
             )}
 
-            <div className="editor-footer">
-                <button className="btn btn--ghost" onClick={() => void handleDownload()}>設定入りPNGをDL</button>
-                <button className="btn btn--release" onClick={() => void handleRelease()} disabled={releasing}>
-                    {releasing ? "放流中..." : "🌊 泳げ！"}
-                </button>
+            <div className="sticky bottom-0 flex gap-2 border-t border-slate-200 bg-white/95 p-3 backdrop-blur lg:static lg:rounded-lg lg:border lg:shadow-sm">
+                <Button variant="outline" onClick={() => void handleDownload()} className="flex-1 gap-1.5"><Download className="h-4 w-4" />PNG</Button>
+                <Button onClick={() => void handleRelease()} disabled={releasing} className="flex-[2] gap-1.5">
+                    <Waves className="h-4 w-4" />{releasing ? "放流中..." : "泳がせる"}
+                </Button>
             </div>
+            </div>
+            </main>
         </div>
     );
 }

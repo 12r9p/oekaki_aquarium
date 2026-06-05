@@ -6,6 +6,8 @@ import type { PendingFish } from "@aquarium/shared";
 import { Editor } from "../controller/Editor";
 import { api } from "../shared/api";
 import "../styles/global.css";
+import { Button } from "@/components/ui/button";
+import { Camera, Fish, Wifi, WifiOff } from "lucide-react";
 
 // ============================================================
 // guest: スマホ餌やりUI（1ファイルで完結）
@@ -59,27 +61,28 @@ function App(): React.ReactElement {
 
     if (mode === "create") {
         return (
-            <div style={{ minHeight: "100svh", background: "linear-gradient(180deg,#001a3a,#000d24)", color: "white", padding: 24, textAlign: "center" }}>
-                <button className="btn btn--ghost" onClick={() => setMode("feed")}>← エサやりへ</button>
-                <h1 style={{ margin: "48px 0 12px" }}>魚を放流する</h1>
-                <p style={{ color: "#7ec8e3", marginBottom: 24 }}>写真を撮るかPNGを選ぶと、泳ぎ方・向き・大きさ・速度を設定できます。</p>
-                <label className="btn btn--primary" style={{ display: "inline-block", padding: "16px 24px" }}>
-                    写真を撮る / PNGを選ぶ
+            <div className="flex min-h-screen items-center justify-center bg-slate-50 p-5 text-slate-900">
+                <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-white p-6 text-center shadow-sm">
+                <Button variant="ghost" onClick={() => setMode("feed")} className="mb-6">エサやりへ戻る</Button>
+                <h1 className="text-xl font-bold">魚を放流する</h1>
+                <p className="mt-2 text-sm leading-6 text-slate-500">写真を撮るか PNG を選ぶと、泳ぎ方・向き・大きさ・速度を設定できます。</p>
+                <Button asChild className="mt-6 w-full gap-2">
+                    <label>
+                    <Camera className="h-4 w-4" />写真を撮る / PNGを選ぶ
                     <input type="file" accept="image/*" capture="environment" hidden
                         onChange={e => e.target.files?.[0] && void uploadPhoto(e.target.files[0])} />
                 </label>
+                </Button>
+                </div>
             </div>
         );
     }
 
     return (
         <div
+            className="flex min-h-screen select-none flex-col items-center justify-center gap-6 bg-slate-950 p-6 text-white"
             style={{
-                minHeight: "100svh", position: "relative", userSelect: "none", touchAction: "none",
-                background: "linear-gradient(180deg,#001a3a 0%,#000d24 100%)",
-                color: "white", fontFamily: "'Hiragino Sans','Noto Sans JP',sans-serif",
-                display: "flex", flexDirection: "column", alignItems: "center",
-                justifyContent: "center", gap: 24,
+                touchAction: "none",
             }}
             onClick={handleTap}
             onTouchStart={handleTap}
@@ -100,26 +103,25 @@ function App(): React.ReactElement {
         }
       `}</style>
 
-            <div style={{ textAlign: "center", pointerEvents: "none" }}>
-                <div style={{ fontSize: "4rem", marginBottom: 8 }}>🐠</div>
-                <h1 style={{ fontSize: "1.5rem", marginBottom: 4 }}>エサやり</h1>
-                <p style={{ color: "#7ec8e3", fontSize: "0.95rem", marginBottom: 32 }}>
+            <div className="pointer-events-none text-center">
+                <div className="mx-auto mb-4 flex h-20 w-20 items-center justify-center rounded-full border border-sky-400/30 bg-sky-400/10">
+                    <Fish className="h-10 w-10 text-sky-200" />
+                </div>
+                <h1 className="text-2xl font-bold">エサやり</h1>
+                <p className="mt-2 text-sm text-sky-100/80">
                     画面をタップしてエサを投げよう！
                 </p>
-                <div style={{
-                    background: connected ? "rgba(0,200,100,0.2)" : "rgba(200,50,50,0.2)",
-                    border: `1px solid ${connected ? "#00c864" : "#c83200"}`,
-                    borderRadius: 999, padding: "6px 16px", display: "inline-block", marginBottom: 16,
-                }}>
-                    {connected ? "🟢 接続中" : "🔴 接続中断"}
+                <div className={`mx-auto mt-8 inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-bold ${connected ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-100" : "border-red-400/40 bg-red-400/10 text-red-100"}`}>
+                    {connected ? <Wifi className="h-3.5 w-3.5" /> : <WifiOff className="h-3.5 w-3.5" />}
+                    {connected ? "接続中" : "接続中断"}
                 </div>
                 {feedCount > 0 && (
-                    <p style={{ color: "#ffd700", fontSize: "0.9rem" }}>🍖 エサ投入 {feedCount}回</p>
+                    <p className="mt-3 text-sm font-bold text-amber-200">エサ投入 {feedCount}回</p>
                 )}
-                <button className="btn btn--primary" style={{ marginTop: 28, pointerEvents: "auto" }}
+                <Button className="pointer-events-auto mt-8"
                     onClick={e => { e.stopPropagation(); setMode("create"); }}>
                     自分の魚を放流する
-                </button>
+                </Button>
             </div>
         </div>
     );

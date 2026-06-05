@@ -39,6 +39,7 @@ function ManageApp(): React.ReactElement {
     const [systemMetrics, setSystemMetrics] = useState<SystemMetrics>({ startedAt: Date.now(), samples: [] });
     const [horizontalBoundaryMode, setHorizontalBoundaryMode] = useState<HorizontalBoundaryMode>("wrap");
     const [fishSpeedMultiplier, setFishSpeedMultiplier] = useState(1);
+    const [fishScaleMultiplier, setFishScaleMultiplier] = useState(1);
     const [connected, setConnected] = useState(false);
     const [alert, setAlert] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string | null>(null);
@@ -81,6 +82,7 @@ function ManageApp(): React.ReactElement {
                 if (msg.fishLayers !== undefined) setFishLayers(msg.fishLayers);
                 if (msg.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(msg.horizontalBoundaryMode);
                 if (msg.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(msg.fishSpeedMultiplier);
+                if (msg.fishScaleMultiplier !== undefined) setFishScaleMultiplier(msg.fishScaleMultiplier);
                 if (msg.motionSettings !== undefined) setMotionSettings(msg.motionSettings);
                 if (msg.systemMetrics !== undefined) setSystemMetrics(msg.systemMetrics);
             } else if (msg.event === "update_world_config") {
@@ -90,6 +92,7 @@ function ManageApp(): React.ReactElement {
                 if (msg.layers !== undefined) setLayers(msg.layers);
                 if (msg.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(msg.horizontalBoundaryMode);
                 if (msg.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(msg.fishSpeedMultiplier);
+                if (msg.fishScaleMultiplier !== undefined) setFishScaleMultiplier(msg.fishScaleMultiplier);
             } else if (msg.event === "fish_list") {
                 setActiveFish(msg.activeFish);
                 setPendingFish(msg.pendingFish);
@@ -121,6 +124,7 @@ function ManageApp(): React.ReactElement {
                 layers?: AppLayerConfig[];
                 horizontalBoundaryMode?: HorizontalBoundaryMode;
                 fishSpeedMultiplier?: number;
+                fishScaleMultiplier?: number;
                 fishLayers?: LayerConfig[];
                 motionSettings?: MotionSettings;
                 systemMetrics?: SystemMetrics;
@@ -137,6 +141,7 @@ function ManageApp(): React.ReactElement {
             if (data.fishLayers !== undefined) setFishLayers(data.fishLayers);
             if (data.horizontalBoundaryMode !== undefined) setHorizontalBoundaryMode(data.horizontalBoundaryMode);
             if (data.fishSpeedMultiplier !== undefined) setFishSpeedMultiplier(data.fishSpeedMultiplier);
+            if (data.fishScaleMultiplier !== undefined) setFishScaleMultiplier(data.fishScaleMultiplier);
             if (data.motionSettings !== undefined) setMotionSettings(data.motionSettings);
             if (data.systemMetrics !== undefined) setSystemMetrics(data.systemMetrics);
         } catch (err) {
@@ -252,7 +257,7 @@ function ManageApp(): React.ReactElement {
         displays, activeFish, pendingFish, sendRateSetting,
         worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints,
-        layers, setLayers, horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier,
+        layers, setLayers, horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier, fishScaleMultiplier, setFishScaleMultiplier,
         selectedDisplay, setSelectedDisplay, activeLayerId, setActiveLayerId, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports,
@@ -297,7 +302,7 @@ function ManageApp(): React.ReactElement {
                     />
                 )}
                 {tab === "fish" && (
-                    <FishTab activeFish={activeFish} fishLayers={fishLayers} onRefresh={poll} />
+                    <FishTab activeFish={activeFish} fishLayers={fishLayers} fishScaleMultiplier={fishScaleMultiplier} onRefresh={poll} />
                 )}
                 {tab === "pending" && (
                     <PendingTab pendingFish={pendingFish} onRefresh={poll} />
@@ -305,7 +310,7 @@ function ManageApp(): React.ReactElement {
                 {tab === "motion" && (
                     <MotionPage settings={motionSettings} onChange={(next) => {
                         setMotionSettings(next);
-                        if (connected) ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, motionSettings: next });
+                        if (connected) ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, fishScaleMultiplier, motionSettings: next });
                     }} />
                 )}
                 {tab === "settings" && (
@@ -363,6 +368,8 @@ interface LayoutTabProps {
         setHorizontalBoundaryMode: React.Dispatch<React.SetStateAction<HorizontalBoundaryMode>>;
         fishSpeedMultiplier: number;
         setFishSpeedMultiplier: React.Dispatch<React.SetStateAction<number>>;
+        fishScaleMultiplier: number;
+        setFishScaleMultiplier: React.Dispatch<React.SetStateAction<number>>;
         selectedDisplay: string | null;
         setSelectedDisplay: React.Dispatch<React.SetStateAction<string | null>>;
         activeLayerId?: string;
@@ -387,7 +394,7 @@ interface LayoutTabProps {
 function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWorldSize }: LayoutTabProps) {
     const { displays, sendRateSetting, worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints, layers, setLayers,
-        horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier,
+        horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier, fishScaleMultiplier,
         selectedDisplay, setSelectedDisplay, activeLayerId, setActiveLayerId, arLocked, setArLocked,
         displaysRef, pendingViewports, hoveredDisplayRef, setHoveredUI,
         undoStackRef, redoStackRef, snapshotViewports } = state;
@@ -399,8 +406,9 @@ function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWo
         layers?: AppLayerConfig[];
         horizontalBoundaryMode?: HorizontalBoundaryMode;
         fishSpeedMultiplier?: number;
+        fishScaleMultiplier?: number;
     }) => {
-        const next = { bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, ...patch };
+        const next = { bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, fishScaleMultiplier, ...patch };
         if (connected) ws.send({ event: "update_world_config", ...next });
     };
 

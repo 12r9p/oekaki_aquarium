@@ -2,6 +2,7 @@ import { useState } from "react";
 import type { ActiveFish } from "@aquarium/shared";
 import { CopyPlus, Settings2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { getLayerGradient, getLayerLabel } from "./layer-colors";
 import {
     Table,
     TableBody,
@@ -36,7 +37,7 @@ export function FishTable({ activeFish, onEdit, onDuplicate, onDelete }: FishTab
                         <TableHead>情報</TableHead>
                         <TableHead className="w-24 text-center">タイプ</TableHead>
                         <TableHead className="w-24 text-center">大きさ / 速度</TableHead>
-                        <TableHead className="w-24 text-center">ステータス</TableHead>
+                    <TableHead className="w-32 text-center">ステータス</TableHead>
                         <TableHead className="w-44">時刻</TableHead>
                         <TableHead className="text-right w-16">操作</TableHead>
                     </TableRow>
@@ -91,7 +92,6 @@ function FishRow({
                 <div className="flex flex-col gap-0.5">
                     <span className="text-xs font-bold text-slate-700 truncate max-w-[160px]">{fish.author ?? "anonymous"}</span>
                     <span className="text-[10px] font-mono text-slate-400">{fish.id.slice(0, 12)}…</span>
-                    <span className="text-[10px] text-slate-400">Lyr {fish.layerIndex}</span>
                 </div>
             </TableCell>
             <TableCell className="align-middle border-r border-slate-100 text-center">
@@ -107,9 +107,13 @@ function FishRow({
             </TableCell>
             <TableCell className="align-middle border-r border-slate-100 text-center">
                 <div className="flex flex-col gap-0.5 items-center">
-                    {fish.isPinned && <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">📌 固定</span>}
-                    {fish.isArchived && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">非表示</span>}
-                    {!fish.isPinned && !fish.isArchived && <span className="text-[10px] text-slate-300">—</span>}
+                    <span
+                        className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold text-white shadow-sm"
+                        style={{ background: getLayerGradient(fish.isArchived ? -1 : fish.layerIndex, 5) }}
+                    >
+                        {getLayerLabel(fish.layerIndex, fish.isArchived)}
+                    </span>
+                    {fish.isPinned && !fish.isArchived && <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">固定</span>}
                 </div>
             </TableCell>
             <TableCell className="align-middle border-r border-slate-100 text-[10px] text-slate-500">

@@ -37,12 +37,11 @@ import {
   restoreActiveFishFromDisk,
   removeFish,
   updateFishParams,
-  multiplyAllFishParams,
   removePendingFish,
   duplicateFish,
   redistributeFish,
 } from "./fish-manager";
-import { getWorld, updateFishLayerConfig } from "./world";
+import { getWorld, updateFishLayerConfig, updateWorldMotionSettings } from "./world";
 import { loadFishLibrary, getLibraryFileBuffer, DATA_FISH_DIR } from "./fish-library";
 import { readFishMeta, writeFishMeta, DEFAULT_FISH_META } from "./png-metadata";
 import { updatePersistedSettings } from "./settings-store";
@@ -102,13 +101,26 @@ app.put("/api/fish/:id", async (c) => {
   return c.json({ success: ok });
 });
 
-app.post("/api/fish/bulk-multiply", async (c) => {
-  const body = await c.req.json<{ scaleMultiplier?: number; speedMultiplier?: number }>();
-  const scaleMultiplier = Number.isFinite(body.scaleMultiplier) ? body.scaleMultiplier! : 1;
-  const speedMultiplier = Number.isFinite(body.speedMultiplier) ? body.speedMultiplier! : 1;
-  const updated = multiplyAllFishParams(scaleMultiplier, speedMultiplier);
+app.put("/api/fish-scale-multiplier", async (c) => {
+  const body = await c.req.json<{ value?: number }>();
+  updateWorldMotionSettings(undefined, undefined, Number.isFinite(body.value) ? body.value : undefined);
+  updateFishLayers(getAllActiveFish());
+  const w = getWorld();
+  updatePersistedSettings({
+    world: {
+      width: w.width,
+      height: w.height,
+      forbiddenZones: w.forbiddenZones,
+      spawnPoints: w.spawnPoints,
+      layers: w.layers,
+      horizontalBoundaryMode: w.horizontalBoundaryMode,
+      fishSpeedMultiplier: w.fishSpeedMultiplier,
+      fishScaleMultiplier: w.fishScaleMultiplier,
+      motionSettings: w.motionSettings,
+    },
+  });
   pushClientListToManagers();
-  return c.json({ success: true, updated });
+  return c.json({ success: true, fishScaleMultiplier: w.fishScaleMultiplier });
 });
 
 // 魚の複製
@@ -421,6 +433,7 @@ app.get("/api/state", (c) => {
     fishLayers:  LAYER_CONFIG,
     horizontalBoundaryMode: w.horizontalBoundaryMode,
     fishSpeedMultiplier: w.fishSpeedMultiplier,
+    fishScaleMultiplier: w.fishScaleMultiplier,
     motionSettings: w.motionSettings,
     systemMetrics: getSystemMetrics(),
   });

@@ -1,5 +1,6 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { LAYER_CONFIG } from "@aquarium/shared";
+import { FISH_SCALE_BASE_MULTIPLIER, getWorld } from "./world";
 
 // ============================================================
 // LayerManager: ところてん方式のレイヤー割り当て
@@ -52,9 +53,10 @@ export function getFishLayerCounts(allFish: ActiveFish[]): number[] {
 function applyLayerProps(fish: ActiveFish, layerIdx: number): void {
   const config = LAYER_CONFIG[layerIdx] ?? LAYER_CONFIG[0];
   if (!config) return;
+  const globalScale = getWorld().fishScaleMultiplier * FISH_SCALE_BASE_MULTIPLIER;
   fish.layerIndex = layerIdx;
   // これらの目標値に向かってクライアントが Lerp で補間する
-  fish.targetScale = fish.userParams.scale * config.scale;
+  fish.targetScale = fish.userParams.scale * config.scale * globalScale;
   fish.targetOpacity = config.opacity;
   // 遠くの魚は遅く動かす（パララックス効果）
   fish.physics.speedMultiplier = config.speedFactor;

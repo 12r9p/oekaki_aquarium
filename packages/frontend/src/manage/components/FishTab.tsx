@@ -11,6 +11,7 @@ import { PageHeader } from "./PageHeader";
 interface FishTabProps {
     activeFish: ActiveFish[];
     fishLayers: LayerConfig[];
+    fishScaleMultiplier: number;
     onRefresh: () => void;
 }
 
@@ -298,13 +299,11 @@ function FishConfigPopup({
     );
 }
 
-export function FishTab({ activeFish, fishLayers, onRefresh }: FishTabProps) {
+export function FishTab({ activeFish, fishLayers, fishScaleMultiplier, onRefresh }: FishTabProps) {
     const [selectedFish, setSelectedFish] = useState<ActiveFish | null>(null);
     const [showBulk, setShowBulk] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
-    const [bulkScaleMultiplier, setBulkScaleMultiplier] = useState(1);
-    const [bulkSpeedMultiplier, setBulkSpeedMultiplier] = useState(1);
-    const lastBulkValues = React.useRef({ scale: 1, speed: 1 });
+    const [bulkScaleMultiplier, setBulkScaleMultiplier] = useState(fishScaleMultiplier);
     const bulkTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const importFish = async (files: FileList | null) => {
@@ -361,23 +360,21 @@ export function FishTab({ activeFish, fishLayers, onRefresh }: FishTabProps) {
         onRefresh();
     };
 
+    React.useEffect(() => setBulkScaleMultiplier(fishScaleMultiplier), [fishScaleMultiplier]);
+
     React.useEffect(() => {
+        if (!showBulk) return;
         if (bulkTimer.current) clearTimeout(bulkTimer.current);
         bulkTimer.current = setTimeout(async () => {
-            const scaleMultiplier = bulkScaleMultiplier / lastBulkValues.current.scale;
-            const speedMultiplier = bulkSpeedMultiplier / lastBulkValues.current.speed;
-            if (Math.abs(scaleMultiplier - 1) < 0.0001 && Math.abs(speedMultiplier - 1) < 0.0001) return;
-            const response = await api.request("/api/fish/bulk-multiply", {
-                method: "POST",
+            const response = await api.request("/api/fish-scale-multiplier", {
+                method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ scaleMultiplier, speedMultiplier }),
+                body: JSON.stringify({ value: bulkScaleMultiplier }),
             });
-            if (!response.ok) return;
-            lastBulkValues.current = { scale: bulkScaleMultiplier, speed: bulkSpeedMultiplier };
-            onRefresh();
+            if (response.ok) onRefresh();
         }, 150);
         return () => { if (bulkTimer.current) clearTimeout(bulkTimer.current); };
-    }, [bulkScaleMultiplier, bulkSpeedMultiplier]);
+    }, [bulkScaleMultiplier, showBulk]);
 
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col gap-6">
@@ -438,7 +435,7 @@ export function FishTab({ activeFish, fishLayers, onRefresh }: FishTabProps) {
             {showBulk && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={event => { if (event.target === event.currentTarget) setShowBulk(false); }}>
                     <div className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-2xl">
-                        <BulkMultiplierSection scale={bulkScaleMultiplier} speed={bulkSpeedMultiplier} onScaleChange={setBulkScaleMultiplier} onSpeedChange={setBulkSpeedMultiplier} />
+                        <BulkMultiplierSection scale={bulkScaleMultiplier} onScaleChange={setBulkScaleMultiplier} />
                         <div className="mt-4 flex justify-end"><Button variant="outline" onClick={() => setShowBulk(false)}>閉じる</Button></div>
                     </div>
                 </div>

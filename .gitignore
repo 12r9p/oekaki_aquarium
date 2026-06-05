@@ -9,3 +9,4 @@ scanner/__pycache__/
 scanner/input/
 scanner/output/
 packages/server/public/images/
+data/fish

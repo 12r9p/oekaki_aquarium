@@ -77,6 +77,7 @@ function persistServerSettings(): void {
       layers: w.layers,
       horizontalBoundaryMode: w.horizontalBoundaryMode,
       fishSpeedMultiplier: w.fishSpeedMultiplier,
+      fishScaleMultiplier: w.fishScaleMultiplier,
       motionSettings: w.motionSettings,
     },
   });
@@ -233,6 +234,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
           layers: w.layers,
           horizontalBoundaryMode: w.horizontalBoundaryMode,
           fishSpeedMultiplier: w.fishSpeedMultiplier,
+          fishScaleMultiplier: w.fishScaleMultiplier,
           motionSettings: w.motionSettings,
           displayNumber,
         });
@@ -290,7 +292,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       updateForbiddenZones(msg.forbiddenZones);
       updateSpawnPoints(msg.spawnPoints);
       if (msg.layers) updateLayers(msg.layers);
-      updateWorldMotionSettings(msg.horizontalBoundaryMode, msg.fishSpeedMultiplier, msg.motionSettings);
+      updateWorldMotionSettings(msg.horizontalBoundaryMode, msg.fishSpeedMultiplier, msg.fishScaleMultiplier, msg.motionSettings);
       persistServerSettings();
       const w = getWorld();
 
@@ -302,6 +304,7 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
         layers: msg.layers,
         horizontalBoundaryMode: w.horizontalBoundaryMode,
         fishSpeedMultiplier: w.fishSpeedMultiplier,
+        fishScaleMultiplier: w.fishScaleMultiplier,
         motionSettings: w.motionSettings,
       });
       // 管理画面のstate_pushもトリガー
@@ -439,6 +442,7 @@ export function pushStateToManagers(): void {
     fishLayers: LAYER_CONFIG,
     horizontalBoundaryMode: w.horizontalBoundaryMode,
     fishSpeedMultiplier: w.fishSpeedMultiplier,
+    fishScaleMultiplier: w.fishScaleMultiplier,
     motionSettings: w.motionSettings,
     systemMetrics: getSystemMetrics(),
   };

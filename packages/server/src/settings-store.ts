@@ -13,6 +13,7 @@ export interface PersistedAquariumSettings {
     layers: AppLayerConfig[];
     horizontalBoundaryMode: HorizontalBoundaryMode;
     fishSpeedMultiplier: number;
+    fishScaleMultiplier: number;
     motionSettings: MotionSettings;
   };
   bgUrl?: string;

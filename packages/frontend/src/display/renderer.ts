@@ -33,6 +33,7 @@ let displayNumber: number | undefined;
 const fishLayerContainers = new Map<number, Container>();
 const imageLayerSprites = new Map<string, Sprite>();
 const FISH_BASE_SIZE = 48;
+let rendererApp: Application | null = null;
 
 // Lerp 関数
 function lerp(a: number, b: number, t: number): number { return a + (b - a) * t; }
@@ -59,7 +60,7 @@ export function updateFishTargets(
   const layerIndex = fd.l ?? 0;
   if (entry.layerIndex !== layerIndex) {
     entry.layerIndex = layerIndex;
-    fishLayerContainers.get(layerIndex)?.addChild(entry.sprite);
+    ensureFishLayerContainer(layerIndex)?.addChild(entry.sprite);
   }
   entry.facing = fd.d ?? entry.facing;
   const wrapJumpThreshold = STATE.WORLD_W * STATE.scaleX * 0.5;
@@ -76,12 +77,21 @@ export function updateFishTargets(
 }
 
 export function initRenderer(app: Application) {
+  rendererApp = app;
   for (let layerIndex = 0; layerIndex < 3; layerIndex++) {
+    ensureFishLayerContainer(layerIndex);
+  }
+}
+
+function ensureFishLayerContainer(layerIndex: number): Container | undefined {
+  const existing = fishLayerContainers.get(layerIndex);
+  if (existing) return existing;
+  if (!rendererApp) return undefined;
     const container = new Container();
     container.sortableChildren = true;
     fishLayerContainers.set(layerIndex, container);
-    app.stage.addChild(container);
-  }
+  rendererApp.stage.addChild(container);
+  return container;
 }
 
 export function setDisplayNumber(value?: number): void {
@@ -547,7 +557,7 @@ export function spawnFish(app: Application, fishMap: Map<string, FishEntry>, fd:
   sprite.alpha = fd.o;
   sprite.zIndex = fd.z;
   const layerIndex = fd.l ?? 0;
-  (fishLayerContainers.get(layerIndex) ?? fishLayerContainers.get(0))?.addChild(sprite);
+  (ensureFishLayerContainer(layerIndex) ?? ensureFishLayerContainer(0))?.addChild(sprite);
   const entry: FishEntry = {
     sprite,
     textureUrl: fd.u,
