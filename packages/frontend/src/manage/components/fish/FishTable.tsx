@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ActiveFish } from "@aquarium/shared";
 import { CopyPlus, Settings2, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getLayerGradient, getLayerLabel } from "./layer-colors";
+import { getLayerColor, getLayerLabel } from "./layer-colors";
 import {
     Table,
     TableBody,
@@ -11,6 +11,13 @@ import {
     TableHeader,
     TableRow,
 } from "@/components/ui/table";
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from "@/components/ui/select";
 
 interface FishTableProps {
     activeFish: ActiveFish[];
@@ -29,7 +36,19 @@ export function FishTable({ activeFish, onEdit, onDuplicate, onDelete }: FishTab
     });
     return (
         <div className="bg-white rounded-xl shadow-sm border border-slate-200 max-h-[60vh] overflow-y-auto">
-            <div className="sticky top-0 z-10 flex justify-end border-b border-slate-200 bg-white p-3"><select value={sort} onChange={event => setSort(event.target.value as typeof sort)} className="h-8 rounded-md border border-slate-200 px-2 text-xs"><option value="released-new">放流: 新しい順</option><option value="released-old">放流: 古い順</option><option value="created-new">作成: 新しい順</option><option value="archived-new">アーカイブ: 新しい順</option></select></div>
+            <div className="sticky top-0 z-10 flex justify-end border-b border-slate-200 bg-white p-3">
+                <Select value={sort} onValueChange={value => setSort(value as typeof sort)}>
+                    <SelectTrigger className="h-8 w-40 text-xs">
+                        <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="released-new">放流: 新しい順</SelectItem>
+                        <SelectItem value="released-old">放流: 古い順</SelectItem>
+                        <SelectItem value="created-new">作成: 新しい順</SelectItem>
+                        <SelectItem value="archived-new">アーカイブ: 新しい順</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
             <Table>
                 <TableHeader className="bg-slate-50">
                     <TableRow>
@@ -37,7 +56,7 @@ export function FishTable({ activeFish, onEdit, onDuplicate, onDelete }: FishTab
                         <TableHead>情報</TableHead>
                         <TableHead className="w-24 text-center">タイプ</TableHead>
                         <TableHead className="w-24 text-center">大きさ / 速度</TableHead>
-                    <TableHead className="w-32 text-center">ステータス</TableHead>
+                        <TableHead className="w-32 text-center">ステータス</TableHead>
                         <TableHead className="w-44">時刻</TableHead>
                         <TableHead className="text-right w-16">操作</TableHead>
                     </TableRow>
@@ -109,7 +128,7 @@ function FishRow({
                 <div className="flex flex-col gap-0.5 items-center">
                     <span
                         className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold text-white shadow-sm"
-                        style={{ background: getLayerGradient(fish.isArchived ? -1 : fish.layerIndex, 5) }}
+                        style={{ background: getLayerColor(fish.isArchived ? -1 : fish.layerIndex, 5) }}
                     >
                         {getLayerLabel(fish.layerIndex, fish.isArchived)}
                     </span>

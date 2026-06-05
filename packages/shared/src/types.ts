@@ -214,6 +214,14 @@ export type HorizontalBoundaryMode = "bounce" | "wrap";
 export interface MotionSettings {
   verticalSpread: number;
   turnStrength: number;
+  typeProfiles?: Partial<Record<FishType, MotionTypeProfile>>;
+  customCode?: string;
+}
+
+export interface MotionTypeProfile {
+  speedMultiplier: number;
+  verticalSpread: number;
+  turnStrength: number;
 }
 
 export interface SystemMetricSample {

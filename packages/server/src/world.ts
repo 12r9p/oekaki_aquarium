@@ -119,8 +119,26 @@ export function updateWorldMotionSettings(
     world.motionSettings = {
       verticalSpread: Math.max(0.2, Math.min(motionSettings.verticalSpread, 2)),
       turnStrength: Math.max(0.2, Math.min(motionSettings.turnStrength, 2)),
+      typeProfiles: normalizeMotionTypeProfiles(motionSettings.typeProfiles),
+      customCode: typeof motionSettings.customCode === "string" ? motionSettings.customCode.slice(0, 20_000) : undefined,
     };
   }
+}
+
+function normalizeMotionTypeProfiles(
+  profiles: MotionSettings["typeProfiles"],
+): MotionSettings["typeProfiles"] {
+  if (!profiles) return undefined;
+  const normalized: NonNullable<MotionSettings["typeProfiles"]> = {};
+  for (const [type, profile] of Object.entries(profiles)) {
+    if (!profile) continue;
+    normalized[type as keyof NonNullable<MotionSettings["typeProfiles"]>] = {
+      speedMultiplier: Math.max(0.1, Math.min(profile.speedMultiplier ?? 1, 5)),
+      verticalSpread: Math.max(0.1, Math.min(profile.verticalSpread ?? 1, 5)),
+      turnStrength: Math.max(0.1, Math.min(profile.turnStrength ?? 1, 5)),
+    };
+  }
+  return normalized;
 }
 
 export function restoreWorldSettings(settings: Partial<Omit<WorldConfig, "validZones">>): void {

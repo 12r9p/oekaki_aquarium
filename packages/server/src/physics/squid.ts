@@ -1,7 +1,7 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
 import { getWorld } from "../world";
-import { movementScale } from "./motion-profile";
+import { movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
 // squid.ts — イカ型: ホバリング + Sin波パルス推進
@@ -53,7 +53,7 @@ export function applySquid(fish: ActiveFish): void {
 
   // Y方向: sin波ホバリング
   const t = state.phase + (Date.now() / 1000) * (Math.PI * 2 / (PHYSICS.SQUID_HOVER_PERIOD / 60));
-  const targetY = state.baseY + Math.sin(t) * PHYSICS.SQUID_HOVER_AMP * world.motionSettings.verticalSpread;
+  const targetY = state.baseY + Math.sin(t) * PHYSICS.SQUID_HOVER_AMP * verticalSpreadForFish(fish);
   const dy = (targetY - fish.physics.pos.y) * 0.04;
   fish.physics.vel.y = dy;
   fish.physics.pos.y += dy;

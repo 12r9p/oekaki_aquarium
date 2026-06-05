@@ -1,7 +1,7 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
 import { getWorld } from "../world";
-import { movementScale } from "./motion-profile";
+import { movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
 // tuna.ts — マグロ型: 高速直線往復
@@ -41,12 +41,12 @@ export function applyTuna(fish: ActiveFish): void {
   state.frame++;
   state.framesUntilLaneChange--;
   if (state.framesUntilLaneChange <= 0) {
-    const spread = world.motionSettings.verticalSpread;
+    const spread = verticalSpreadForFish(fish);
     const marginRatio = Math.max(0.04, 0.18 / spread);
     state.laneTargetY = world.height * (marginRatio + Math.random() * (1 - marginRatio * 2));
     state.framesUntilLaneChange = 180 + Math.floor(Math.random() * 480);
   }
-  state.baseY += (state.laneTargetY - state.baseY) * 0.003 * world.motionSettings.turnStrength;
+  state.baseY += (state.laneTargetY - state.baseY) * 0.003 * turnStrengthForFish(fish);
 
   // 壁および禁止エリアに近づいたら向きを反転
   let shouldTurnLeft = false;
@@ -90,7 +90,7 @@ export function applyTuna(fish: ActiveFish): void {
   fish.physics.pos.x += fish.physics.vel.x;
 
   // Y: sin波でごくわずかにドリフト（ほぼ水平）
-  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 50 * world.motionSettings.verticalSpread;
+  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 50 * verticalSpreadForFish(fish);
   const targetY = state.baseY + driftY;
   const dy = (targetY - fish.physics.pos.y) * 0.05;
   fish.physics.vel.y = dy;

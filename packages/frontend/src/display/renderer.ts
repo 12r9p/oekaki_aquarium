@@ -70,8 +70,7 @@ export function updateFishTargets(
   entry.targetX = screenX;
   entry.targetY = screenY;
   entry.targetRotation = fd.r;
-  // 登録される魚画像は左向きを正としているため、進行方向とは逆符号で反転する。
-  entry.targetScale = normalizedFishScale(entry.sprite.texture, desiredScale) * -entry.facing;
+  entry.targetScale = normalizedFishScale(entry.sprite.texture, desiredScale) * entry.facing;
   entry.targetAlpha = fd.o;
   entry.targetZIndex = fd.z;
 }

@@ -1,7 +1,7 @@
 import type { ActiveFish, Vector2 } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
 import { getWorld } from "../world";
-import { movementScale } from "./motion-profile";
+import { movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
 // school.ts — イワシ群れ型: 改良Boids（横バイアス・縦抑制）
@@ -53,7 +53,7 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
   }
   state.framesUntilChange--;
   if (state.framesUntilChange <= 0) {
-    const edge = Math.max(0.02, 0.08 / world.motionSettings.verticalSpread);
+    const edge = Math.max(0.02, 0.08 / verticalSpreadForFish(fish));
     state.targetY = world.height * (edge + Math.random() * (1 - edge * 2));
     if (Math.random() < 0.25) state.cruiseDir *= -1;
     state.framesUntilChange = 300 + Math.floor(Math.random() * 500);
@@ -124,7 +124,7 @@ export function applySchool(fish: ActiveFish, allFish: ActiveFish[]): void {
 
   // 小さな群れごとに水槽内を巡回する。全個体が中央へ密集するのを防ぐ。
   fx += state.cruiseDir * 0.025;
-  const verticalForce = 0.09 * world.motionSettings.verticalSpread;
+  const verticalForce = 0.09 * verticalSpreadForFish(fish);
   fy += Math.max(-verticalForce, Math.min(verticalForce, (state.targetY - fish.physics.pos.y) * 0.0015));
 
   fish.physics.vel.x += fx;

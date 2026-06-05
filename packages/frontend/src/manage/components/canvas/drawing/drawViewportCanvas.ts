@@ -250,7 +250,8 @@ export function drawViewportCanvas({
             const colorIdx = (zIndexGroup + layerColors.length) % layerColors.length;
             const isDragging = dragFishId === fish.i;
             const textureUrl = fish.u ?? fishTextureMap.get(fish.i);
-            const sz = Math.max(12, 80 * cam.zoom) * (fish.s ?? 1.0);
+            const previewScale = Math.sqrt(Math.max(0.1, fish.s ?? 1));
+            const sz = Math.max(8, Math.min(34, 16 * previewScale) * cam.zoom);
 
             if (textureUrl) {
                 const img = loadFishImage(textureUrl);

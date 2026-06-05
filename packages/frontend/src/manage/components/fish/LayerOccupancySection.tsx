@@ -4,7 +4,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { EyeOff, Plus } from "lucide-react";
-import { getLayerGradient } from "./layer-colors";
+import { getLayerColor } from "./layer-colors";
 
 export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, compact = false, onUpdate }: { activeFish: ActiveFish[]; configs?: LayerConfig[]; compact?: boolean; onUpdate?: (configs: LayerConfig[]) => void }) {
     return (
@@ -15,17 +15,17 @@ export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, comp
                     const count = activeFish.filter(f => !f.isPinned && f.layerIndex === idx && !f.isArchived).length;
                     const ratio = Math.min(count / conf.maxCount, 1);
                     const isFull = count >= conf.maxCount;
-                    const gradient = getLayerGradient(idx, configs.length);
+                    const layerColor = getLayerColor(idx, configs.length);
                     return (
                         <div key={conf.id} className={`flex items-center gap-3 ${onUpdate ? "rounded-lg border border-slate-100 bg-slate-50 p-3" : ""}`}>
                             <div className="flex w-20 items-center justify-end gap-2 text-[11px] font-bold text-slate-500 mt-0.5">
-                                <span className="h-2.5 w-2.5 rounded-full" style={{ background: gradient }} />
+                                <span className="h-2.5 w-2.5 rounded-full" style={{ background: layerColor }} />
                                 <span>Lyr {conf.id}</span>
                             </div>
                             <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden relative border border-slate-200 outline outline-1 outline-white mt-1">
                                 <div
                                     className={`absolute top-0 left-0 h-full transition-all duration-300 ${isFull ? "bg-amber-400" : ""}`}
-                                    style={{ width: `${ratio * 100}%`, background: isFull ? undefined : gradient }}
+                                    style={{ width: `${ratio * 100}%`, background: isFull ? undefined : layerColor }}
                                 />
                             </div>
                             <div className={`w-12 text-xs font-mono text-right mt-0.5 ${isFull ? "text-amber-600 font-bold" : "text-slate-500"}`}>

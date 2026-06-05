@@ -1,6 +1,6 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { getWorld } from "../world";
-import { movementScale } from "./motion-profile";
+import { movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
 // wander.ts — 角度ドリフト方式 Wander（速度ベクトル空間で動作）
@@ -78,15 +78,15 @@ export function applyWander(fish: ActiveFish): void {
   // 角度差を [-π, π] に正規化
   while (angleDiff > Math.PI)  angleDiff -= Math.PI * 2;
   while (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
-  const turnRate = state.turnRate * world.motionSettings.turnStrength;
+  const turnRate = state.turnRate * turnStrengthForFish(fish);
   const turn = Math.max(-turnRate, Math.min(turnRate, angleDiff));
 
   // 回転後の速度ベクトルに小さな寄与として加算
   const newAngle = curAngle + turn;
   const driftMag = DRIFT_SPEED * movementScale(fish);
   vel.x += Math.cos(newAngle) * driftMag;
-  vel.y += Math.sin(newAngle) * driftMag * world.motionSettings.verticalSpread;
-  fish.physics.pos.y += Math.sin(newAngle) * driftMag * 0.8 * world.motionSettings.verticalSpread;
+  vel.y += Math.sin(newAngle) * driftMag * verticalSpreadForFish(fish);
+  fish.physics.pos.y += Math.sin(newAngle) * driftMag * 0.8 * verticalSpreadForFish(fish);
 
   // ---- 壁・禁止エリアへの追加反発 ----
   // boundaries.ts の跳ね返しを補完し、「張りつき」をさらに防ぐ

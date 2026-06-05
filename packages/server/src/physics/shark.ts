@@ -1,7 +1,7 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
 import { getWorld } from "../world";
-import { movementScale } from "./motion-profile";
+import { movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
 // shark.ts — サメ型: 大弧単独回遊（優雅な旋回）
@@ -43,7 +43,7 @@ export function applyShark(fish: ActiveFish): void {
   }
 
   // 毎フレーム少しずつ旋回角度を変化させる（縦抑制のため、Y成分を弱める）
-  state.angle += state.turnRate * state.turnDir * world.motionSettings.turnStrength;
+  state.angle += state.turnRate * state.turnDir * turnStrengthForFish(fish);
   const margin = PHYSICS.WALL_MARGIN * 2.5;
   if (
     (world.horizontalBoundaryMode === "bounce" && fish.physics.pos.x < margin) ||
@@ -65,7 +65,7 @@ export function applyShark(fish: ActiveFish): void {
 
   // 速度ベクトル計算（縦成分を抑制）
   fish.physics.vel.x = Math.cos(state.angle) * speed;
-  fish.physics.vel.y = Math.sin(state.angle) * speed * PHYSICS.SHARK_VERTICAL_DAMPING * world.motionSettings.verticalSpread;
+  fish.physics.vel.y = Math.sin(state.angle) * speed * PHYSICS.SHARK_VERTICAL_DAMPING * verticalSpreadForFish(fish);
 
   fish.physics.pos.x += fish.physics.vel.x;
   fish.physics.pos.y += fish.physics.vel.y;
