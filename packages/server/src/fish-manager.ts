@@ -64,6 +64,9 @@ function saveActiveFishToDisk(fish: ActiveFish) {
     buf = writeFishMeta(buf, meta);
     // URLを公開する前に書き込みを完了させ、初回リクエストの404を防ぐ。
     writeFileSync(destPath, buf);
+    // キャッシュ用JSONの書き出し（起動・管理を高速化しメモリ使用量を削減するため）
+    const jsonPath = join(DATA_FISH_DIR, `${fish.id}.json`);
+    writeFileSync(jsonPath, JSON.stringify(meta, null, 2), "utf-8");
     // 永続化されたファイルのURLに差し替え
     fish.textureUrl = `/lib-images/${fish.id}.png`;
   } catch (e) {
@@ -96,6 +99,9 @@ function updateActiveFishOnDisk(fish: ActiveFish) {
     };
     buf = writeFishMeta(buf, meta);
     writeFileSync(destPath, buf);
+    // キャッシュ用JSONの更新
+    const jsonPath = join(DATA_FISH_DIR, `${fish.id}.json`);
+    writeFileSync(jsonPath, JSON.stringify(meta, null, 2), "utf-8");
   } catch (e) {
     console.error(`[FishManager] Failed to update fish ${fish.id} on disk:`, e);
   }
@@ -109,6 +115,14 @@ function removeActiveFishFromDisk(fishId: string) {
       unlinkSync(destPath);
     } catch (e) {
       console.error(`[FishManager] Failed to remove fish ${fishId} from disk:`, e);
+    }
+  }
+  const jsonPath = join(DATA_FISH_DIR, `${fishId}.json`);
+  if (existsSync(jsonPath)) {
+    try {
+      unlinkSync(jsonPath);
+    } catch (e) {
+      console.error(`[FishManager] Failed to remove fish json ${fishId} from disk:`, e);
     }
   }
 }
@@ -406,8 +420,21 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
       if (activePool.has(fishId)) continue;
 
       try {
-        const buf = readFileSync(filePath) as Buffer;
-        const meta = readFishMeta(buf) ?? { ...DEFAULT_FISH_META };
+        let meta: FishMeta;
+        const jsonPath = join(DATA_FISH_DIR, `${fishId}.json`);
+
+        // JSONキャッシュがあればそれを読み込み、PNG解析に伴う大量のBuffer確保を回避する
+        if (existsSync(jsonPath)) {
+          meta = JSON.parse(readFileSync(jsonPath, "utf-8"));
+        } else {
+          const buf = readFileSync(filePath) as Buffer;
+          meta = readFishMeta(buf) ?? { ...DEFAULT_FISH_META };
+          try {
+            writeFileSync(jsonPath, JSON.stringify(meta, null, 2), "utf-8");
+          } catch (err) {
+            console.error(`[FishManager] Failed to create json cache for ${fishId}:`, err);
+          }
+        }
 
         // 初期位置: world全体にランダム散布（グリッド均等配置 + ジッター）
         const totalFiles = files.length;
