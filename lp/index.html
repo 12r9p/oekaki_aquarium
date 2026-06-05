@@ -225,6 +225,11 @@
       border: 1px solid var(--border-accent);
       box-shadow: var(--shadow-layered);
       background: var(--bg-white);
+      transition: transform 0.3s ease;
+    }
+
+    .hero-preview:hover {
+      transform: scale(1.005);
     }
 
     .hero-preview img {
@@ -288,7 +293,7 @@
       background: var(--bg-white);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 32px;
+      padding: 24px;
       box-shadow: var(--shadow-md);
       transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -301,7 +306,7 @@
 
     .layered-card h3 {
       font-family: var(--font-title);
-      font-size: 1.25rem;
+      font-size: 1.2rem;
       font-weight: 700;
       color: var(--text);
       margin-bottom: 12px;
@@ -309,9 +314,32 @@
 
     .layered-card p {
       color: var(--text-muted);
-      font-size: 0.9rem;
+      font-size: 0.88rem;
       font-weight: 300;
       line-height: 1.6;
+    }
+
+    /* Screenshot container in cards */
+    .card-screenshot {
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-accent);
+      margin-bottom: 20px;
+      box-shadow: var(--shadow-sm);
+      aspect-ratio: 16 / 10;
+      background: #f1f5f9;
+      transition: transform 0.2s ease;
+    }
+
+    .layered-card:hover .card-screenshot {
+      transform: scale(1.02);
+    }
+
+    .card-screenshot img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
     }
 
     /* Guest Experience Steps (Visitor Section) */
@@ -325,7 +353,7 @@
       background: var(--bg-white);
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 24px;
+      padding: 28px 24px 24px;
       box-shadow: var(--shadow-md);
       position: relative;
     }
@@ -508,6 +536,21 @@
       left: 0;
       color: var(--primary);
       font-weight: bold;
+    }
+
+    /* Screenshot container in tabs */
+    .pane-screenshot {
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border-accent);
+      box-shadow: var(--shadow-md);
+      margin-bottom: 20px;
+      background: #f1f5f9;
+    }
+
+    .pane-screenshot img {
+      width: 100%;
+      display: block;
     }
 
     /* Code Block styling with shadows */
@@ -916,7 +959,7 @@
           <li><a href="#panels">機能構成</a></li>
           <li><a href="#tech-stack">技術スタック</a></li>
           <li><a href="#biology">生物物理</a></li>
-          <li><a href="#layers">レイヤー割り当て</a></li>
+          <li><a href="#layers">レイヤー視差</a></li>
           <li><a href="#resilience">運用設計</a></li>
         </ul>
       </div>
@@ -935,11 +978,13 @@
         </div>
 
         <div class="hero-preview">
-          <img src="hero.png" alt="おえかき水族館 サイバーアクアリウム ヒーロービジュアル">
+          <!-- User actual display client image -->
+          <img src="assets/描画クライアント.png" alt="おえかき水族館 描画クライアント画面">
+          <img src="assets/ステータス.png" alt="おえかき水族館 ステータス画面">
         </div>
       </section>
 
-      <!-- Visitor Experience Flow (For general visitors) -->
+      <!-- Visitor Experience Flow -->
       <section id="visitor">
         <div class="section-title">
           <span class="section-title-tag">For Visitors</span>
@@ -971,7 +1016,7 @@
         </div>
       </section>
 
-      <!-- Panels Configuration (For operators & creators) -->
+      <!-- Panels Configuration -->
       <section id="panels">
         <div class="section-title">
           <span class="section-title-tag">Architecture Roles</span>
@@ -980,22 +1025,34 @@
         </div>
 
         <div class="grid-3">
+          <!-- Manage Console with layout.png -->
           <div class="layered-card">
+            <div class="card-screenshot">
+              <img src="assets/水槽レイアウト.png" alt="管理コンソール レイアウト画面">
+            </div>
             <h3>管理コンソール `/manage`</h3>
             <p>仮想水槽のサイズ変更や接続ディスプレイのViewport配置、進入禁止エリア（Forbidden Zones）、画像レイヤーを直感的にレイアウトするReactアプリケーション。</p>
           </div>
+          <!-- Display client with display.png -->
           <div class="layered-card">
+            <div class="card-screenshot">
+              <img src="assets/描画クライアント.png" alt="描画クライアント画面">
+            </div>
             <h3>描画クライアント `/display`</h3>
             <p>展示モニターで動作するPixiJS 8レンダラー。サーバーから約60fpsで配信される魚座標情報を目標値とし、クライアント側で滑らかに補間描画（WebGL）します。</p>
           </div>
+          <!-- Controller / guest with terminal.png -->
           <div class="layered-card">
+            <div class="card-screenshot">
+              <img src="assets/操作用端末.png" alt="放流コントローラー画面">
+            </div>
             <h3>放流 & スマホ体験</h3>
             <p>魚の承認待ちリストから手書きパス等を設定して放流するコントローラー(`/controller`)や、スマホからエサをやれる来場者アプリ(`/guest`)を提供します。</p>
           </div>
         </div>
       </section>
 
-      <!-- Technology Stack Section (For developers) -->
+      <!-- Technology Stack Section -->
       <section id="tech-stack">
         <div class="section-title">
           <span class="section-title-tag">For Developers</span>
@@ -1067,7 +1124,7 @@
         </div>
       </section>
 
-      <!-- Biology Models Section (For developers & enthusiasts) -->
+      <!-- Biology Models Section -->
       <section id="biology">
         <div class="section-title">
           <span class="section-title-tag">Physics Model</span>
@@ -1088,6 +1145,7 @@
           <div class="pane-text">
             <h3>マグロ <span style="font-size:0.9rem; font-weight:normal; color:var(--text-muted);">// Kick-and-Glide</span></h3>
             <p>高速で水平に泳ぎ続ける回遊魚モデル。</p>
+
             <ul class="pane-list">
               <li><strong>推進トルク:</strong> 尾鰭の左右運動の位相に同期して、瞬間的な加速とスライド減速を繰り返すKick-and-Glide物理。</li>
               <li><strong>水平巡航:</strong> 縦方向の最大速度制限を厳しく制限し、無駄な上下運動をカット。</li>
@@ -1208,6 +1266,10 @@ state.angle += state.angularVelocity;</code></pre>
           </div>
 
           <div>
+            <!-- User fish data tab screenshot -->
+            <div class="pane-screenshot" style="margin-bottom: 24px;">
+              <img src="assets/魚.png" alt="魚データ管理一覧画面">
+            </div>
             <div class="layers-info-box">
               <h4>玉突き自動負荷調整</h4>
               <p>新しく放流された魚が新しい順（releasedAt降順）に前景へ追加され、古い魚は順に奥へと押し出されます。定員（計80匹）から溢れた魚は、自動的に非表示になり描画・計算負荷を抑制します。</p>
@@ -1229,14 +1291,18 @@ state.angle += state.angularVelocity;</code></pre>
         </div>
 
         <div class="grid-3">
+          <!-- High resilience card with status image -->
           <div class="resilience-card">
+
             <h3>スリープ・通信復帰対策</h3>
             <p>Screen Wake Lock APIを要求して常時稼働。タブがバックグラウンドから復帰した際は自動的にWake Lockを再要求。通信が30秒以上途絶した場合は自動的にWebSocket再接続を試みます。</p>
           </div>
+          <!-- resilience card with config image -->
           <div class="resilience-card">
             <h3>512KB 送信キュー間引き</h3>
             <p>低速通信下、あるいはスリープ中のクライアントのWebSocketバッファが512KBを超えた時点で、古いフレーム座標の送信をスキップ。サーバーのソケット詰まりと負荷を確実に保護します。</p>
           </div>
+          <!-- resilience card with clean metadata description -->
           <div class="resilience-card">
             <h3>PNG tEXtバイナリ操作</h3>
             <p>外部DBに依存せず、PNG画像のメタデータ（tEXtチャンク）に設定を直接書き込み。CRC32計算を含め、画像ライブラリなしでBufferオブジェクト操作により自前バイナリ実装されています。</p>
