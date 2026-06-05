@@ -155,18 +155,18 @@
       "scale": 1
     },
     "display:tab-6a9d9d66": {
-      "x": 0,
-      "y": 8.709369024856642,
-      "width": 1805,
-      "height": 1197.5812619502867,
+      "x": 267.59082338196623,
+      "y": 87.54766759372978,
+      "width": 1735,
+      "height": 1189,
       "scale": 1
     }
   },
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 1805,
-    "height": 1215,
+    "width": 1690,
+    "height": 1219,
     "forbiddenZones": [],
     "spawnPoints": [
       {
@@ -254,7 +254,7 @@
     {
       "id": 0,
       "maxCount": 10,
-      "scale": 2.7,
+      "scale": 1.95,
       "opacity": 1,
       "speedFactor": 1.85,
       "zIndex": 100
