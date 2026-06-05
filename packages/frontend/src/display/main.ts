@@ -1,7 +1,7 @@
 import "../styles/global.css";
 import { Application } from "pixi.js";
-import { DISPLAY_ID, STATE, updateStateVP } from "./state";
-import { setupNetwork } from "./network";
+import { DISPLAY_ID, STATE, updateStateVP, viewportForCurrentWindow } from "./state";
+import { setupNetwork, ws } from "./network";
 import { applyViewport, setupRenderLoop, currentPattern, drawTestPattern, initRenderer, type FishEntry } from "./renderer";
 import { setupInteractions } from "./interaction";
 
@@ -36,9 +36,22 @@ async function main(): Promise<void> {
   updateStateVP(STATE.VP);
 
   // ウィンドウリサイズ監視
+  let resizeSaveTimer: ReturnType<typeof setTimeout> | undefined;
   window.addEventListener("resize", () => {
-    updateStateVP(STATE.VP);
+    updateStateVP(viewportForCurrentWindow());
     applyViewport(app);
+    clearTimeout(resizeSaveTimer);
+    resizeSaveTimer = setTimeout(() => {
+      ws.send({
+        event: "update_viewport",
+        clientInfo: {
+          uuid: DISPLAY_ID,
+          name: DISPLAY_ID,
+          viewport: STATE.VP,
+          debug: { showGrid: false, showId: false },
+        },
+      });
+    }, 250);
   });
 
   // 初期パターンの描画

@@ -99,7 +99,7 @@ export function updateSpawnPoints(points: { id: string; x: number; y: number }[]
 }
 
 export function updateLayers(layers: AppLayerConfig[]): void {
-  world.layers = layers;
+  world.layers = layers.filter(layer => layer.type === "image" || layer.type === "fish" || layer.type === "foreground");
 }
 
 export function updateWorldMotionSettings(

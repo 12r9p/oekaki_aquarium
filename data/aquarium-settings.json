@@ -78,8 +78,8 @@
       "scale": 1
     },
     "display:tab-c1aded82": {
-      "x": 342.68595041322317,
-      "y": 316,
+      "x": 301.9581801790584,
+      "y": 300.91305831439706,
       "width": 661.3140495867768,
       "height": 1046,
       "scale": 1
@@ -92,18 +92,46 @@
       "scale": 1
     },
     "display:tab-c17f29ae": {
-      "x": 35.3502045470164,
-      "y": 167.28189098707014,
-      "width": 662.8411939080075,
-      "height": 1048.4154831747571,
-      "scale": 0.9662815513131401
+      "x": 0,
+      "y": 155.683932177583,
+      "width": 659.5536391967955,
+      "height": 1132.5668551864164,
+      "scale": 0.8046900424965994
+    },
+    "display:tab-70a366b7": {
+      "x": 71.45041322314052,
+      "y": 0,
+      "width": 861.099173553719,
+      "height": 1362,
+      "scale": 1
+    },
+    "display:tab-4891b3e8": {
+      "x": 0,
+      "y": 398.625,
+      "width": 1004,
+      "height": 564.75,
+      "scale": 1
+    },
+    "display:tab-0fea05d8": {
+      "x": -667.6654268649751,
+      "y": 37.210182306237584,
+      "width": 2540.8844929267457,
+      "height": 1465.7898176937624,
+      "scale": 1.7630942698388739
+    },
+    "display:tab-b2dedc78": {
+      "x": 0,
+      "y": 136.07731958762884,
+      "width": 1352,
+      "height": 1230.8453608247423,
+      "scale": 1
     }
   },
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 1004,
-    "height": 1362,
+    "width": 1031,
+    "height": 1404,
     "forbiddenZones": [],
     "spawnPoints": [
       {
@@ -113,20 +141,6 @@
       }
     ],
     "layers": [
-      {
-        "id": "L_1780670333925",
-        "name": "海藻.png",
-        "type": "image",
-        "zIndex": 101,
-        "visible": true,
-        "opacity": 1,
-        "url": "/images/scene/03ed4218-2e66-444d-9a1b-85a1ff7f2d02.png",
-        "x": 256,
-        "y": 1144,
-        "width": 334,
-        "height": 252,
-        "aspectRatioLocked": true
-      },
       {
         "id": "layer_system",
         "name": "System (モニター・壁)",
@@ -150,29 +164,39 @@
         "zIndex": 70,
         "visible": true,
         "opacity": 1
+      },
+      {
+        "id": "layer_fish_2",
+        "name": "Lyr 2 (魚レイヤー)",
+        "type": "fish",
+        "zIndex": 40,
+        "visible": true,
+        "opacity": 1
+      },
+      {
+        "id": "layer_fish_3",
+        "name": "Lyr 3 (魚レイヤー)",
+        "type": "fish",
+        "zIndex": 10,
+        "visible": true,
+        "opacity": 1
+      },
+      {
+        "id": "layer_fish_4",
+        "name": "Lyr 4 (魚レイヤー)",
+        "type": "fish",
+        "zIndex": 0,
+        "visible": true,
+        "opacity": 1
       }
     ],
     "horizontalBoundaryMode": "wrap",
     "fishSpeedMultiplier": 1,
-    "fishScaleMultiplier": 1.05,
+    "fishScaleMultiplier": 1,
     "motionSettings": {
       "verticalSpread": 2,
-      "turnStrength": 0.85,
+      "turnStrength": 0.4,
       "typeProfiles": {
-        "jellyfish": {
-          "speedMultiplier": 1,
-          "verticalSpread": 0.1,
-          "turnStrength": 0.65,
-          "tailBeat": 0.75,
-          "glide": 0.7
-        },
-        "squid": {
-          "speedMultiplier": 1,
-          "verticalSpread": 0.3,
-          "turnStrength": 1,
-          "tailBeat": 1,
-          "glide": 1
-        },
         "shark": {
           "speedMultiplier": 1.55,
           "verticalSpread": 0.3,
@@ -181,13 +205,41 @@
           "glide": 1
         },
         "tuna": {
-          "speedMultiplier": 0.65,
+          "speedMultiplier": 0.9,
           "verticalSpread": 1,
           "turnStrength": 1,
           "tailBeat": 1,
           "glide": 1
+        },
+        "jellyfish": {
+          "speedMultiplier": 2.55,
+          "verticalSpread": 0.25,
+          "turnStrength": 1,
+          "tailBeat": 1,
+          "glide": 1
+        },
+        "squid": {
+          "speedMultiplier": 1,
+          "verticalSpread": 0.25,
+          "turnStrength": 1,
+          "tailBeat": 1,
+          "glide": 1
         }
-      }
+      },
+      "customCode": "function update(fish, t, api) {\n  const state = fish.__custom ??= {\n    dir: api.noise(1) < 0.5 ? -1 : 1,\n    baseY: fish.physics.pos.y,\n    phase: api.noise(2) * Math.PI * 2,\n  };\n\n  const margin = 120;\n  if (fish.physics.pos.x > api.world.width - margin) state.dir = -1;\n  if (fish.physics.pos.x < margin) state.dir = 1;\n\n  state.phase += 0.045 * api.speed;\n  const cruise = 2.4 * api.speed * state.dir;\n  const targetY = state.baseY + Math.sin(state.phase * 0.55) * 70 * api.verticalSpread;\n\n  fish.physics.vel.x = api.lerp(fish.physics.vel.x, cruise, 0.08);\n  fish.physics.vel.y = api.lerp(fish.physics.vel.y, (targetY - fish.physics.pos.y) * 0.035, 0.12);\n  fish.physics.pos.x += fish.physics.vel.x;\n  fish.physics.pos.y += fish.physics.vel.y;\n}",
+      "customPresets": [
+        {
+          "id": "custom_1780686063140",
+          "name": "カスタム 1",
+          "code": "function update(fish, t, api) {\n  const state = fish.__custom ??= {\n    dir: api.noise(1) < 0.5 ? -1 : 1,\n    baseY: fish.physics.pos.y,\n    phase: api.noise(2) * Math.PI * 2,\n  };\n\n  const margin = 120;\n  if (fish.physics.pos.x > api.world.width - margin) state.dir = -1;\n  if (fish.physics.pos.x < margin) state.dir = 1;\n\n  state.phase += 0.045 * api.speed;\n  const cruise = 2.4 * api.speed * state.dir;\n  const targetY = state.baseY + Math.sin(state.phase * 0.55) * 70 * api.verticalSpread;\n\n  fish.physics.vel.x = api.lerp(fish.physics.vel.x, cruise, 0.08);\n  fish.physics.vel.y = api.lerp(fish.physics.vel.y, (targetY - fish.physics.pos.y) * 0.035, 0.12);\n  fish.physics.pos.x += fish.physics.vel.x;\n  fish.physics.pos.y += fish.physics.vel.y;\n}"
+        },
+        {
+          "id": "custom_1780687377907",
+          "name": "カスタム 2",
+          "code": "function update(fish, t, api) {\n  const state = fish.__custom ??= {\n    dir: api.noise(1) < 0.5 ? -1 : 1,\n    baseY: fish.physics.pos.y,\n    phase: api.noise(2) * Math.PI * 2,\n  };\n\n  const margin = 120;\n  if (fish.physics.pos.x > api.world.width - margin) state.dir = -1;\n  if (fish.physics.pos.x < margin) state.dir = 1;\n\n  state.phase += 0.045 * api.speed;\n  const cruise = 2.4 * api.speed * state.dir;\n  const targetY = state.baseY + Math.sin(state.phase * 0.55) * 70 * api.verticalSpread;\n\n  fish.physics.vel.x = api.lerp(fish.physics.vel.x, cruise, 0.08);\n  fish.physics.vel.y = api.lerp(fish.physics.vel.y, (targetY - fish.physics.pos.y) * 0.035, 0.12);\n  fish.physics.pos.x += fish.physics.vel.x;\n  fish.physics.pos.y += fish.physics.vel.y;\n}"
+        }
+      ],
+      "currentCustomPresetId": "custom_1780687377907"
     }
   },
   "fishLayers": [
@@ -196,16 +248,40 @@
       "maxCount": 10,
       "scale": 1.75,
       "opacity": 1,
-      "speedFactor": 1,
+      "speedFactor": 0.65,
       "zIndex": 100
     },
     {
       "id": 1,
-      "maxCount": 50,
-      "scale": 0.9,
-      "opacity": 0.36,
+      "maxCount": 20,
+      "scale": 0.84,
+      "opacity": 0.66,
       "speedFactor": 0.5,
       "zIndex": 70
+    },
+    {
+      "id": 2,
+      "maxCount": 100,
+      "scale": 0.55,
+      "opacity": 0.39,
+      "speedFactor": 0.3,
+      "zIndex": 40
+    },
+    {
+      "id": 3,
+      "maxCount": 10,
+      "scale": 0.85,
+      "opacity": 0.27,
+      "speedFactor": 0.6,
+      "zIndex": 10
+    },
+    {
+      "id": 4,
+      "maxCount": 100,
+      "scale": 0.75,
+      "opacity": 0.19,
+      "speedFactor": 0.25,
+      "zIndex": 0
     }
   ]
 }

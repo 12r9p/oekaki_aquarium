@@ -156,7 +156,7 @@ export interface LayerConfig {
   maxCount: number;
   /** このレイヤーの表示スケール */
   scale: number;
-  /** このレイヤーの透明度 */
+  /** このレイヤーの魚の明るさ。1.0 = 通常、低いほど遠景として暗く表示 */
   opacity: number;
   /** 移動量の乗数（パララックス効果: 奥の魚はゆっくり動く） */
   speedFactor: number;
@@ -167,14 +167,13 @@ export interface LayerConfig {
 // -------------------------------------------------------
 // アプリ全体のレイヤー管理定義 (背景画像や配置オブジェクト)
 // -------------------------------------------------------
-export type AppLayerType = "image" | "color" | "fish" | "foreground";
+export type AppLayerType = "image" | "fish" | "foreground";
 
 export interface AppLayerConfig {
   id: string;        // UUID
   name: string;      // 表示名
   type: AppLayerType;
   url?: string;      // image用
-  color?: string;    // color用 (#RRGGBB)
   x?: number;        // 画像レイヤーのワールドX座標 (未指定時は 0)
   y?: number;        // 画像レイヤーのワールドY座標 (未指定時は 0)
   width?: number;    // 画像レイヤーの幅 (未指定時は WorldW)
@@ -220,6 +219,8 @@ export interface UdpFishData {
   d?: 1 | -1;
   /** 元画像の左右反転。泳ぐ向き d と乗算して使う。 */
   fx?: boolean;
+  /** 魚レイヤー由来の明るさ。1.0 が通常、低いほど奥で暗い。 */
+  br?: number;
   /** X方向速度（デバッグ・後方互換用） */
   vx?: number;
   /** 尾びれの拍動に使う -1..1 の位相値 */

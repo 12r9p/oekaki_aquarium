@@ -49,7 +49,7 @@ export function replaceLayerConfig(next: LayerConfig[]): void {
       id: index,
       maxCount: Math.max(1, Math.round(layer.maxCount)),
       scale: Math.max(0.1, Math.min(layer.scale, 5)),
-      opacity: Math.max(0, Math.min(layer.opacity, 1)),
+      opacity: Math.max(0.18, Math.min(layer.opacity, 1)),
       speedFactor: Math.max(0.05, Math.min(layer.speedFactor, 3)),
       zIndex: Number.isFinite(layer.zIndex) ? layer.zIndex : 100 - index * 30,
     }));

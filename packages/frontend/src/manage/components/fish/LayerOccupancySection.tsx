@@ -70,7 +70,7 @@ export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, comp
                             {onUpdate && <>
                                 <label className="w-20 text-[10px] font-bold text-slate-500">定員<Input className="mt-1 h-7 bg-white text-xs" type="number" min={1} value={conf.maxCount} onChange={event => onUpdate(configs.map((item, i) => i === idx ? { ...item, maxCount: Number(event.target.value) || 1 } : item))} /></label>
                                 <div className="w-44"><div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500"><span>大きさ</span><span>×{conf.scale.toFixed(2)}</span></div><Slider value={[conf.scale]} min={0.1} max={5} step={0.05} onValueChange={value => onUpdate(configs.map((item, i) => i === idx ? { ...item, scale: value[0] } : item))} /></div>
-                                <div className="w-44"><div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500"><span>透明度</span><span>{Math.round(conf.opacity * 100)}%</span></div><Slider value={[conf.opacity]} min={0} max={1} step={0.01} onValueChange={value => onUpdate(configs.map((item, i) => i === idx ? { ...item, opacity: value[0] } : item))} /></div>
+                                <div className="w-44"><div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500"><span>明るさ</span><span>{Math.round(conf.opacity * 100)}%</span></div><Slider value={[conf.opacity]} min={0.18} max={1} step={0.01} onValueChange={value => onUpdate(configs.map((item, i) => i === idx ? { ...item, opacity: value[0] } : item))} /></div>
                                 <div className="w-44"><div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500"><span>速度</span><span>×{conf.speedFactor.toFixed(2)}</span></div><Slider value={[conf.speedFactor]} min={0.05} max={3} step={0.05} onValueChange={value => onUpdate(configs.map((item, i) => i === idx ? { ...item, speedFactor: value[0] } : item))} /></div>
                                 {configs.length > 1 && <button className="text-[10px] font-bold text-rose-500" onClick={() => onUpdate(configs.filter((_, i) => i !== idx))}>削除</button>}
                             </>}
@@ -90,7 +90,7 @@ export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, comp
                 </div>
             </div>
             {!compact && <div className="mt-3 text-[10px] text-slate-400 leading-snug">
-                ※放流が新しい魚から Lyr0 に入り、いっぱいになると奥のレイヤーへ送られます。全レイヤー定員({configs.reduce((acc, conf) => acc + conf.maxCount, 0)}匹)を超えた魚は自動で非表示へ入ります。
+                ※放流が新しい魚から Lyr0 に入り、いっぱいになると奥のレイヤーへ送られます。明るさを下げると、そのレイヤーの魚だけが遠くにいるように暗くなります。
             </div>}
             </>}
         </div>

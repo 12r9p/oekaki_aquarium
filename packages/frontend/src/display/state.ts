@@ -48,6 +48,15 @@ export function updateStateVP(newVp: NonNullable<ClientConfig["viewport"]>) {
   STATE.scaleY = window.innerHeight / STATE.VP.height;
 }
 
+export function viewportForCurrentWindow(): NonNullable<ClientConfig["viewport"]> {
+  const scale = Number.isFinite(STATE.VP.scale) && STATE.VP.scale > 0 ? STATE.VP.scale : 1;
+  return {
+    ...STATE.VP,
+    width: Math.max(1, Math.round(window.innerWidth / scale)),
+    height: Math.max(1, Math.round(window.innerHeight / scale)),
+  };
+}
+
 export function updateWorldSize(w: number, h: number) {
   STATE.WORLD_W = w;
   STATE.WORLD_H = h;
