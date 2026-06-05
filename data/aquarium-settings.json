@@ -78,8 +78,8 @@
       "scale": 1
     },
     "display:tab-c1aded82": {
-      "x": 138.25066718385466,
-      "y": 79.85943134538523,
+      "x": 148.28488131499734,
+      "y": 88.812195121496,
       "width": 1186.791444248455,
       "height": 1449.9570967454758,
       "scale": 1.0502579152641196
@@ -136,8 +136,8 @@
     "spawnPoints": [
       {
         "id": "sp_1780592286214",
-        "x": 763.622938051159,
-        "y": 502.03421554629585
+        "x": 718.3253576283957,
+        "y": 1199.867939766238
       }
     ],
     "layers": [
@@ -183,7 +183,7 @@
       }
     ],
     "horizontalBoundaryMode": "wrap",
-    "fishSpeedMultiplier": 0.95,
+    "fishSpeedMultiplier": 4.9,
     "fishScaleMultiplier": 1,
     "motionSettings": {
       "verticalSpread": 2,
@@ -210,21 +210,16 @@
           "id": "custom_1780686063140",
           "name": "カスタム 1",
           "code": "function update(fish, t, api) {\n  const state = fish.__custom ??= {\n    dir: api.noise(1) < 0.5 ? -1 : 1,\n    baseY: fish.physics.pos.y,\n    phase: api.noise(2) * Math.PI * 2,\n  };\n\n  const margin = 120;\n  if (fish.physics.pos.x > api.world.width - margin) state.dir = -1;\n  if (fish.physics.pos.x < margin) state.dir = 1;\n\n  state.phase += 0.045 * api.speed;\n  const cruise = 2.4 * api.speed * state.dir;\n  const targetY = state.baseY + Math.sin(state.phase * 0.55) * 70 * api.verticalSpread;\n\n  fish.physics.vel.x = api.lerp(fish.physics.vel.x, cruise, 0.08);\n  fish.physics.vel.y = api.lerp(fish.physics.vel.y, (targetY - fish.physics.pos.y) * 0.035, 0.12);\n  fish.physics.pos.x += fish.physics.vel.x;\n  fish.physics.pos.y += fish.physics.vel.y;\n}"
-        },
-        {
-          "id": "custom_1780687377907",
-          "name": "カスタム 2",
-          "code": "function update(fish, t, api) {\n  const state = fish.__custom ??= {\n    dir: api.noise(1) < 0.5 ? -1 : 1,\n    baseY: fish.physics.pos.y,\n    phase: api.noise(2) * Math.PI * 2,\n  };\n\n  const margin = 120;\n  if (fish.physics.pos.x > api.world.width - margin) state.dir = -1;\n  if (fish.physics.pos.x < margin) state.dir = 1;\n\n  state.phase += 0.045 * api.speed;\n  const cruise = 2.4 * api.speed * state.dir;\n  const targetY = state.baseY + Math.sin(state.phase * 0.55) * 70 * api.verticalSpread;\n\n  fish.physics.vel.x = api.lerp(fish.physics.vel.x, cruise, 0.08);\n  fish.physics.vel.y = api.lerp(fish.physics.vel.y, (targetY - fish.physics.pos.y) * 0.035, 0.12);\n  fish.physics.pos.x += fish.physics.vel.x;\n  fish.physics.pos.y += fish.physics.vel.y;\n}"
         }
       ],
-      "currentCustomPresetId": "custom_1780687377907"
+      "currentCustomPresetId": "custom_1780686063140"
     }
   },
   "fishLayers": [
     {
       "id": 0,
       "maxCount": 10,
-      "scale": 1.9,
+      "scale": 2.3,
       "opacity": 1,
       "speedFactor": 1.1,
       "zIndex": 100
@@ -232,24 +227,24 @@
     {
       "id": 1,
       "maxCount": 20,
-      "scale": 1.2,
-      "opacity": 0.79,
+      "scale": 1.6,
+      "opacity": 0.7,
       "speedFactor": 0.55,
       "zIndex": 70
     },
     {
       "id": 2,
       "maxCount": 100,
-      "scale": 0.68,
-      "opacity": 0.27,
+      "scale": 0.8,
+      "opacity": 0.51,
       "speedFactor": 0.3,
       "zIndex": 40
     },
     {
       "id": 3,
-      "maxCount": 100,
-      "scale": 0.51,
-      "opacity": 0.27,
+      "maxCount": 1000,
+      "scale": 0.55,
+      "opacity": 0.28,
       "speedFactor": 0.3,
       "zIndex": 10
     }

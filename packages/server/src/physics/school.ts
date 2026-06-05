@@ -32,7 +32,7 @@ function steer(desired: Vector2, current: Vector2): Vector2 {
   );
 }
 
-const WALL_REPULSE    = 180;
+const WALL_REPULSE    = 80;
 const WALL_FORCE      = 0.35;
 
 interface SchoolState {

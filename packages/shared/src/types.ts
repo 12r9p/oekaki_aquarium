@@ -260,6 +260,8 @@ export interface SystemMetricSample {
   fishCount: number;
   fishCalculationMs: number;
   monitorCommunicationMs: number;
+  memoryRss?: number;
+  memoryHeapUsed?: number;
 }
 
 export interface SystemMetrics {

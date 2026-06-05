@@ -355,6 +355,13 @@ export function redistributeFish(): number {
   const n = fish.length;
   if (n === 0) return 0;
 
+  // 魚の配列順序をランダムにシャッフル（Fisher-Yatesシャッフル）
+  // これにより、再配置の際に同系統の魚や同じ作者の魚が特定の場所に固まるのを防ぐ
+  for (let i = n - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [fish[i], fish[j]] = [fish[j], fish[i]];
+  }
+
   const ww = world.width;
   const wh = world.height;
   const margin = 120;

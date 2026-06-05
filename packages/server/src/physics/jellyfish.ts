@@ -50,7 +50,7 @@ export function applyJellyfish(fish: ActiveFish): void {
   state.baseY += (Math.random() - 0.5) * 0.18 * verticalSpreadForFish(fish);
 
   // 2. 壁からの反発で baseY を補正
-  const WALL_REPULSE = 180;
+  const WALL_REPULSE = 80;
   const WALL_FORCE_BASE = 0.8;
   if (state.baseY < WALL_REPULSE) {
     state.baseY += WALL_FORCE_BASE * (1 - state.baseY / WALL_REPULSE);

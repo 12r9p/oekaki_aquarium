@@ -25,7 +25,7 @@ const tunaState = new Map<string, {
 export function applyTuna(fish: ActiveFish): void {
   const world = getWorld();
   const speed = PHYSICS.TUNA_SPEED * movementScale(fish);
-  const margin = PHYSICS.WALL_MARGIN + 50;
+  const margin = 42; // 壁ギリギリで反転するように縮小
 
   if (!tunaState.has(fish.id)) {
     // 初回: 初期方向をランダムに決定
@@ -99,7 +99,7 @@ export function applyTuna(fish: ActiveFish): void {
   ay += Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 0.015 * verticalSpreadForFish(fish);
 
   // 3. 上下の壁からの反発（相対）
-  const WALL_REPULSE = 180;
+  const WALL_REPULSE = 80;
   const WALL_FORCE = 0.25;
   if (fish.physics.pos.y < WALL_REPULSE) {
     ay += WALL_FORCE * (1 - fish.physics.pos.y / WALL_REPULSE);

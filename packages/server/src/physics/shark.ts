@@ -51,7 +51,7 @@ export function applyShark(fish: ActiveFish): void {
   }
 
   // --- 相対的な壁・禁止エリア回避ベクトルの計算 ---
-  const margin = PHYSICS.WALL_MARGIN * 2.5;
+  const margin = 96; // サメは体が大きいため少し余裕を持たせつつ、境界ギリギリまで接近可能なマージンに縮小
   let avoidX = 0;
   let avoidY = 0;
   let isNearWall = false;

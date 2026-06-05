@@ -323,7 +323,6 @@ function ManageApp(): React.ReactElement {
                             await api.request("/api/clients/reload-images", { method: "POST" });
                             showAlert("モニターへ画像の再読み込みを指示しました");
                         }}
-                        startedAt={systemMetrics.startedAt}
                     />
                 )}
             </main>

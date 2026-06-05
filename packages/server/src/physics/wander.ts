@@ -27,7 +27,7 @@ const MAX_TURN_RATE   = 0.035;
 const DRIFT_SPEED     = 0.18;
 const MIN_HOLD_FRAMES = 90;
 const MAX_HOLD_FRAMES = 300;
-const WALL_REPULSE    = 180;    // 壁・禁止エリアの反発開始距離(px)
+const WALL_REPULSE    = 80;    // 壁・禁止エリアの反発開始距離(px)
 const WALL_FORCE      = 0.35;   // 壁反発力
 
 interface WanderState {
