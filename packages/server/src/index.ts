@@ -123,6 +123,32 @@ app.put("/api/fish-scale-multiplier", async (c) => {
   return c.json({ success: true, fishScaleMultiplier: w.fishScaleMultiplier });
 });
 
+app.put("/api/fish-global-multipliers", async (c) => {
+  const body = await c.req.json<{ scale?: number; speed?: number }>();
+  updateWorldMotionSettings(
+    undefined,
+    Number.isFinite(body.speed) ? body.speed : undefined,
+    Number.isFinite(body.scale) ? body.scale : undefined,
+  );
+  updateFishLayers(getAllActiveFish());
+  const w = getWorld();
+  updatePersistedSettings({
+    world: {
+      width: w.width,
+      height: w.height,
+      forbiddenZones: w.forbiddenZones,
+      spawnPoints: w.spawnPoints,
+      layers: w.layers,
+      horizontalBoundaryMode: w.horizontalBoundaryMode,
+      fishSpeedMultiplier: w.fishSpeedMultiplier,
+      fishScaleMultiplier: w.fishScaleMultiplier,
+      motionSettings: w.motionSettings,
+    },
+  });
+  pushClientListToManagers();
+  return c.json({ success: true, fishScaleMultiplier: w.fishScaleMultiplier, fishSpeedMultiplier: w.fishSpeedMultiplier });
+});
+
 // 魚の複製
 app.post("/api/fish/:id/duplicate", (c) => {
   const id = c.req.param("id");

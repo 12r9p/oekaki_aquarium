@@ -1,7 +1,8 @@
 import type { ActiveFish } from "@aquarium/shared";
 import { PHYSICS } from "@aquarium/shared";
 import { getWorld } from "../world";
-import { movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
+import { initDepthBehavior, resetDepthBehavior, updateDepthBehavior, type DepthBehaviorState } from "./depth-behavior";
+import { motionProfileFor, movementScale, verticalSpreadForFish, turnStrengthForFish } from "./motion-profile";
 
 // ============================================================
 // tuna.ts — マグロ型: 高速直線往復
@@ -19,6 +20,9 @@ const tunaState = new Map<string, {
   laneTargetY: number;
   framesUntilLaneChange: number;
   speedFactor: number;
+  burstPhase: number;
+  turnCooldown: number;
+  depth: DepthBehaviorState;
 }>();
 
 export function applyTuna(fish: ActiveFish): void {
@@ -35,10 +39,16 @@ export function applyTuna(fish: ActiveFish): void {
       laneTargetY: fish.physics.pos.y,
       framesUntilLaneChange: 120 + Math.floor(Math.random() * 500),
       speedFactor: 0.82 + Math.random() * 0.36,
+      burstPhase: Math.random() * Math.PI * 2,
+      turnCooldown: 0,
+      depth: initDepthBehavior(fish),
     });
   }
   const state = tunaState.get(fish.id)!;
+  const profile = motionProfileFor(fish);
   state.frame++;
+  state.turnCooldown = Math.max(0, state.turnCooldown - 1);
+  state.burstPhase += 0.018 * Math.max(0.5, profile.tailBeat);
   state.framesUntilLaneChange--;
   if (state.framesUntilLaneChange <= 0) {
     const spread = verticalSpreadForFish(fish);
@@ -76,23 +86,32 @@ export function applyTuna(fish: ActiveFish): void {
     }
   }
 
-  if (shouldTurnLeft && state.dir === 1) {
+  if (state.turnCooldown === 0 && shouldTurnLeft && state.dir === 1) {
     state.dir = -1;
     state.baseY = fish.physics.pos.y; // Uターン時にY基準を更新
+    state.turnCooldown = 90;
   }
-  if (shouldTurnRight && state.dir === -1) {
+  if (state.turnCooldown === 0 && shouldTurnRight && state.dir === -1) {
     state.dir = 1;
     state.baseY = fish.physics.pos.y;
+    state.turnCooldown = 90;
   }
 
   // X: 一定速度
-  fish.physics.vel.x = speed * state.speedFactor * state.dir;
+  const burst = 1 + Math.sin(state.burstPhase) * 0.08 * Math.max(0.4, profile.tailBeat);
+  const targetVX = speed * state.speedFactor * burst * state.dir;
+  const turning = fish.physics.vel.x * state.dir < 0;
+  const accel = turning
+    ? Math.max(0.018, Math.min(0.08, 0.045 / Math.max(0.45, profile.glide)))
+    : Math.max(0.03, Math.min(0.18, 0.10 / Math.max(0.45, profile.glide)));
+  fish.physics.vel.x += (targetVX - fish.physics.vel.x) * accel;
   fish.physics.pos.x += fish.physics.vel.x;
 
   // Y: sin波でごくわずかにドリフト（ほぼ水平）
-  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT) * 50 * verticalSpreadForFish(fish);
+  const driftY = Math.sin(state.frame * PHYSICS.TUNA_VERTICAL_DRIFT * Math.max(0.5, profile.tailBeat)) * 42 * verticalSpreadForFish(fish);
   const targetY = state.baseY + driftY;
-  const dy = (targetY - fish.physics.pos.y) * 0.05;
+  const depthForce = updateDepthBehavior(fish, state.depth, 0.0045) * 12;
+  const dy = (targetY - fish.physics.pos.y) * (0.024 + 0.014 * turnStrengthForFish(fish)) + depthForce;
   fish.physics.vel.y = dy;
   fish.physics.pos.y += dy;
 }
@@ -106,6 +125,7 @@ export function resetTunaState(fishId: string, newY: number): void {
   if (state) {
     state.baseY = newY;
     state.laneTargetY = newY;
+    resetDepthBehavior(state.depth, newY);
     state.frame = Math.floor(Math.random() * 360); // フレームも乱数リセット
   } else {
     // stateがない場合は次のフレームで初期化されるが、baseYはpos.yから自然に取得される

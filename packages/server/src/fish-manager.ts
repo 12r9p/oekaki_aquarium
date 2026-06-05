@@ -206,15 +206,25 @@ export function releaseFish(
   const createdAt = pendingIdx >= 0 ? pendingQueue[pendingIdx]!.timestamp : config.fishMeta?.createdAt ?? Date.now();
   if (pendingIdx >= 0) pendingQueue.splice(pendingIdx, 1);
 
+  const normalizedType = normalizeFishType(config.type);
+  const world = getWorld();
+  const releaseSpread = normalizedType === "anchor" ? 0 : Math.min(180, Math.max(60, Math.min(world.width, world.height) * 0.08));
+  const angle = Math.random() * Math.PI * 2;
+  const radius = Math.sqrt(Math.random()) * releaseSpread;
+  const initialPos = {
+    x: Math.max(0, Math.min(world.width, spawnPos.x + Math.cos(angle) * radius)),
+    y: Math.max(0, Math.min(world.height, spawnPos.y + Math.sin(angle) * radius)),
+  };
+
   const fish: ActiveFish = {
     ...config,
-    type: normalizeFishType(config.type),
+    type: normalizedType,
     timestamp: Date.now(),
     createdAt,
     releasedAt: Date.now(),
     physics: {
-      pos: { ...spawnPos },
-      vel: initialVelForType(normalizeFishType(config.type)),
+      pos: initialPos,
+      vel: initialVelForType(normalizedType),
       speedMultiplier: 1.0, // レイヤーマネージャが後から上書きする
     },
     layerIndex: 0,

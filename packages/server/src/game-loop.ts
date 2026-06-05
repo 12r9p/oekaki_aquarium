@@ -17,6 +17,7 @@ import { recordSystemMetric } from "./system-metrics";
 let loopInterval: ReturnType<typeof setInterval> | null = null;
 let frameCount = 0;
 const fishFacing = new Map<string, 1 | -1>();
+const fishRenderRotation = new Map<string, number>();
 
 export function startGameLoop(): void {
   loopInterval = setInterval(tick, GAME_LOOP_MS);
@@ -59,15 +60,18 @@ function tick(): void {
       const preferredDirection = fish.userParams.direction;
       const facing = preferredDirection === "left" ? -1
         : preferredDirection === "right" ? 1
-        : Math.abs(vx) > 0.15 ? (vx < 0 ? -1 : 1) : previousFacing;
+        : vx * previousFacing < -0.45 ? (vx < 0 ? -1 : 1) : previousFacing;
       fishFacing.set(fish.id, facing);
       // 左右は反転、回転は上下の傾きだけに分け、二重反転を防ぐ。
-      const r = Math.atan2(vy * 0.55, Math.max(Math.abs(vx), 0.1));
+      const rawRotation = Math.max(-0.45, Math.min(0.45, Math.atan2(Math.abs(vy) < 0.025 ? 0 : vy * 0.42, Math.max(Math.abs(vx), 0.35))));
+      const previousRotation = fishRenderRotation.get(fish.id) ?? rawRotation;
+      const r = previousRotation + (rawRotation - previousRotation) * 0.18;
+      fishRenderRotation.set(fish.id, r);
       const beat = tailBeatForFish(fish.id);
       return {
         i: fish.id.slice(0, 8),
-        x: Math.round(fish.physics.pos.x),
-        y: Math.round(fish.physics.pos.y),
+        x: Number(fish.physics.pos.x.toFixed(2)),
+        y: Number(fish.physics.pos.y.toFixed(2)),
         r,
         s: fish.targetScale,
         o: fish.targetOpacity,

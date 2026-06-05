@@ -65,3 +65,15 @@ export function applyAnchor(fish: ActiveFish): void {
   fish.physics.pos.x += cur.x + (next.x - cur.x) * t;
   fish.physics.pos.y += cur.y + (next.y - cur.y) * t;
 }
+
+export function resetAnchorState(fishId: string, x: number, y: number): void {
+  const state = anchorState.get(fishId);
+  if (!state) {
+    anchorState.set(fishId, { pathIdx: 0, frame: 0, baseX: x, baseY: y });
+    return;
+  }
+  state.baseX = x;
+  state.baseY = y;
+  state.pathIdx = 0;
+  state.frame = 0;
+}

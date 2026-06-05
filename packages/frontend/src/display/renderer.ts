@@ -624,9 +624,9 @@ export function setupRenderLoop(app: Application, fishMap: Map<string, FishEntry
       const sign = e.targetScale < 0 ? -1 : 1;
       const absTarget = Math.abs(e.targetScale);
       const absScale  = Math.abs(s.scale.x);
-      const beatSquash = 1 + e.targetBeat * 0.025;
+      const beatSquash = 1 + e.targetBeat * 0.012;
       s.scale.set(lerp(absScale, absTarget, 0.05) * sign, lerp(Math.abs(s.scale.y), absTarget * beatSquash, 0.08));
-      s.skew.y = lerp(s.skew.y, e.targetBeat * 0.045 * sign, 0.12);
+      s.skew.y = lerp(s.skew.y, e.targetBeat * 0.018 * sign, 0.10);
       s.alpha    = lerp(s.alpha, e.targetAlpha, 0.05);
       if (s.tint !== e.targetTint) s.tint = e.targetTint;
       if (s.zIndex !== e.targetZIndex) s.zIndex = e.targetZIndex;

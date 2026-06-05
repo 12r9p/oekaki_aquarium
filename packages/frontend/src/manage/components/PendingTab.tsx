@@ -186,10 +186,11 @@ function ReleaseFishDialog({ fish, onClose, onRelease }: { fish: PendingFish; on
 }
 
 const MOTION_CHOICES: Array<{ type: FishType; label: string; description: string }> = [
-    { type: "school", label: "横に移動", description: "標準的に水平方向へ泳ぐ" },
-    { type: "jellyfish", label: "浮遊主体", description: "上下に漂う動き" },
-    { type: "anchor", label: "固定", description: "その場に留める" },
-    { type: "tuna", label: "速く移動", description: "直線的に大きく泳ぐ" },
-    { type: "squid", label: "パルス移動", description: "止まりながら進む" },
+    { type: "school", label: "イワシ", description: "小さく群れながら泳ぐ" },
+    { type: "jellyfish", label: "クラゲ", description: "上下に漂う動き" },
+    { type: "anchor", label: "固定", description: "水草や岩のように留める" },
+    { type: "tuna", label: "マグロ", description: "大きく直線的に泳ぐ" },
+    { type: "squid", label: "イカ", description: "休みながら進む" },
+    { type: "shark", label: "サメ", description: "ゆっくり弧を描く" },
     { type: "custom", label: "カスタム", description: "管理画面のカスタム泳ぎ" },
 ];

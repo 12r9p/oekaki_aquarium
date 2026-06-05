@@ -14,6 +14,7 @@ interface FishTabProps {
     activeFish: ActiveFish[];
     fishLayers: LayerConfig[];
     fishScaleMultiplier: number;
+    fishSpeedMultiplier: number;
     onRefresh: () => void;
 }
 
@@ -152,12 +153,12 @@ function FishConfigPopup({
                         <label className="text-xs font-semibold text-slate-600 uppercase tracking-wide">動きタイプ</label>
                         <div className="grid grid-cols-3 gap-1.5">
                             {[
-                                { val: "school", label: "横に移動" },
-                                { val: "jellyfish", label: "浮遊主体" },
+                                { val: "school", label: "イワシ" },
+                                { val: "jellyfish", label: "クラゲ" },
                                 { val: "anchor", label: "固定" },
-                                { val: "tuna", label: "高速" },
-                                { val: "squid", label: "パルス" },
-                                { val: "shark", label: "大きな弧" },
+                                { val: "tuna", label: "マグロ" },
+                                { val: "squid", label: "イカ" },
+                                { val: "shark", label: "サメ" },
                                 { val: "custom", label: "カスタム" },
                             ].map(({ val, label }) => (
                                 <button
@@ -362,11 +363,12 @@ function FishConfigPopup({
     );
 }
 
-export function FishTab({ activeFish, fishLayers, fishScaleMultiplier, onRefresh }: FishTabProps) {
+export function FishTab({ activeFish, fishLayers, fishScaleMultiplier, fishSpeedMultiplier, onRefresh }: FishTabProps) {
     const [selectedFish, setSelectedFish] = useState<ActiveFish | null>(null);
     const [showBulk, setShowBulk] = useState(false);
     const [isImporting, setIsImporting] = useState(false);
     const [bulkScaleMultiplier, setBulkScaleMultiplier] = useState(fishScaleMultiplier);
+    const [bulkSpeedMultiplier, setBulkSpeedMultiplier] = useState(fishSpeedMultiplier);
     const bulkTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
     const importFish = async (files: FileList | null) => {
@@ -424,20 +426,21 @@ export function FishTab({ activeFish, fishLayers, fishScaleMultiplier, onRefresh
     };
 
     React.useEffect(() => setBulkScaleMultiplier(fishScaleMultiplier), [fishScaleMultiplier]);
+    React.useEffect(() => setBulkSpeedMultiplier(fishSpeedMultiplier), [fishSpeedMultiplier]);
 
     React.useEffect(() => {
         if (!showBulk) return;
         if (bulkTimer.current) clearTimeout(bulkTimer.current);
         bulkTimer.current = setTimeout(async () => {
-            const response = await api.request("/api/fish-scale-multiplier", {
+            const response = await api.request("/api/fish-global-multipliers", {
                 method: "PUT",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ value: bulkScaleMultiplier }),
+                body: JSON.stringify({ scale: bulkScaleMultiplier, speed: bulkSpeedMultiplier }),
             });
             if (response.ok) onRefresh();
         }, 150);
         return () => { if (bulkTimer.current) clearTimeout(bulkTimer.current); };
-    }, [bulkScaleMultiplier, showBulk]);
+    }, [bulkScaleMultiplier, bulkSpeedMultiplier, showBulk]);
 
     return (
         <div className="flex-1 overflow-y-auto p-6 bg-slate-50 flex flex-col gap-6">
@@ -498,7 +501,7 @@ export function FishTab({ activeFish, fishLayers, fishScaleMultiplier, onRefresh
             {showBulk && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4" onClick={event => { if (event.target === event.currentTarget) setShowBulk(false); }}>
                     <div className="w-full max-w-2xl rounded-xl bg-white p-5 shadow-2xl">
-                        <BulkMultiplierSection scale={bulkScaleMultiplier} onScaleChange={setBulkScaleMultiplier} />
+                        <BulkMultiplierSection scale={bulkScaleMultiplier} speed={bulkSpeedMultiplier} onScaleChange={setBulkScaleMultiplier} onSpeedChange={setBulkSpeedMultiplier} />
                         <div className="mt-4 flex justify-end"><Button variant="outline" onClick={() => setShowBulk(false)}>閉じる</Button></div>
                     </div>
                 </div>

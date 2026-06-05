@@ -30,13 +30,14 @@ export function movementScale(fish: ActiveFish): number {
 /** 境界処理で使う魚種別の最大速度。 */
 export function maxSpeedForFish(fish: ActiveFish): number {
   const scale = movementScale(fish);
+  if (scale <= 0) return 0;
   switch (fish.type) {
     case "tuna":
       return PHYSICS.TUNA_SPEED * scale * 1.15;
     case "squid":
       return PHYSICS.SQUID_PULSE_SPEED * scale;
     case "jellyfish":
-      return Math.max(0.8, PHYSICS.JELLYFISH_FLOAT_SPEED * scale * 3);
+      return PHYSICS.JELLYFISH_FLOAT_SPEED * scale * 3;
     case "shark":
       return PHYSICS.SHARK_SPEED * scale * 1.2;
     case "custom":

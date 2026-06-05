@@ -302,7 +302,7 @@ function ManageApp(): React.ReactElement {
                     />
                 )}
                 {tab === "fish" && (
-                    <FishTab activeFish={activeFish} fishLayers={fishLayers} fishScaleMultiplier={fishScaleMultiplier} onRefresh={poll} />
+                    <FishTab activeFish={activeFish} fishLayers={fishLayers} fishScaleMultiplier={fishScaleMultiplier} fishSpeedMultiplier={fishSpeedMultiplier} onRefresh={poll} />
                 )}
                 {tab === "pending" && (
                     <PendingTab pendingFish={pendingFish} onRefresh={poll} />

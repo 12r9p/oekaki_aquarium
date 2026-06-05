@@ -110,7 +110,7 @@ export function updateWorldMotionSettings(
 ): void {
   if (horizontalBoundaryMode) world.horizontalBoundaryMode = horizontalBoundaryMode;
   if (fishSpeedMultiplier !== undefined) {
-    world.fishSpeedMultiplier = Math.max(0.1, Math.min(fishSpeedMultiplier, 3));
+    world.fishSpeedMultiplier = Math.max(0, Math.min(fishSpeedMultiplier, 5));
   }
   if (fishScaleMultiplier !== undefined) {
     world.fishScaleMultiplier = Math.max(0.1, Math.min(fishScaleMultiplier, 5));

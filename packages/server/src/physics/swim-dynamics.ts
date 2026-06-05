@@ -19,17 +19,7 @@ export function applyFishSwimmingDynamics(fish: ActiveFish): void {
   const beatRate = (0.09 + Math.min(speed, 8) * 0.018) * profile.tailBeat / glide;
   state.phase += beatRate;
   const beat = Math.sin(state.phase);
-  state.lastBeat = beat;
-
-  const nx = fish.physics.vel.x / speed;
-  const ny = fish.physics.vel.y / speed;
-  const pulse = 1 + beat * 0.018 + Math.sin(state.phase * 2) * 0.012;
-  fish.physics.vel.x *= pulse;
-  fish.physics.vel.y *= pulse;
-
-  const sideForce = Math.cos(state.phase) * 0.055 * profile.tailBeat;
-  fish.physics.vel.x += -ny * sideForce;
-  fish.physics.vel.y += nx * sideForce * 0.45;
+  state.lastBeat += (beat - state.lastBeat) * 0.18;
 }
 
 export function tailBeatForFish(fishId: string): number {

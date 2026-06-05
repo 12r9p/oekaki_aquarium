@@ -78,10 +78,10 @@
       "scale": 1
     },
     "display:tab-c1aded82": {
-      "x": 301.9581801790584,
-      "y": 300.91305831439706,
-      "width": 661.3140495867768,
-      "height": 1046,
+      "x": 76.69578503081237,
+      "y": 43.153183156518665,
+      "width": 1130,
+      "height": 1381,
       "scale": 1
     },
     "display:tab-60e3b01e": {
@@ -92,7 +92,7 @@
       "scale": 1
     },
     "display:tab-c17f29ae": {
-      "x": 0,
+      "x": 57.10737763423306,
       "y": 155.683932177583,
       "width": 659.5536391967955,
       "height": 1132.5668551864164,
@@ -130,8 +130,8 @@
   "bgUrl": "/images/scene/aquarium-default.png",
   "sceneObjects": [],
   "world": {
-    "width": 1031,
-    "height": 1404,
+    "width": 1345,
+    "height": 1504,
     "forbiddenZones": [],
     "spawnPoints": [
       {
@@ -191,36 +191,22 @@
       }
     ],
     "horizontalBoundaryMode": "wrap",
-    "fishSpeedMultiplier": 1,
+    "fishSpeedMultiplier": 0.8,
     "fishScaleMultiplier": 1,
     "motionSettings": {
       "verticalSpread": 2,
-      "turnStrength": 0.4,
+      "turnStrength": 0.3,
       "typeProfiles": {
-        "shark": {
-          "speedMultiplier": 1.55,
+        "squid": {
+          "speedMultiplier": 1,
           "verticalSpread": 0.3,
-          "turnStrength": 0.95,
-          "tailBeat": 1,
-          "glide": 1
-        },
-        "tuna": {
-          "speedMultiplier": 0.9,
-          "verticalSpread": 1,
           "turnStrength": 1,
           "tailBeat": 1,
           "glide": 1
         },
         "jellyfish": {
-          "speedMultiplier": 2.55,
-          "verticalSpread": 0.25,
-          "turnStrength": 1,
-          "tailBeat": 1,
-          "glide": 1
-        },
-        "squid": {
           "speedMultiplier": 1,
-          "verticalSpread": 0.25,
+          "verticalSpread": 0.3,
           "turnStrength": 1,
           "tailBeat": 1,
           "glide": 1
@@ -246,41 +232,41 @@
     {
       "id": 0,
       "maxCount": 10,
-      "scale": 1.75,
+      "scale": 1.8,
       "opacity": 1,
-      "speedFactor": 0.65,
+      "speedFactor": 1.05,
       "zIndex": 100
     },
     {
       "id": 1,
       "maxCount": 20,
-      "scale": 0.84,
-      "opacity": 0.66,
-      "speedFactor": 0.5,
+      "scale": 1.2,
+      "opacity": 0.75,
+      "speedFactor": 0.7,
       "zIndex": 70
     },
     {
       "id": 2,
       "maxCount": 100,
-      "scale": 0.55,
-      "opacity": 0.39,
-      "speedFactor": 0.3,
+      "scale": 0.68,
+      "opacity": 0.4,
+      "speedFactor": 0.6,
       "zIndex": 40
     },
     {
       "id": 3,
-      "maxCount": 10,
-      "scale": 0.85,
-      "opacity": 0.27,
+      "maxCount": 100,
+      "scale": 0.51,
+      "opacity": 0.18,
       "speedFactor": 0.6,
       "zIndex": 10
     },
     {
       "id": 4,
       "maxCount": 100,
-      "scale": 0.75,
-      "opacity": 0.19,
-      "speedFactor": 0.25,
+      "scale": 0.35,
+      "opacity": 0.18,
+      "speedFactor": 0.6,
       "zIndex": 0
     }
   ]

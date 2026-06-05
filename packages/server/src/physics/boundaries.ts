@@ -34,13 +34,14 @@ export function applyBoundaries(fish: ActiveFish): void {
     if (pos.x < 0) pos.x = world.width;
     if (pos.x > world.width) pos.x = 0;
   } else {
+    const minEdgeEscape = speed * 0.22;
     if (pos.x < PHYSICS.WALL_MARGIN) {
       pos.x = PHYSICS.WALL_MARGIN;
-      if (vel.x < 0) vel.x *= -bounceDamp;
+      if (vel.x < minEdgeEscape) vel.x = Math.max(minEdgeEscape, Math.abs(vel.x) * bounceDamp);
     }
     if (pos.x > world.width - PHYSICS.WALL_MARGIN) {
       pos.x = world.width - PHYSICS.WALL_MARGIN;
-      if (vel.x > 0) vel.x *= -bounceDamp;
+      if (vel.x > -minEdgeEscape) vel.x = -Math.max(minEdgeEscape, Math.abs(vel.x) * bounceDamp);
     }
   }
   if (pos.y < PHYSICS.WALL_MARGIN) {
