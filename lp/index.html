@@ -3,7 +3,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>OEKAKI AQUARIUM // おえかき水族館 - 総合ガイド & 技術LP</title>
+    <title>OEKAKI AQUARIUM</title>
     <meta
       name="description"
       content="自分で描いた魚が巨大水槽を泳ぎ回る。来場者向け体験ステップから、Bun/Hono/PixiJS/rembgなどエンジニア向けの高度な技術スタック、生物物理シミュレーションまでを網羅したおえかき水族館の総合LP。"
@@ -758,7 +758,7 @@
 
       .specs-grid {
         display: grid;
-        grid-template-columns: repeat(3, 1fr);
+        grid-template-columns: repeat(4, 1fr);
         gap: 24px;
         border-top: 1px solid var(--border-accent);
         padding-top: 32px;
@@ -1061,6 +1061,10 @@
             src="assets/描画クライアント.png"
             alt="おえかき水族館 描画クライアント画面"
           />
+          <img
+            src="assets/ステータス.png"
+            alt="おえかき水族館 管理コンソール"
+          />  
         </div>
       </section>
 
@@ -1110,9 +1114,9 @@
       <section id="panels">
         <div class="section-title">
           <span class="section-title-tag">Architecture Roles</span>
-          <h2>マルチパネルシステム</h2>
+          <h2>複数ディスプレイ前提のマルチパネル同期</h2>
           <p>
-            おえかき水族館は、役割ごとにクリーンに分離されたWebアプリケーション群で構成されています。
+            巨大水槽を表現するために「最初から複数ディスプレイ（マルチパネル）のシームレスな同期稼働」を前提として開発されています。役割ごとにクリーンに分離されたシステム構成です。
           </p>
         </div>
 
@@ -1704,15 +1708,6 @@ state.angle += state.angularVelocity;</code></pre>
         <div class="grid-3">
           <!-- High resilience card with status image -->
           <div class="resilience-card">
-            <div
-              class="card-screenshot"
-              style="aspect-ratio: 16/9; margin-bottom: 16px"
-            >
-              <img
-                src="assets/ステータス.png"
-                alt="システムステータス・通信監視画面"
-              />
-            </div>
             <h3>スリープ・通信復帰対策</h3>
             <p>
               Screen Wake Lock
@@ -1722,40 +1717,18 @@ state.angle += state.angularVelocity;</code></pre>
           </div>
           <!-- resilience card with config image -->
           <div class="resilience-card">
-            <div
-              class="card-screenshot"
-              style="aspect-ratio: 16/9; margin-bottom: 16px"
-            >
-              <img src="assets/設定.png" alt="環境・システム設定画面" />
-            </div>
+            
             <h3>512KB 送信キュー間引き</h3>
             <p>
               低速通信下、あるいはスリープ中のクライアントのWebSocketバッファが512KBを超えた時点で、古いフレーム座標の送信をスキップ。サーバーのソケット詰まりと負荷を確実に保護します。
             </p>
           </div>
-          <!-- resilience card with clean metadata description -->
+          <!-- resilience card with DB-less file-based architecture -->
           <div class="resilience-card">
-            <div
-              class="card-screenshot"
-              style="
-                aspect-ratio: 16/9;
-                margin-bottom: 16px;
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                background: #0f172a;
-                color: #38bdf8;
-                font-family: var(--font-code);
-                font-size: 1.1rem;
-                font-weight: bold;
-                border: 1px solid var(--border-accent);
-              "
-            >
-              PNG + tEXt Chunk
-            </div>
-            <h3>PNG tEXtバイナリ操作</h3>
+            
+            <h3>DB不使用・ファイルベース管理</h3>
             <p>
-              外部DBに依存せず、PNG画像のメタデータ（tEXtチャンク）に設定を直接書き込み。CRC32計算を含め、画像ライブラリなしでBufferオブジェクト操作により自前バイナリ実装されています。
+              外部データベースを一切使用せず、「画像ファイルがあれば描画する」という極めて単純な仕組みを採用。PNG画像のメタデータ（tEXtチャンク）に設定を直接書き込んでおり、OSのエクスプローラーやFinderから画像を直接コピー・削除するだけで魚の管理やバックアップを安全に行えます。
             </p>
           </div>
         </div>
@@ -1779,6 +1752,12 @@ state.angle += state.angularVelocity;</code></pre>
               プロジェクター設営に必須なIdentify（画面番号表示）やCalibration（全面調整）、世界座標グリッドを標準装備。
             </p>
           </div>
+          <div class="spec-item">
+            <h4>現地環境パラメータチューニング</h4>
+            <p>
+              現地のプロジェクター投影サイズや部屋の広さ、マシンスペックに合わせ、魚の速度や大きさを管理画面からピクセル単位で細かく微調整可能です。
+            </p>
+          </div>
         </div>
       </section>
     </main>
@@ -1787,15 +1766,6 @@ state.angle += state.angularVelocity;</code></pre>
     <footer>
       <div class="container">
         <p>&copy; 2026 おえかき水族館プロジェクト.</p>
-        <p
-          style="
-            font-family: var(--font-code);
-            color: #94a3b8;
-            font-size: 0.7rem;
-          "
-        >
-          Designed & Programmed with Antigravity Agent
-        </p>
       </div>
     </footer>
 
