@@ -131,25 +131,25 @@
     {
       "id": 0,
       "maxCount": 20,
-      "scale": 1.8,
-      "opacity": 0.7,
-      "speedFactor": 1.3,
-      "zIndex": 0
+      "scale": 1,
+      "opacity": 1,
+      "speedFactor": 1,
+      "zIndex": 100
     },
     {
       "id": 1,
       "maxCount": 50,
-      "scale": 0.85,
-      "opacity": 0.7,
+      "scale": 0.45,
+      "opacity": 1,
       "speedFactor": 0.8,
       "zIndex": 70
     },
     {
       "id": 2,
       "maxCount": 100,
-      "scale": 0.5,
-      "opacity": 0.7,
-      "speedFactor": 0.85,
+      "scale": 0.3,
+      "opacity": 1,
+      "speedFactor": 0.7,
       "zIndex": 40
     }
   ]

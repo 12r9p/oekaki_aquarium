@@ -104,7 +104,7 @@ function FishRow({
                 <div className="w-12 h-12 bg-slate-100 rounded-lg overflow-hidden flex items-center justify-center border border-slate-200 mx-auto">
                     <img src={fish.textureUrl} alt="fish" className="max-w-full max-h-full object-contain" />
                 </div>
-                {fish.isArchived && <div className="absolute top-1 right-1 bg-slate-700 text-white text-[9px] px-1 rounded">非表示</div>}
+                {(fish.isArchived || fish.isAutoHidden) && <div className="absolute top-1 right-1 bg-slate-700 text-white text-[9px] px-1 rounded">非表示</div>}
                 {fish.isPinned && <div className="absolute top-1 left-1 text-sky-500 text-[10px]">📌</div>}
             </TableCell>
             <TableCell className="align-middle border-r border-slate-100">
@@ -128,10 +128,11 @@ function FishRow({
                 <div className="flex flex-col gap-0.5 items-center">
                     <span
                         className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold text-white shadow-sm"
-                        style={{ background: getLayerColor(fish.isArchived ? -1 : fish.layerIndex, 5) }}
+                        style={{ background: getLayerColor((fish.isArchived || fish.isAutoHidden) ? -1 : fish.layerIndex, 5) }}
                     >
-                        {getLayerLabel(fish.layerIndex, fish.isArchived)}
+                        {getLayerLabel(fish.layerIndex, fish.isArchived || fish.isAutoHidden)}
                     </span>
+                    {fish.isAutoHidden && !fish.isArchived && <span className="text-[10px] bg-slate-100 text-slate-600 px-1.5 py-0.5 rounded-full">定員超過</span>}
                     {fish.isPinned && !fish.isArchived && <span className="text-[10px] bg-sky-100 text-sky-700 px-1.5 py-0.5 rounded-full">固定</span>}
                 </div>
             </TableCell>

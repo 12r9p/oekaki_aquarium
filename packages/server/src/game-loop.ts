@@ -45,13 +45,13 @@ function tick(): void {
   const fishCalculationMs = performance.now() - calculationStartedAt;
   if (frameCount % 6 === 0) {
     const monitorCommunicationMs = Math.max(0, ...getDisplayClientInfoList().map(display => display.ping ?? 0));
-    recordSystemMetric(allFish.filter(fish => !fish.isArchived).length, fishCalculationMs, monitorCommunicationMs);
+    recordSystemMetric(allFish.filter(fish => !fish.isArchived && !fish.isAutoHidden).length, fishCalculationMs, monitorCommunicationMs);
   }
 
   // フレームパケットを組み立てて display クライアントにのみ送信
   const packet: UdpPacket = {
     t: Date.now(),
-    f: allFish.filter(fish => !fish.isArchived).map((fish) => {
+    f: allFish.filter(fish => !fish.isArchived && !fish.isAutoHidden).map((fish) => {
       const vx = fish.physics.vel.x;
       const vy = fish.physics.vel.y;
       const previousFacing = fishFacing.get(fish.id) ?? (vx < 0 ? -1 : 1);

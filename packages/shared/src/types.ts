@@ -98,6 +98,8 @@ export interface ActiveFish extends FishConfig {
   targetOpacity: number;
   /** アーカイブ（非表示・計算除外）状態フラグ */
   isArchived?: boolean;
+  /** レイヤー定員超過による自動非表示。永続アーカイブではない。 */
+  isAutoHidden?: boolean;
 }
 
 // -------------------------------------------------------

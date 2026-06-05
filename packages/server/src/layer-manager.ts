@@ -7,28 +7,34 @@ import { FISH_SCALE_BASE_MULTIPLIER, getWorld } from "./world";
 //
 // ルール:
 //   1. isPinned=true の魚はロジックから除外し、pinnedLayerId に固定
-//   2. 残りを timestamp 降順（新しい順）でソート
+//   2. 残りを releasedAt 降順（新しい順）でソート
 //   3. 先頭から LAYER_CONFIG の maxCount の枠に割り当て
-//   4. 枠が溢れたら最後のレイヤーに詰め込む
+//   4. 枠が溢れたら自動非表示レイヤー扱いにする
 // ============================================================
 
 export function updateFishLayers(allFish: ActiveFish[]): void {
   if (LAYER_CONFIG.length === 0) return;
   // ピン留め済みと一般に分離
-  const pinnedFish = allFish.filter((f) => f.isPinned);
+  const pinnedFish = allFish.filter((f) => f.isPinned && !f.isArchived);
   const normalFish = allFish
-    .filter((f) => !f.isPinned)
-    .sort((a, b) => b.timestamp - a.timestamp); // 新しい順
+    .filter((f) => !f.isPinned && !f.isArchived)
+    .sort((a, b) => (b.releasedAt ?? b.timestamp) - (a.releasedAt ?? a.timestamp)); // 放流が新しい順
+
+  for (const fish of allFish) fish.isAutoHidden = false;
 
   // --- 一般魚へのレイヤー割り当て ---
   let layerIdx = 0;
   let countInLayer = 0;
 
   for (const fish of normalFish) {
-    // 現レイヤーが満員なら次のレイヤーへ
-    if (countInLayer >= LAYER_CONFIG[layerIdx]!.maxCount) {
-      layerIdx = Math.min(layerIdx + 1, LAYER_CONFIG.length - 1);
+    while (layerIdx < LAYER_CONFIG.length && countInLayer >= LAYER_CONFIG[layerIdx]!.maxCount) {
+      layerIdx++;
       countInLayer = 0;
+    }
+    if (layerIdx >= LAYER_CONFIG.length) {
+      fish.isAutoHidden = true;
+      fish.targetOpacity = 0;
+      continue;
     }
     applyLayerProps(fish, layerIdx);
     countInLayer++;
@@ -44,7 +50,7 @@ export function updateFishLayers(allFish: ActiveFish[]): void {
 export function getFishLayerCounts(allFish: ActiveFish[]): number[] {
   const counts = LAYER_CONFIG.map(() => 0);
   for (const fish of allFish) {
-    if (!fish.isArchived && counts[fish.layerIndex] !== undefined) counts[fish.layerIndex]++;
+    if (!fish.isArchived && !fish.isAutoHidden && counts[fish.layerIndex] !== undefined) counts[fish.layerIndex]++;
   }
   return counts;
 }
