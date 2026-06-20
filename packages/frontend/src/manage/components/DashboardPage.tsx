@@ -31,8 +31,9 @@ function StatusCard({
         emerald: "bg-emerald-100 text-emerald-700",
         amber: "bg-amber-100 text-amber-700",
     };
-    return (
-        <button type="button" onClick={onClick} className="rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm transition hover:border-sky-300 hover:shadow flex flex-col justify-between">
+
+    const content = (
+        <>
             <div className="w-full">
                 <div className="flex items-start justify-between gap-4">
                     <div>
@@ -47,8 +48,31 @@ function StatusCard({
                     </div>
                 )}
             </div>
-            <div className="mt-4 flex w-full items-center justify-between text-xs text-slate-500"><span>{detail}</span>{onClick && <ExternalLink className="h-3.5 w-3.5" />}</div>
-        </button>
+            <div className="mt-4 flex w-full items-center justify-between text-xs text-slate-500">
+                <span>{detail}</span>
+                {onClick && <ExternalLink className="h-3.5 w-3.5" />}
+            </div>
+        </>
+    );
+
+    const baseClass = "rounded-xl border border-slate-200 bg-white p-5 text-left shadow-sm flex flex-col justify-between";
+
+    if (onClick) {
+        return (
+            <button
+                type="button"
+                onClick={onClick}
+                className={`${baseClass} transition hover:border-sky-300 hover:shadow w-full`}
+            >
+                {content}
+            </button>
+        );
+    }
+
+    return (
+        <div className={baseClass}>
+            {content}
+        </div>
     );
 }
 

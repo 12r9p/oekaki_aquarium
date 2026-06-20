@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import type { PendingFish } from "@aquarium/shared";
 import { api } from "../shared/api";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ const EDITOR_ID = `editor-${Math.random().toString(36).slice(2, 8)}`;
 export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
     const [fishList, setFishList] = useState<PendingFish[]>([]);
     const [loading, setLoading] = useState(true);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const fetchPending = useCallback(async (): Promise<void> => {
         try {
@@ -62,13 +63,11 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
                         <h1 className="text-xl font-bold tracking-tight">待合室</h1>
                         <p className="mt-1 text-sm text-slate-500">自分の絵を選んで、泳ぎ方を設定します。</p>
                     </div>
-                    <Button asChild className="gap-2">
-                        <label>
-                    <Upload className="h-4 w-4" />写真・PNGを追加
-                    <input type="file" accept="image/png,image/*" capture="environment" multiple hidden
-                        onChange={e => e.target.files && void uploadFiles(e.target.files)} />
-                </label>
+                    <Button className="gap-2" onClick={() => fileInputRef.current?.click()}>
+                        <Upload className="h-4 w-4" />写真・PNGを追加
                     </Button>
+                    <input type="file" ref={fileInputRef} accept="image/png,image/*" capture="environment" multiple className="hidden"
+                        onChange={e => e.target.files && void uploadFiles(e.target.files)} />
                 </div>
             </header>
             <div className="mx-auto max-w-5xl px-5 py-5">

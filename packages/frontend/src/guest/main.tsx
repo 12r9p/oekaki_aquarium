@@ -20,6 +20,7 @@ function App(): React.ReactElement {
     const [ripple, setRipple] = React.useState<{ x: number; y: number; id: number } | null>(null);
     const [mode, setMode] = React.useState<"feed" | "create">("feed");
     const [editingFish, setEditingFish] = React.useState<PendingFish | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const uploadPhoto = async (file: File): Promise<void> => {
         const form = new FormData();
@@ -39,10 +40,14 @@ function App(): React.ReactElement {
         return () => { remove(); clearInterval(t); };
     }, []);
 
-    const handleTap = (e: React.MouseEvent | React.TouchEvent): void => {
-        const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-        const clientX = "touches" in e ? e.touches[0]?.clientX ?? 0 : (e as React.MouseEvent).clientX;
-        const clientY = "touches" in e ? e.touches[0]?.clientY ?? 0 : (e as React.MouseEvent).clientY;
+    const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
+        if ((e.target as HTMLElement).closest("button")) {
+            return;
+        }
+
+        const rect = e.currentTarget.getBoundingClientRect();
+        const clientX = e.clientX;
+        const clientY = e.clientY;
 
         // タップ位置をグローバル座標に変換（world幅 3840 基準）
         const globalX = Math.round((clientX / rect.width) * 3840);
@@ -66,13 +71,11 @@ function App(): React.ReactElement {
                 <Button variant="ghost" onClick={() => setMode("feed")} className="mb-6">エサやりへ戻る</Button>
                 <h1 className="text-xl font-bold">魚を放流する</h1>
                 <p className="mt-2 text-sm leading-6 text-slate-500">写真を撮るか PNG を選ぶと、泳ぎ方・向き・大きさ・速度を設定できます。</p>
-                <Button asChild className="mt-6 w-full gap-2">
-                    <label>
+                <Button className="mt-6 w-full gap-2" onClick={() => fileInputRef.current?.click()}>
                     <Camera className="h-4 w-4" />写真を撮る / PNGを選ぶ
-                    <input type="file" accept="image/*" capture="environment" hidden
-                        onChange={e => e.target.files?.[0] && void uploadPhoto(e.target.files[0])} />
-                </label>
                 </Button>
+                <input type="file" ref={fileInputRef} accept="image/*" capture="environment" className="hidden"
+                    onChange={e => e.target.files?.[0] && void uploadPhoto(e.target.files[0])} />
                 </div>
             </div>
         );
@@ -84,8 +87,7 @@ function App(): React.ReactElement {
             style={{
                 touchAction: "none",
             }}
-            onClick={handleTap}
-            onTouchStart={handleTap}
+            onPointerDown={handlePointerDown}
         >
             {/* リップルエフェクト */}
             {ripple && (

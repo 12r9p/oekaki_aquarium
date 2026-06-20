@@ -264,7 +264,7 @@ function ManageApp(): React.ReactElement {
     };
 
     return (
-        <div className="flex h-screen w-full overflow-hidden bg-slate-50 font-sans text-slate-800">
+        <div className="flex h-screen w-full flex-col lg:flex-row overflow-hidden bg-slate-50 font-sans text-slate-800">
             {alert && <div className="manage-toast">{alert}</div>}
 
             <Toolbar
