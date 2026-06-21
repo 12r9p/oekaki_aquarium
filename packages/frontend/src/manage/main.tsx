@@ -5,6 +5,7 @@ import { LAYER_CONFIG } from "@aquarium/shared";
 import { createWsClient } from "../shared/useWs";
 import { api } from "../shared/api";
 import "../styles/global.css";
+import { Button } from "@/components/ui/button";
 
 // コンポーネント群をimport
 import { Sidebar } from "./components/Sidebar";
@@ -332,7 +333,7 @@ function ManageApp(): React.ReactElement {
                 {toasts.map(t => (
                     <div key={t.id} className="bg-sky-500 text-white px-4 py-2 rounded shadow-lg text-sm font-bold flex items-center justify-between pointer-events-auto">
                         {t.msg}
-                        <button className="ml-4 opacity-70 hover:opacity-100" onClick={() => removeToast(t.id)}>×</button>
+                        <Button variant="ghost" size="icon" className="ml-4 h-6 w-6 opacity-70 hover:opacity-100 text-white hover:bg-sky-600 hover:text-white" onClick={() => removeToast(t.id)}>×</Button>
                     </div>
                 ))}
             </div>
@@ -440,8 +441,8 @@ function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWo
                         <input type="checkbox" checked={arLocked} onChange={e => setArLocked(e.target.checked)} className="form-checkbox text-blue-500" />
                         縦横比を固定
                     </label>
-                    <button className="rounded-md border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-400" disabled>元に戻す</button>
-                    <button className="rounded-md border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-400" disabled>やり直す</button>
+                    <Button variant="outline" size="sm" className="rounded-md border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-400" disabled>元に戻す</Button>
+                    <Button variant="outline" size="sm" className="rounded-md border border-slate-200 bg-white px-3 py-2 font-semibold text-slate-400" disabled>やり直す</Button>
                 </div>
             </div>
             <div className="flex flex-1 overflow-hidden relative">

@@ -23,6 +23,7 @@ interface PendingTabProps {
 export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
     const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
     const [releaseTarget, setReleaseTarget] = useState<PendingFish | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
     const uploadFiles = async (files: FileList | File[]) => {
         for (const file of Array.from(files)) {
             if (file.type !== "image/png") continue;
@@ -58,7 +59,14 @@ export function PendingTab({ pendingFish, onRefresh }: PendingTabProps) {
             <PageHeader
                 title="承認待ち"
                 description={`${pendingFish.length}匹が未処理です。画像を確認して放流または却下します。`}
-                actions={<label className="inline-flex h-10 cursor-pointer items-center gap-2 rounded-md bg-sky-500 px-4 text-sm font-bold text-white hover:bg-sky-600"><Upload className="h-4 w-4" />PNGを追加<input type="file" accept="image/png" multiple hidden onChange={e => e.target.files && void uploadFiles(e.target.files)} /></label>}
+                actions={
+                    <>
+                        <Button onClick={() => fileInputRef.current?.click()} className="gap-2">
+                            <Upload className="h-4 w-4" />PNGを追加
+                        </Button>
+                        <input ref={fileInputRef} type="file" accept="image/png" multiple className="hidden" onChange={e => e.target.files && void uploadFiles(e.target.files)} />
+                    </>
+                }
             />
             <div className="mb-4 rounded-xl border-2 border-dashed border-sky-200 bg-sky-50 p-4 text-center text-sm text-sky-700"
                 onDragOver={e => e.preventDefault()} onDrop={e => { e.preventDefault(); void uploadFiles(e.dataTransfer.files); }}>
@@ -159,10 +167,10 @@ function ReleaseFishDialog({ fish, onClose, onRelease }: { fish: PendingFish; on
                             <div className="mb-2 text-xs font-bold text-slate-600">動きプリセット</div>
                             <div className="grid grid-cols-2 gap-2">
                                 {MOTION_CHOICES.map(choice => (
-                                    <button key={choice.type} type="button" onClick={() => setType(choice.type)} className={`rounded-lg border p-3 text-left text-xs ${type === choice.type ? "border-sky-500 bg-sky-50 text-sky-800" : "border-slate-200 bg-white text-slate-600"}`}>
-                                        <div className="font-bold">{choice.label}</div>
-                                        <div className="mt-1 text-[11px] opacity-75">{choice.description}</div>
-                                    </button>
+                                    <Button key={choice.type} type="button" variant="ghost" onClick={() => setType(choice.type)} className={`rounded-lg border p-3 text-left text-xs h-auto w-full flex-col items-start font-normal block hover:bg-sky-50 whitespace-normal min-w-0 ${type === choice.type ? "border-sky-500 bg-sky-50 text-sky-800 hover:text-sky-800" : "border-slate-200 bg-white text-slate-600 hover:text-slate-600 hover:bg-slate-50"}`}>
+                                        <div className="font-bold break-words">{choice.label}</div>
+                                        <div className="mt-1 text-[11px] opacity-75 break-words">{choice.description}</div>
+                                    </Button>
                                 ))}
                             </div>
                         </div>
@@ -170,8 +178,8 @@ function ReleaseFishDialog({ fish, onClose, onRelease }: { fish: PendingFish; on
                             <div className="mb-2 text-xs font-bold text-slate-600">泳ぐ向き</div>
                             <div className="grid grid-cols-3 gap-2">
                                 <div className={`rounded-lg border px-3 py-2 text-center text-xs font-bold ${direction === "auto" ? "border-slate-300 bg-slate-100 text-slate-500" : "border-slate-200 bg-slate-50 text-slate-400"}`}>自動</div>
-                                <button type="button" onClick={() => setDirection("left")} className={`rounded-lg border px-3 py-2 text-xs font-bold ${direction === "left" ? "border-sky-500 bg-sky-50 text-sky-800" : "border-slate-200"}`}>← 左</button>
-                                <button type="button" onClick={() => setDirection("right")} className={`rounded-lg border px-3 py-2 text-xs font-bold ${direction === "right" ? "border-sky-500 bg-sky-50 text-sky-800" : "border-slate-200"}`}>右 →</button>
+                                <Button type="button" variant="ghost" onClick={() => setDirection("left")} className={`rounded-lg border px-3 py-2 text-xs font-bold h-auto hover:bg-sky-50 whitespace-normal min-w-0 ${direction === "left" ? "border-sky-500 bg-sky-50 text-sky-800 hover:text-sky-800" : "border-slate-200 text-slate-600 hover:text-slate-600 hover:bg-slate-50"}`}>← 左</Button>
+                                <Button type="button" variant="ghost" onClick={() => setDirection("right")} className={`rounded-lg border px-3 py-2 text-xs font-bold h-auto hover:bg-sky-50 whitespace-normal min-w-0 ${direction === "right" ? "border-sky-500 bg-sky-50 text-sky-800 hover:text-sky-800" : "border-slate-200 text-slate-600 hover:text-slate-600 hover:bg-slate-50"}`}>右 →</Button>
                             </div>
                         </div>
                         <div className="flex justify-end gap-2">

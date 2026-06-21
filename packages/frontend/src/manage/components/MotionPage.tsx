@@ -105,9 +105,9 @@ export function MotionPage({ settings, onChange }: { settings: MotionSettings; o
                         <MotionCard key={preset.id} title={preset.name} description="名前をつけて保存したカスタム泳ぎ" preview="custom" onClick={() => setSelection({ kind: "custom", id: preset.id, title: preset.name, description: "名前をつけて保存したカスタム泳ぎ" })} />
                     ))}
                     {customPresets.length === 0 && (
-                        <button type="button" onClick={addCustomPreset} className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-left text-sm font-bold text-slate-500 hover:border-sky-300 hover:text-sky-700">
+                        <Button type="button" variant="ghost" onClick={addCustomPreset} className="rounded-lg border border-dashed border-slate-300 bg-white p-5 text-left text-sm font-bold text-slate-500 hover:border-sky-300 hover:text-sky-700 block h-auto w-full hover:bg-white whitespace-normal min-w-0">
                             カスタム泳ぎを追加
-                        </button>
+                        </Button>
                     )}
                 </MotionSection>
 
@@ -149,11 +149,11 @@ function MotionSection({ title, action, children }: { title: string; action?: Re
 }
 
 function MotionCard({ title, description, preview, onClick }: { title: string; description: string; preview: string; onClick: () => void }) {
-    return <button type="button" onClick={onClick} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow">
+    return <Button variant="ghost" onClick={onClick} className="rounded-lg border border-slate-200 bg-white p-4 text-left shadow-sm transition hover:border-sky-300 hover:shadow block h-auto w-full font-normal hover:bg-white text-slate-800 hover:text-slate-800 whitespace-normal min-w-0">
         <MotionPreview mode={preview} />
-        <h3 className="mt-3 font-bold text-slate-900">{title}</h3>
-        <p className="mt-1 text-xs text-slate-500">{description}</p>
-    </button>;
+        <h3 className="mt-3 font-bold text-slate-900 break-words">{title}</h3>
+        <p className="mt-1 text-xs text-slate-500 break-words">{description}</p>
+    </Button>;
 }
 
 function MotionDialog({ selection, settings, customPresets, onClose, onChange, onUpdateProfile, onSaveCustom, onDeleteCustom }: {

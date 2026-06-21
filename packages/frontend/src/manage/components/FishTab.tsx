@@ -140,9 +140,9 @@ function FishConfigPopup({
                         <div className="text-sm font-bold text-slate-800 truncate">{fish.author ?? "anonymous"}</div>
                         <div className="text-[10px] text-slate-400">レイヤー: {fish.layerIndex} {fish.isPinned && <span className="text-sky-500">固定中</span>}</div>
                     </div>
-                    <button onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0">
+                    <Button variant="ghost" size="icon" onClick={onClose} className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors flex-shrink-0 h-8 w-8">
                         <X className="w-5 h-5" />
-                    </button>
+                    </Button>
                 </div>
 
                 {/* フォーム */}
@@ -161,13 +161,15 @@ function FishConfigPopup({
                                 { val: "shark", label: "サメ" },
                                 { val: "custom", label: "カスタム" },
                             ].map(({ val, label }) => (
-                                <button
+                                <Button
                                     key={val}
+                                    type="button"
+                                    variant="ghost"
                                     onClick={() => handleType(val)}
-                                    className={`text-xs py-1.5 px-2 rounded-lg border font-medium transition-all ${type === val ? "bg-sky-500 text-white border-sky-500 shadow-sm" : "bg-slate-50 text-slate-600 border-slate-200 hover:border-sky-300 hover:bg-sky-50"}`}
+                                    className={`text-xs py-1.5 px-2 rounded-lg border font-medium transition-all h-auto hover:bg-sky-50 whitespace-normal min-w-0 ${type === val ? "bg-sky-500 text-white border-sky-500 shadow-sm hover:bg-sky-600 hover:text-white" : "bg-slate-50 text-slate-600 border-slate-200 hover:border-sky-300 hover:bg-sky-50 hover:text-slate-800"}`}
                                 >
                                     {label}
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     </div>
@@ -252,10 +254,15 @@ function FishConfigPopup({
                                 ["left", "← 左"],
                                 ["right", "右 →"],
                             ] as const).map(([value, label]) => (
-                                <button key={value} onClick={() => handleDirection(value)}
-                                    className={`text-xs py-1.5 px-2 rounded-lg border font-medium ${direction === value ? "bg-sky-500 text-white border-sky-500" : "bg-slate-50 text-slate-600 border-slate-200"}`}>
+                                <Button
+                                    key={value}
+                                    type="button"
+                                    variant="ghost"
+                                    onClick={() => handleDirection(value)}
+                                    className={`text-xs py-1.5 px-2 rounded-lg border font-medium h-auto hover:bg-sky-50 whitespace-normal min-w-0 ${direction === value ? "bg-sky-500 text-white border-sky-500 hover:bg-sky-600 hover:text-white" : "bg-slate-50 text-slate-600 border-slate-200 hover:text-slate-800"}`}
+                                >
                                     {label}
-                                </button>
+                                </Button>
                             ))}
                         </div>
                     </div>

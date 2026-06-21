@@ -29,13 +29,13 @@ export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, comp
     return (
         <div className="bg-white p-4 rounded-xl shadow-sm border border-slate-200">
             <div className="mb-3 flex items-center justify-between gap-3">
-                <button type="button" className="flex items-center gap-2 text-left" onClick={() => setCollapsed(value => !value)}>
-                    <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${collapsed ? "-rotate-90" : ""}`} />
-                    <div>
-                        <h3 className="text-sm font-bold text-slate-700">レイヤー</h3>
-                        <div className="text-[10px] font-medium text-slate-400">{visibleCount}/{capacity}匹 表示中</div>
+                <Button variant="ghost" className="flex items-center gap-2 text-left p-0 h-auto hover:bg-transparent text-slate-800 whitespace-normal min-w-0" onClick={() => setCollapsed(value => !value)}>
+                    <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform flex-shrink-0 ${collapsed ? "-rotate-90" : ""}`} />
+                    <div className="min-w-0">
+                        <h3 className="text-sm font-bold text-slate-700 break-words">レイヤー</h3>
+                        <div className="text-[10px] font-medium text-slate-400 break-words">{visibleCount}/{capacity}匹 表示中</div>
                     </div>
-                </button>
+                </Button>
                 {onUpdate && <div className="flex items-center gap-2">
                     <Button variant="outline" size="sm" onClick={autoTunePerspective}><Wand2 className="mr-1 h-4 w-4" />遠近感を自動設定</Button>
                     <Button variant="outline" size="sm" onClick={() => onUpdate([...configs, { id: configs.length, maxCount: 20, scale: 0.5, opacity: 0.7, speedFactor: 0.5, zIndex: Math.max(0, 100 - configs.length * 30) }])}><Plus className="mr-1 h-4 w-4" />追加</Button>
@@ -71,7 +71,7 @@ export function LayerOccupancySection({ activeFish, configs = LAYER_CONFIG, comp
                                 <div className="w-44"><div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500"><span>大きさ</span><span>×{conf.scale.toFixed(2)}</span></div><Slider value={[conf.scale]} min={0.1} max={5} step={0.05} onValueChange={value => onUpdate(configs.map((item, i) => i === idx ? { ...item, scale: value[0] } : item))} /></div>
                                 <div className="w-44"><div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500"><span>明るさ</span><span>{Math.round(conf.opacity * 100)}%</span></div><Slider value={[conf.opacity]} min={0.18} max={1} step={0.01} onValueChange={value => onUpdate(configs.map((item, i) => i === idx ? { ...item, opacity: value[0] } : item))} /></div>
                                 <div className="w-44"><div className="mb-1 flex justify-between text-[10px] font-bold text-slate-500"><span>速度</span><span>×{conf.speedFactor.toFixed(2)}</span></div><Slider value={[conf.speedFactor]} min={0.05} max={3} step={0.05} onValueChange={value => onUpdate(configs.map((item, i) => i === idx ? { ...item, speedFactor: value[0] } : item))} /></div>
-                                {configs.length > 1 && <button className="text-[10px] font-bold text-rose-500" onClick={() => onUpdate(configs.filter((_, i) => i !== idx))}>削除</button>}
+                                {configs.length > 1 && <Button variant="ghost" className="text-[10px] font-bold text-rose-500 hover:text-rose-600 p-0 h-auto hover:bg-transparent" onClick={() => onUpdate(configs.filter((_, i) => i !== idx))}>削除</Button>}
                             </>}
                         </div>
                     );
