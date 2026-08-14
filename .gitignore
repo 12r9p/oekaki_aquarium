@@ -10,3 +10,5 @@ scanner/input/
 scanner/output/
 packages/server/public/images/
 data/fish
+.claude/
+.codebase-memory/

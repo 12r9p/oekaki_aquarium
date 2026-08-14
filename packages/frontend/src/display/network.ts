@@ -1,18 +1,15 @@
 import { createWsClient } from "../shared/useWs";
 import { STATE, DISPLAY_ID, updateStateVP, updateWorldSize, updateLayers } from "./state";
-import { 
-  applyViewport, 
-  drawTestPattern, 
-  renderSceneObjects, 
-  currentPattern, 
-  spawnFish, 
-  destroyFish, 
+import {
+  spawnFish,
+  destroyFish,
   updateFishTexture,
   updateFishTargets,
-  updateBackground,
-  setDisplayNumber,
   type FishEntry
-} from "./renderer";
+} from "./renderer/fish-renderer";
+import { renderSceneObjects, updateBackground } from "./renderer/scene-renderer";
+import { drawTestPattern, currentPattern, setDisplayNumber } from "./renderer/test-pattern-overlay";
+import { applyViewport } from "./renderer/viewport";
 import type { WsServerMessage, UdpPacket } from "@aquarium/shared";
 import { Application } from "pixi.js";
 

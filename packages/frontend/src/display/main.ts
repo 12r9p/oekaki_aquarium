@@ -2,7 +2,9 @@ import "../styles/global.css";
 import { Application } from "pixi.js";
 import { DISPLAY_ID, STATE, updateStateVP, viewportForCurrentWindow } from "./state";
 import { setupNetwork, ws } from "./network";
-import { applyViewport, setupRenderLoop, currentPattern, drawTestPattern, initRenderer, type FishEntry } from "./renderer";
+import { setupRenderLoop, initFishLayers, type FishEntry } from "./renderer/fish-renderer";
+import { currentPattern, drawTestPattern } from "./renderer/test-pattern-overlay";
+import { applyViewport } from "./renderer/viewport";
 import { setupInteractions } from "./interaction";
 
 // ============================================================
@@ -60,7 +62,7 @@ async function main(): Promise<void> {
   }
 
   // 2. モジュールのセットアップ
-  initRenderer(app);
+  initFishLayers(app);
   const fishMap = new Map<string, FishEntry>();
   
   // マウス/タッチ インタラクション (タップ餌やり、ドラッグ移動)
