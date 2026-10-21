@@ -5,6 +5,8 @@ import type { WsClientMessage } from "@aquarium/shared";
 import type { PendingFish } from "@aquarium/shared";
 import { Editor } from "../controller/Editor";
 import { api } from "../shared/api";
+import { MyFishAquarium } from "./MyFishAquarium";
+import "./MyFishAquarium.css";
 import "../styles/global.css";
 import { Button } from "@/components/ui/button";
 import { Camera, Fish, Wifi, WifiOff } from "lucide-react";
@@ -18,7 +20,7 @@ function App(): React.ReactElement {
     const [connected, setConnected] = React.useState(false);
     const [feedCount, setFeedCount] = React.useState(0);
     const [ripple, setRipple] = React.useState<{ x: number; y: number; id: number } | null>(null);
-    const [mode, setMode] = React.useState<"feed" | "create">("feed");
+    const [mode, setMode] = React.useState<"feed" | "create" | "my-fish">(() => new URLSearchParams(location.search).has("fish") ? "my-fish" : "feed");
     const [editingFish, setEditingFish] = React.useState<PendingFish | null>(null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
@@ -63,6 +65,8 @@ function App(): React.ReactElement {
         return <Editor fish={editingFish} onReleased={() => { setEditingFish(null); setMode("feed"); }}
             onCancel={() => setEditingFish(null)} />;
     }
+
+    if (mode === "my-fish") return <MyFishAquarium onBack={() => setMode("feed")} />;
 
     if (mode === "create") {
         return (
@@ -120,10 +124,10 @@ function App(): React.ReactElement {
                 {feedCount > 0 && (
                     <p className="mt-3 text-sm font-bold text-amber-200">エサ投入 {feedCount}回</p>
                 )}
-                <Button className="pointer-events-auto mt-8"
-                    onClick={e => { e.stopPropagation(); setMode("create"); }}>
-                    自分の魚を放流する
-                </Button>
+                <div className="pointer-events-auto mt-8 flex flex-col gap-2">
+                    <Button onClick={e => { e.stopPropagation(); setMode("create"); }}>自分の魚を放流する</Button>
+                    <Button variant="outline" onClick={e => { e.stopPropagation(); setMode("my-fish"); }}>自分の魚を見る</Button>
+                </div>
             </div>
         </div>
     );
