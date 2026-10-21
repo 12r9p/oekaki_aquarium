@@ -19,17 +19,28 @@ const FORWARD_USER_AGENT = "OpenAI File Downloader, XaiImageApiFetch/1.0";
 const ACCESS_ASSERTION_HEADER = "Cf-Access-Jwt-Assertion";
 const INTERNAL_ACCESS_IDENTITY_HEADER = "X-Aquarium-Access-Identity";
 const COMMAND_ID_HEADER = "X-Aquarium-Command-Id";
+const AQUARIUM_REVISION_HEADER = "X-Aquarium-Revision";
 const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
 const IMMUTABLE_IMAGE = /^\/images\/(?:artwork_[\w-]+\.png|fish_\d+\.png|scene\/[\w-]+\.[a-z0-9]+)$/i;
 const LIBRARY_IMAGE = /^\/lib-images\/[\w.-]+\.png$/i;
 const IMMUTABLE_TTL_SECONDS = 60 * 60 * 24 * 30;
 const COMMAND_REQUEST_BODY_LIMIT = 32 * 1024 * 1024;
+const PUBLIC_SCAN_BODY_LIMIT = 12 * 1024 * 1024;
+const PUBLIC_RELEASE_BODY_LIMIT = 64 * 1024;
 const COMMAND_REPLAY_BODY_LIMIT = 16 * 1024;
 const AQUARIUM_SNAPSHOT_LIMIT = 8 * 1024 * 1024;
 const COMMAND_ID_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const APP_ROUTES: Record<string, string> = { "/": "/index.html", "/display": "/display.html", "/controller": "/controller.html", "/guest": "/guest.html", "/manage": "/manage.html" };
 const edgeCache = (caches as CacheStorage & { default: Cache }).default;
+
+type PublicApiRateLimitRoute = "scan" | "release" | "state";
+
+const PUBLIC_API_RATE_LIMITS: Record<PublicApiRateLimitRoute, { limit: number; windowMs: number }> = {
+  scan: { limit: 30, windowMs: 10 * 60 * 1000 },
+  release: { limit: 60, windowMs: 10 * 60 * 1000 },
+  state: { limit: 240, windowMs: 60 * 1000 },
+};
 
 export default {
   async fetch(request: Request, env: Env, context: WorkerContext): Promise<Response> {
@@ -87,11 +98,17 @@ export default {
 async function routeProtectedApiOrWebSocket(request: Request, env: Env, pathname: string): Promise<Response> {
   const isWebSocket = pathname === "/ws";
   const isPublicApi = isPublicVisitorApi(request.method, pathname);
+  const isDisplayViewportUpdate = request.method.toUpperCase() === "PUT"
+    && /^\/api\/clients\/display:[A-Za-z0-9_-]{1,128}\/viewport$/.test(pathname);
   let identity: AccessIdentity | null;
 
   try {
     if (isWebSocket || isPublicApi) {
       identity = await optionalIdentity(request, env);
+    } else if (isDisplayViewportUpdate) {
+      const displayIdentity = await requireIdentity(request, env, ["display", "admin"]);
+      if (displayIdentity instanceof Response) return displayIdentity;
+      identity = displayIdentity;
     } else {
       const protectedIdentity = await requireIdentity(request, env, ["manage", "admin"]);
       if (protectedIdentity instanceof Response) return protectedIdentity;
@@ -108,8 +125,29 @@ async function routeProtectedApiOrWebSocket(request: Request, env: Env, pathname
 }
 
 function isPublicVisitorApi(method: string, pathname: string): boolean {
-  return (method === "POST" && (pathname === "/api/scan" || pathname === "/api/release"))
-    || (method === "GET" && pathname === "/api/state");
+  return getPublicApiRateLimitRoute(method, pathname) !== null;
+}
+
+function getPublicApiRateLimitRoute(method: string, pathname: string): PublicApiRateLimitRoute | null {
+  if (method.toUpperCase() === "POST" && pathname === "/api/scan") return "scan";
+  if (method.toUpperCase() === "POST" && pathname === "/api/release") return "release";
+  if (method.toUpperCase() === "GET" && pathname === "/api/state") return "state";
+  return null;
+}
+
+async function hashRateLimitIp(ipHeader: string | null): Promise<string> {
+  const candidate = ipHeader?.trim().toLowerCase() ?? "";
+  const ip = candidate.length > 0 && candidate.length <= 128 ? candidate : "unknown";
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(ip));
+  return Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
+function rateLimitedResponse(retryAfterSeconds: number): Response {
+  const retryAfter = String(Math.max(1, Math.ceil(retryAfterSeconds)));
+  return Response.json(
+    { error: "rate_limit_exceeded", retryAfterSeconds: Number(retryAfter) },
+    { status: 429, headers: { "Cache-Control": "no-store", "Retry-After": retryAfter } },
+  );
 }
 
 function requiredPageRoles(pathname: string): string[] | null {
@@ -536,6 +574,27 @@ export class AquariumContainer extends DurableObject<Env> {
   private commandQueue: Promise<void> = Promise.resolve();
 
   async fetch(request: Request): Promise<Response> {
+    const publicRateLimitRoute = getPublicApiRateLimitRoute(
+      request.method,
+      decodePathForAuthorization(new URL(request.url).pathname),
+    );
+    if (publicRateLimitRoute) {
+      const policy = PUBLIC_API_RATE_LIMITS[publicRateLimitRoute];
+      let ipHash: string;
+      try {
+        ipHash = await hashRateLimitIp(request.headers.get("CF-Connecting-IP"));
+      } catch {
+        return Response.json({ error: "rate_limit_unavailable" }, { status: 503, headers: { "Cache-Control": "no-store", "Retry-After": "2" } });
+      }
+      const decision = this.getCommandStore().consumePublicRateLimit(
+        publicRateLimitRoute,
+        ipHash,
+        policy.limit,
+        policy.windowMs,
+      );
+      if (!decision.allowed) return rateLimitedResponse(decision.retryAfterSeconds);
+    }
+
     if (isUnsafeApiCommand(request)) {
       const command = this.serializeCommand(() => this.handleApiCommand(request));
       this.commandQueue = command.then(() => undefined, () => undefined);
@@ -561,7 +620,14 @@ export class AquariumContainer extends DurableObject<Env> {
 
     let body: Uint8Array;
     try {
-      body = await readRequestBody(request, COMMAND_REQUEST_BODY_LIMIT);
+      const pathname = decodePathForAuthorization(new URL(request.url).pathname);
+      const publicRoute = getPublicApiRateLimitRoute(request.method, pathname);
+      const bodyLimit = publicRoute === "scan"
+        ? PUBLIC_SCAN_BODY_LIMIT
+        : publicRoute === "release"
+          ? PUBLIC_RELEASE_BODY_LIMIT
+          : COMMAND_REQUEST_BODY_LIMIT;
+      body = await readRequestBody(request, bodyLimit);
     } catch (error) {
       if (error instanceof RequestBodyTooLargeError) {
         return commandErrorResponse("request_body_too_large", 413, commandId, this.getCommandStore().getRevision());
@@ -595,7 +661,7 @@ export class AquariumContainer extends DurableObject<Env> {
     const upstreamRequest = new Request(request, { headers, body: body.byteLength > 0 ? forwardedBody : null });
     let response: Response;
     try {
-      response = await this.forwardToContainer(upstreamRequest, commandId);
+      response = await this.forwardToContainer(upstreamRequest, commandId, commandStore.getRevision() + 1);
     } catch {
       // The upstream may have applied the command before the connection failed.
       // Keep the pending claim so a retry cannot accidentally execute it twice.
@@ -664,7 +730,11 @@ export class AquariumContainer extends DurableObject<Env> {
     return this.commandStore;
   }
 
-  private async forwardToContainer(request: Request, restoreCommandId?: string): Promise<Response> {
+  private async forwardToContainer(
+    request: Request,
+    restoreCommandId?: string,
+    upstreamRevision = this.getCommandStore().getRevision(),
+  ): Promise<Response> {
     const container = this.ctx.container;
     if (!container) return new Response("Container binding is unavailable", { status: 503 });
 
@@ -678,8 +748,14 @@ export class AquariumContainer extends DurableObject<Env> {
     const upstreamUrl = new URL(request.url);
     upstreamUrl.protocol = "http:";
     upstreamUrl.host = "container";
-    const forwarded = new Request(upstreamUrl, request);
+    const baseRequest = new Request(upstreamUrl, request);
+    const headers = new Headers(baseRequest.headers);
+    // Never trust a client-provided revision. The DO is the sole revision authority.
+    headers.set(AQUARIUM_REVISION_HEADER, String(upstreamRevision));
+    const forwarded = new Request(baseRequest, { headers });
     forwarded.headers.delete("host");
+    // The raw network address is needed only to select the SQLite rate-limit bucket.
+    forwarded.headers.delete("CF-Connecting-IP");
     forwarded.headers.set("User-Agent", FORWARD_USER_AGENT);
     try {
       return await container.getTcpPort(3000).fetch(forwarded);
@@ -758,11 +834,25 @@ export class AquariumContainer extends DurableObject<Env> {
   private async restoreStoredSnapshot(restoreCommandId?: string): Promise<void> {
     const commandStore = this.getCommandStore();
     if (commandStore.isStateUncertain(restoreCommandId)) {
-      console.error("[AquariumContainer] Skipping an older snapshot because a command result is uncertain; R2 state remains authoritative until a new checkpoint is committed.");
-      return;
+      // Do not let the Container's legacy R2 boot restore silently become the authority.
+      // Keep the runtime unavailable until the ambiguous mutation is reconciled.
+      throw new Error("Aquarium state is uncertain; refusing to serve the Container's R2 fallback");
     }
     const snapshot = commandStore.getSnapshot();
-    if (!snapshot) return;
+    if (!snapshot) {
+      if (commandStore.isInitialized()) {
+        throw new Error("Aquarium DO is marked initialized but has no canonical snapshot");
+      }
+      // One-time migration: the freshly started Container has loaded the legacy R2 state.
+      // Persist that complete state in SQLite before allowing network traffic to continue.
+      const initialSnapshotJson = await this.readContainerSnapshot();
+      if (commandStore.seedSnapshot(initialSnapshotJson)) {
+        console.info("[AquariumContainer] Seeded the authoritative SQLite aquarium snapshot from the legacy R2 restore.");
+        return;
+      }
+      // Another awaited initialization may have populated SQLite first; restore that winner.
+      return this.restoreStoredSnapshot(restoreCommandId);
+    }
     const revision = commandStore.getRevision();
     if (snapshot.revision !== revision) {
       throw new Error(`Stored aquarium snapshot does not match the committed revision (${snapshot.revision} != ${revision})`);
