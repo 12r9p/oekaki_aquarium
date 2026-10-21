@@ -24,6 +24,182 @@ function normalizeFishType(type: unknown): FishType {
   return "school";
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function isSnapshotAssetReference(value: unknown): value is string {
+  return typeof value === "string"
+    && value.length > 0
+    && value.length <= 4096
+    && !/^data:/i.test(value)
+    && !/^blob:/i.test(value);
+}
+
+function parseSnapshotFishType(value: unknown): FishType | undefined {
+  if (value === "swimmer" || value === "looper") return normalizeFishType(value);
+  if (value === "tuna" || value === "school" || value === "squid" || value === "jellyfish" || value === "shark" || value === "anchor" || value === "custom") {
+    return value;
+  }
+  return undefined;
+}
+
+function isVector2(value: unknown): value is Vector2 {
+  return isRecord(value) && isFiniteNumber(value.x) && isFiniteNumber(value.y);
+}
+
+function parseSnapshotCustomMotion(value: unknown): { name: string; code: string } | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value) || typeof value.name !== "string" || typeof value.code !== "string") return null;
+  return { name: value.name.slice(0, 80), code: value.code.slice(0, 20_000) };
+}
+
+function parseSnapshotFishMeta(value: unknown): FishMeta | undefined | null {
+  if (value === undefined) return undefined;
+  if (!isRecord(value)) return null;
+  const type = parseSnapshotFishType(value.type);
+  if (
+    !isFiniteNumber(value.version)
+    || typeof value.author !== "string"
+    || !type
+    || !isFiniteNumber(value.speed)
+    || !isFiniteNumber(value.scale)
+    || !(value.pinnedLayerId === null || (isFiniteNumber(value.pinnedLayerId) && Number.isInteger(value.pinnedLayerId)))
+    || !Array.isArray(value.tags)
+    || value.tags.length > 1000
+    || !value.tags.every((tag) => typeof tag === "string")
+  ) return null;
+
+  const optionalStringFields = ["senderId"] as const;
+  if (optionalStringFields.some((key) => value[key] !== undefined && typeof value[key] !== "string")) return null;
+  const optionalNumberFields = ["createdAt", "releasedAt", "archivedAt", "logoScale", "logoX", "logoY"] as const;
+  if (optionalNumberFields.some((key) => value[key] !== undefined && !isFiniteNumber(value[key]))) return null;
+  if (value.isArchived !== undefined && typeof value.isArchived !== "boolean") return null;
+  if (value.direction !== undefined && value.direction !== "auto" && value.direction !== "left" && value.direction !== "right") return null;
+  if (value.flipX !== undefined && typeof value.flipX !== "boolean") return null;
+  if (value.opacity !== undefined && (!isFiniteNumber(value.opacity) || value.opacity < 0 || value.opacity > 1)) return null;
+  const customMotion = parseSnapshotCustomMotion(value.customMotion);
+  if (customMotion === null) return null;
+
+  return {
+    version: value.version,
+    author: value.author,
+    type,
+    speed: value.speed,
+    scale: value.scale,
+    pinnedLayerId: value.pinnedLayerId,
+    tags: [...value.tags] as string[],
+    ...(value.isArchived === undefined ? {} : { isArchived: value.isArchived }),
+    ...(value.direction === undefined ? {} : { direction: value.direction }),
+    ...(value.flipX === undefined ? {} : { flipX: value.flipX }),
+    ...(value.opacity === undefined ? {} : { opacity: value.opacity }),
+    ...(customMotion === undefined ? {} : { customMotion }),
+    ...(value.createdAt === undefined ? {} : { createdAt: value.createdAt as number }),
+    ...(value.releasedAt === undefined ? {} : { releasedAt: value.releasedAt as number }),
+    ...(value.archivedAt === undefined ? {} : { archivedAt: value.archivedAt as number }),
+    ...(value.senderId === undefined ? {} : { senderId: value.senderId as string }),
+    ...(value.logoScale === undefined ? {} : { logoScale: value.logoScale as number }),
+    ...(value.logoX === undefined ? {} : { logoX: value.logoX as number }),
+    ...(value.logoY === undefined ? {} : { logoY: value.logoY as number }),
+  };
+}
+
+function parseSnapshotActiveFish(value: unknown): ActiveFish | undefined {
+  if (!isRecord(value)) return undefined;
+  const type = parseSnapshotFishType(value.type);
+  const fishMeta = parseSnapshotFishMeta(value.fishMeta);
+  const customMotion = parseSnapshotCustomMotion(value.customMotion);
+  if (fishMeta === null || customMotion === null) return undefined;
+  const userParams = value.userParams;
+  const physics = value.physics;
+  if (
+    typeof value.id !== "string" || value.id.length === 0 || value.id.length > 200
+    || !isSnapshotAssetReference(value.textureUrl)
+    || !type
+    || !isRecord(userParams)
+    || !isFiniteNumber(userParams.scale) || userParams.scale < 0
+    || !isFiniteNumber(userParams.speed) || userParams.speed < 0
+    || !isFiniteNumber(userParams.rotationOffset)
+    || (userParams.direction !== undefined && userParams.direction !== "auto" && userParams.direction !== "left" && userParams.direction !== "right")
+    || (userParams.flipX !== undefined && typeof userParams.flipX !== "boolean")
+    || (userParams.opacity !== undefined && (!isFiniteNumber(userParams.opacity) || userParams.opacity < 0 || userParams.opacity > 1))
+    || !isRecord(physics)
+    || !isVector2(physics.pos) || !isVector2(physics.vel)
+    || !isFiniteNumber(physics.speedMultiplier)
+    || !isFiniteNumber(value.timestamp)
+    || !isFiniteNumber(value.createdAt)
+    || !isFiniteNumber(value.releasedAt)
+    || !Number.isInteger(value.layerIndex) || !isFiniteNumber(value.layerIndex) || value.layerIndex < 0
+    || !isFiniteNumber(value.targetScale) || value.targetScale < 0
+    || !isFiniteNumber(value.targetOpacity) || value.targetOpacity < 0 || value.targetOpacity > 1
+    || (value.author !== undefined && typeof value.author !== "string")
+    || (value.archivedAt !== undefined && !isFiniteNumber(value.archivedAt))
+    || (value.isPinned !== undefined && typeof value.isPinned !== "boolean")
+    || (value.pinnedLayerId !== undefined && (!isFiniteNumber(value.pinnedLayerId) || !Number.isInteger(value.pinnedLayerId)))
+    || (value.isArchived !== undefined && typeof value.isArchived !== "boolean")
+    || (value.isAutoHidden !== undefined && typeof value.isAutoHidden !== "boolean")
+    || (value.motionPath !== undefined && (!Array.isArray(value.motionPath) || value.motionPath.length > 10_000 || !value.motionPath.every(isVector2)))
+  ) return undefined;
+
+  return {
+    id: value.id,
+    textureUrl: value.textureUrl,
+    type,
+    ...(value.author === undefined ? {} : { author: value.author as string }),
+    ...(fishMeta === undefined ? {} : { fishMeta }),
+    userParams: {
+      scale: userParams.scale,
+      speed: userParams.speed,
+      rotationOffset: userParams.rotationOffset,
+      ...(userParams.direction === undefined ? {} : { direction: userParams.direction }),
+      ...(userParams.flipX === undefined ? {} : { flipX: userParams.flipX }),
+      ...(userParams.opacity === undefined ? {} : { opacity: userParams.opacity }),
+    },
+    ...(customMotion === undefined ? {} : { customMotion }),
+    ...(value.motionPath === undefined ? {} : { motionPath: value.motionPath.map((point) => ({ x: point.x, y: point.y })) }),
+    ...(value.isPinned === undefined ? {} : { isPinned: value.isPinned }),
+    ...(value.pinnedLayerId === undefined ? {} : { pinnedLayerId: value.pinnedLayerId }),
+    timestamp: value.timestamp,
+    createdAt: value.createdAt,
+    releasedAt: value.releasedAt,
+    ...(value.archivedAt === undefined ? {} : { archivedAt: value.archivedAt }),
+    physics: {
+      pos: { x: physics.pos.x, y: physics.pos.y },
+      vel: { x: physics.vel.x, y: physics.vel.y },
+      speedMultiplier: physics.speedMultiplier,
+    },
+    layerIndex: value.layerIndex,
+    targetScale: value.targetScale,
+    targetOpacity: value.targetOpacity,
+    ...(value.isArchived === undefined ? {} : { isArchived: value.isArchived }),
+    ...(value.isAutoHidden === undefined ? {} : { isAutoHidden: value.isAutoHidden }),
+  };
+}
+
+function parseSnapshotPendingFish(value: unknown): PendingFish | undefined {
+  if (!isRecord(value)) return undefined;
+  const fishMeta = parseSnapshotFishMeta(value.fishMeta);
+  if (fishMeta === null) return undefined;
+  if (
+    typeof value.id !== "string" || value.id.length === 0 || value.id.length > 200
+    || !isSnapshotAssetReference(value.imageUrl)
+    || !isFiniteNumber(value.timestamp)
+    || (value.lockedBy !== undefined && typeof value.lockedBy !== "string")
+  ) return undefined;
+
+  return {
+    id: value.id,
+    imageUrl: value.imageUrl,
+    timestamp: value.timestamp,
+    ...(value.lockedBy === undefined ? {} : { lockedBy: value.lockedBy as string }),
+    ...(fishMeta === undefined ? {} : { fishMeta }),
+  };
+}
+
 /** /data/fish/ ディレクトリ（プロジェクトルート基準） */
 export const DATA_FISH_DIR = join(import.meta.dir, "..", "..", "..", "data", "fish");
 /** public/images ディレクトリ */
@@ -164,6 +340,132 @@ export function addToPending(imageUrl: string, fishMeta?: FishMeta): PendingFish
 /** 待機リスト全件取得 */
 export function getPendingQueue(): PendingFish[] {
   return [...pendingQueue];
+}
+
+/** Return only validated JSON-safe fish state, preserving existing asset URLs. */
+export function getFishStateSnapshot(): { activeFish: ActiveFish[]; pendingFish: PendingFish[] } {
+  const prepared = prepareFishStateSnapshot({
+    activeFish: getAllActiveFish(),
+    pendingFish: getPendingQueue(),
+  });
+  if (prepared.rejectedActiveFish > 0 || prepared.rejectedPendingFish > 0) {
+    throw new TypeError("Live fish state contains values that cannot be persisted in a snapshot");
+  }
+  return { activeFish: prepared.activeFish, pendingFish: prepared.pendingFish };
+}
+
+export interface RestoreFishStateResult {
+  restoredActiveFish: number;
+  restoredPendingFish: number;
+  rejectedActiveFish: number;
+  rejectedPendingFish: number;
+}
+
+export interface RestorePendingFishResult {
+  preservedActiveFish: number;
+  restoredPendingFish: number;
+  rejectedActiveFish: number;
+  rejectedPendingFish: number;
+}
+
+interface PreparedFishState {
+  activeFish: ActiveFish[];
+  pendingFish: PendingFish[];
+  rejectedActiveFish: number;
+  rejectedPendingFish: number;
+}
+
+function prepareFishStateSnapshot(snapshot: unknown): PreparedFishState {
+  if (!isRecord(snapshot) || !Array.isArray(snapshot.activeFish) || !Array.isArray(snapshot.pendingFish)) {
+    throw new TypeError("Invalid aquarium fish snapshot: activeFish and pendingFish arrays are required");
+  }
+  if (snapshot.activeFish.length > 50_000 || snapshot.pendingFish.length > 50_000) {
+    throw new TypeError("Invalid aquarium fish snapshot: too many fish entries");
+  }
+
+  const activeFish: ActiveFish[] = [];
+  const pendingFish: PendingFish[] = [];
+  const seenIds = new Set<string>();
+  let rejectedActiveFish = 0;
+  let rejectedPendingFish = 0;
+
+  for (const item of snapshot.activeFish) {
+    const fish = parseSnapshotActiveFish(item);
+    if (!fish || seenIds.has(fish.id)) {
+      rejectedActiveFish++;
+      continue;
+    }
+    seenIds.add(fish.id);
+    activeFish.push(fish);
+  }
+
+  for (const item of snapshot.pendingFish) {
+    const fish = parseSnapshotPendingFish(item);
+    if (!fish || seenIds.has(fish.id)) {
+      rejectedPendingFish++;
+      continue;
+    }
+    seenIds.add(fish.id);
+    pendingFish.push(fish);
+  }
+
+  return { activeFish, pendingFish, rejectedActiveFish, rejectedPendingFish };
+}
+
+/** Validate and count snapshot fish entries without changing live fish or queue state. */
+export function validateFishStateSnapshot(snapshot: unknown): RestoreFishStateResult {
+  const prepared = prepareFishStateSnapshot(snapshot);
+  return {
+    restoredActiveFish: prepared.activeFish.length,
+    restoredPendingFish: prepared.pendingFish.length,
+    rejectedActiveFish: prepared.rejectedActiveFish,
+    rejectedPendingFish: prepared.rejectedPendingFish,
+  };
+}
+
+/** Restore the transient queue while keeping R2-loaded active fish and their latest positions intact. */
+export function restorePendingFishFromSnapshot(snapshot: unknown): RestorePendingFishResult {
+  const prepared = preparePendingFishSnapshot(snapshot);
+
+  pendingQueue.length = 0;
+  for (const fish of prepared.pendingFish) {
+    // Editor locks belong to a running browser session, not to durable queue state.
+    delete fish.lockedBy;
+    pendingQueue.push(fish);
+  }
+
+  return {
+    preservedActiveFish: activePool.size,
+    restoredPendingFish: prepared.pendingFish.length,
+    rejectedActiveFish: 0,
+    rejectedPendingFish: prepared.rejectedPendingFish,
+  };
+}
+
+/** Validate only the pending queue that the recovery endpoint actually restores. */
+export function validatePendingFishSnapshot(snapshot: unknown): { rejectedPendingFish: number } | null {
+  if (!isRecord(snapshot) || !Array.isArray(snapshot.pendingFish) || snapshot.pendingFish.length > 50_000) return null;
+  return { rejectedPendingFish: preparePendingFishSnapshot(snapshot).rejectedPendingFish };
+}
+
+function preparePendingFishSnapshot(snapshot: unknown): { pendingFish: PendingFish[]; rejectedPendingFish: number } {
+  if (!isRecord(snapshot) || !Array.isArray(snapshot.pendingFish) || snapshot.pendingFish.length > 50_000) {
+    throw new TypeError("Invalid aquarium pending-fish snapshot");
+  }
+
+  const pendingFish: PendingFish[] = [];
+  const seenIds = new Set<string>();
+  let rejectedPendingFish = 0;
+  for (const item of snapshot.pendingFish) {
+    const fish = parseSnapshotPendingFish(item);
+    if (!fish || seenIds.has(fish.id)) {
+      rejectedPendingFish++;
+      continue;
+    }
+    seenIds.add(fish.id);
+    pendingFish.push(fish);
+  }
+  return { pendingFish, rejectedPendingFish };
 }
 
 /** Update the image and embedded metadata for a fish that is still being edited. */

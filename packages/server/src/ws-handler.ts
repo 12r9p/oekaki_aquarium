@@ -27,6 +27,24 @@ let currentBgUrl = restoredSettings.bgUrl ?? DEFAULT_BACKGROUND_URL;
 /** 現在の背景画像URLを取得する */
 export function getCurrentBgUrl(): string { return currentBgUrl; }
 
+/** Restore or change the aquarium background and synchronize connected clients. */
+export function setCurrentBgUrl(url: string): void {
+  currentBgUrl = url;
+  persistServerSettings();
+  const w = getWorld();
+  broadcastToAll({
+    event: "update_world_config",
+    bgUrl: currentBgUrl,
+    forbiddenZones: w.forbiddenZones,
+    spawnPoints: w.spawnPoints,
+    layers: w.layers,
+    horizontalBoundaryMode: w.horizontalBoundaryMode,
+    fishSpeedMultiplier: w.fishSpeedMultiplier,
+    fishScaleMultiplier: w.fishScaleMultiplier,
+    motionSettings: w.motionSettings,
+  });
+}
+
 // ============================================================
 // Store / State
 // ============================================================
@@ -34,6 +52,9 @@ export function getCurrentBgUrl(): string { return currentBgUrl; }
 export interface ClientData {
   uuid: string;
   clientType: string;
+  accessAuthenticated: boolean;
+  accessRoles: string[];
+  accessExpiresAt: number | null;
   lastHeartbeat: number;
   screenW: number;
   screenH: number;
@@ -43,6 +64,61 @@ export interface ClientData {
 }
 
 const sockets = new Set<ServerWebSocket<ClientData>>();
+
+function isLocalUntrustedFallback(ws: ServerWebSocket<ClientData>): boolean {
+  return !ws.data.accessAuthenticated && process.env.AQUARIUM_ALLOW_UNTRUSTED_WS === "true";
+}
+
+function hasValidAccessIdentity(ws: ServerWebSocket<ClientData>): boolean {
+  return ws.data.accessAuthenticated &&
+    ws.data.accessExpiresAt !== null &&
+    ws.data.accessExpiresAt > Date.now() / 1000;
+}
+
+function hasAccessRole(ws: ServerWebSocket<ClientData>, ...roles: string[]): boolean {
+  return hasValidAccessIdentity(ws) && roles.some((role) => ws.data.accessRoles.includes(role));
+}
+
+function hasManageAccess(ws: ServerWebSocket<ClientData>): boolean {
+  if (ws.data.clientType === "unknown") return false;
+  return hasAccessRole(ws, "manage", "admin") ||
+    (isLocalUntrustedFallback(ws) && ws.data.clientType === "manage");
+}
+
+function hasDisplayAccess(ws: ServerWebSocket<ClientData>): boolean {
+  return hasAccessRole(ws, "display", "admin") ||
+    (isLocalUntrustedFallback(ws) && ws.data.clientType === "display");
+}
+
+function classifyClientType(uuid: string): string {
+  const prefix = uuid.split(":")[0] ?? "";
+  if (prefix.startsWith("display")) return "display";
+  if (prefix.startsWith("controller")) return "controller";
+  if (prefix.startsWith("guest")) return "guest";
+  if (prefix.startsWith("manage")) return "manage";
+  return "unknown";
+}
+
+function mayRegisterClient(ws: ServerWebSocket<ClientData>, clientType: string): boolean {
+  // 来場者・放流画面は公開クライアント。UUIDは権限には使わない。
+  if (clientType === "controller" || clientType === "guest") return true;
+
+  if (ws.data.accessAuthenticated) {
+    if (!hasValidAccessIdentity(ws)) return false;
+    if (clientType === "display") return hasAccessRole(ws, "display", "admin");
+    if (clientType === "manage") return hasAccessRole(ws, "manage", "admin");
+    return false;
+  }
+
+  // ローカル開発の明示 opt-in のみ、従来のUUID prefix判定を許可する。
+  return process.env.AQUARIUM_ALLOW_UNTRUSTED_WS === "true" &&
+    (clientType === "display" || clientType === "manage");
+}
+
+function rejectSocket(ws: ServerWebSocket<ClientData>, reason: string): void {
+  console.warn(`[WS] Rejected ${ws.data.uuid}: ${reason}`);
+  ws.close(1008, reason);
+}
 
 /**
  * displayIDごとにViewportを永続保存するMap。
@@ -129,6 +205,7 @@ function broadcastSceneUpdate(): void {
 export const wsHandlers = {
   open(ws: ServerWebSocket<ClientData>): void {
     ws.data = {
+      ...ws.data,
       uuid: uuidv4(),
       clientType: "unknown",
       lastHeartbeat: Date.now(),
@@ -181,6 +258,11 @@ export const wsHandlers = {
 };
 
 function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): void {
+  if (ws.data.accessAuthenticated && !hasValidAccessIdentity(ws)) {
+    rejectSocket(ws, "Access identity expired");
+    return;
+  }
+
   // heartbeat を含む正常な受信を生存確認として扱う。
   ws.data.lastHeartbeat = Date.now();
   switch (msg.event) {
@@ -191,18 +273,17 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       break;
 
     case "register": {
+      const requestedClientType = classifyClientType(msg.uuid);
+      if (!mayRegisterClient(ws, requestedClientType)) {
+        rejectSocket(ws, `registration is not allowed for ${requestedClientType}`);
+        return;
+      }
+
       ws.data.uuid = msg.uuid;
       ws.data.screenW = msg.hardware.w;
       ws.data.screenH = msg.hardware.h;
       ws.data.lastHeartbeat = Date.now();
-
-      // UUID の prefix から種別を判定（例: "display:left-monitor", "manage-uuid"）
-      const prefix = msg.uuid.split(":")[0];
-      ws.data.clientType = prefix.startsWith("display")    ? "display"
-                         : prefix.startsWith("controller") ? "controller"
-                         : prefix.startsWith("guest")      ? "guest"
-                         : prefix.startsWith("manage")     ? "manage"
-                         : "unknown";
+      ws.data.clientType = requestedClientType;
 
       console.log(`[WS] Registered: ${msg.uuid} (${ws.data.clientType})`);
 
@@ -253,12 +334,20 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       break;
     }
     case "update_viewport":
+      if (!hasManageAccess(ws) && !(ws.data.clientType === "display" && hasDisplayAccess(ws))) {
+        rejectSocket(ws, "update_viewport requires manage access or an authenticated display");
+        return;
+      }
       updateDisplayViewport(ws.data.uuid, msg.clientInfo.viewport);
       // Viewport（Display側）が動いたことを管理画面へ即時反映する
       pushStateToManagers();
       break;
 
     case "spawn_food":
+      if (ws.data.clientType !== "controller" && ws.data.clientType !== "guest") {
+        rejectSocket(ws, "spawn_food requires a controller or guest registration");
+        return;
+      }
       foodItems.push({
         id: uuidv4(),
         pos: { x: msg.x, y: msg.y },
@@ -267,6 +356,10 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       break;
 
     case "viewport_preview": {
+      if (!hasManageAccess(ws)) {
+        rejectSocket(ws, "viewport_preview requires manage access");
+        return;
+      }
       // 管理画面からのドラッグ中リアルタイムプレビュー: 対象displayのみに転送
       const target = [...sockets].find(s => s.data.uuid === msg.displayUuid);
       if (target) sendTo(target, { event: "viewport_preview", viewport: msg.viewport });
@@ -274,11 +367,19 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
     }
 
     case "pointer_move": {
+      if (!hasManageAccess(ws)) {
+        rejectSocket(ws, "pointer_move requires manage access");
+        return;
+      }
       // 管理画面からのマウスポインター位置を全てのディスプレイに転送
       broadcastToDisplays({ event: "pointer_move", x: msg.x, y: msg.y });
       break;
     }
     case "update_world_size": {
+      if (!hasManageAccess(ws)) {
+        rejectSocket(ws, "update_world_size requires manage access");
+        return;
+      }
       setWorldSize(msg.width, msg.height);
       persistServerSettings();
       broadcastToAll({ event: "update_world_size", width: msg.width, height: msg.height });
@@ -287,6 +388,10 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
     }
 
     case "update_world_config": {
+      if (!hasManageAccess(ws)) {
+        rejectSocket(ws, "update_world_config requires manage access");
+        return;
+      }
       // 管理画面から背景や禁止エリアが更新されたら全体へ通知
       currentBgUrl = msg.bgUrl;
       updateForbiddenZones(msg.forbiddenZones);

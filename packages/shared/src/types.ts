@@ -41,6 +41,20 @@ export interface FishMeta {
   logoY?: number;
 }
 
+/**
+ * Optional identity attached to a state-changing HTTP command.
+ * Clients should send this value in the `Idempotency-Key` header; JSON and
+ * multipart routes may also accept it as a `commandId` field during migration.
+ */
+export interface CommandEnvelope {
+  commandId?: string;
+}
+
+/** The server reports process-local replay state through these response headers. */
+export const COMMAND_ID_HEADER = "Idempotency-Key" as const;
+export const COMMAND_REPLAY_HEADER = "Idempotency-Replayed" as const;
+export const COMMAND_DURABILITY_HEADER = "X-Command-Durability" as const;
+
 export type FishDirection = "auto" | "left" | "right";
 
 // -------------------------------------------------------
@@ -285,7 +299,7 @@ export interface UdpEvent {
 // WebSocket メッセージ型
 // -------------------------------------------------------
 export type WsClientMessage =
-  | { event: "register"; uuid: string; hardware: { w: number; h: number } }
+  | { event: "register"; uuid: string; hardware: { w: number; h: number }; lastRevision?: number }
   | { event: "heartbeat"; fps: number; sentAt?: number }
   | { event: "ping_response"; sentAt: number }
   | { event: "spawn_food"; x: number; y: number }
@@ -301,7 +315,7 @@ export type WsClientMessage =
   // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
   | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; fishScaleMultiplier?: number; motionSettings?: MotionSettings };
 
-export type WsServerMessage =
+export type WsServerMessage = (
   | {
       event: "config";
       viewport: ClientConfig["viewport"];
@@ -364,7 +378,8 @@ export type WsServerMessage =
   /** 管理画面からのマウスポインタ位置をディスプレイへ伝える */
   | { event: "pointer_move"; x: number; y: number }
   /** 全クライアント向けWorld サイズ更新 */
-  | { event: "update_world_size"; width: number; height: number };
+  | { event: "update_world_size"; width: number; height: number }
+) & { revision?: number };
 
 /** テストパターンの種類 */
 export type TestPattern = "off" | "identify" | "gradient" | "grid" | "colorbars" | "white" | "black" | "crosshair" | "worldmap" | "calibration";

@@ -25,6 +25,7 @@ import {
 } from "./ws-handler";
 
 import { scanRoute } from "./routes/scan";
+import { getInternalSnapshotRoute, postInternalSnapshotRoute } from "./routes/internal-snapshot";
 import { pendingRoute, lockRoute, unlockRoute } from "./routes/pending";
 import { releaseRoute } from "./routes/release";
 import { pinRoute } from "./routes/pin";
@@ -67,6 +68,43 @@ mkdirSync(PUBLIC_IMAGES_DIR, { recursive: true });
 mkdirSync(SCENE_IMAGES_DIR, { recursive: true });
 mkdirSync(DATA_FISH_DIR, { recursive: true }); // /data/fish/ を初期化
 startR2FilesystemMirror();
+
+const ACCESS_IDENTITY_HEADER = "X-Aquarium-Access-Identity";
+const allowUntrustedWs = () => process.env.AQUARIUM_ALLOW_UNTRUSTED_WS === "true";
+
+interface AccessIdentity {
+  subject: string;
+  roles: string[];
+  expiresAt: number;
+}
+
+function readAccessIdentity(request: Request): AccessIdentity | null {
+  const encoded = request.headers.get(ACCESS_IDENTITY_HEADER);
+  if (!encoded) return null;
+
+  try {
+    const identity = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Partial<AccessIdentity>;
+    if (
+      typeof identity.subject !== "string" ||
+      !Array.isArray(identity.roles) ||
+      !identity.roles.every((role) => typeof role === "string") ||
+      typeof identity.expiresAt !== "number" ||
+      !Number.isFinite(identity.expiresAt) ||
+      identity.expiresAt <= Math.floor(Date.now() / 1000)
+    ) {
+      return null;
+    }
+    return { subject: identity.subject, roles: identity.roles, expiresAt: identity.expiresAt };
+  } catch {
+    return null;
+  }
+}
+
+function hasManagementAccess(request: Request): boolean {
+  const identity = readAccessIdentity(request);
+  if (identity) return identity.roles.includes("manage") || identity.roles.includes("admin");
+  return allowUntrustedWs();
+}
 
 const app = new Hono();
 app.use("*", cors({ origin: "*" }));
@@ -290,6 +328,7 @@ app.put("/api/pending/:id/artwork", async (c) => {
 
 // Viewport 設定（display クライアントのViewportをサーバー側に保持しつつ更新）
 app.put("/api/clients/:uuid/viewport", async (c) => {
+  if (!hasManagementAccess(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
   // クライアント側で encodeURIComponent されているため、ここでデコードして元のUUIDに戻す
   const uuid = decodeURIComponent(c.req.param("uuid"));
   const vp = await c.req.json();
@@ -299,6 +338,7 @@ app.put("/api/clients/:uuid/viewport", async (c) => {
 
 // テストパターン送信（管理画面から）
 app.post("/api/clients/test-pattern", async (c) => {
+  if (!hasManagementAccess(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
   const { pattern, targetUuid } = await c.req.json() as { pattern: string; targetUuid?: string };
   sendTestPattern(pattern as Parameters<typeof sendTestPattern>[0], targetUuid);
   return c.json({ success: true });
@@ -518,6 +558,11 @@ app.get("/api/state", (c) => {
   });
 });
 
+// Worker Durable Object internal state transfer. These paths are called only
+// over the Container loopback and are not part of the public /api surface.
+app.get("/__internal/snapshot", getInternalSnapshotRoute);
+app.post("/__internal/snapshot", postInternalSnapshotRoute);
+
 app.get("/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
 
 // ---- ゲームループ起動 ----------------------------------------
@@ -536,10 +581,14 @@ const server = Bun.serve({
 
     // WS アップグレード
     if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
+      const accessIdentity = readAccessIdentity(req);
       const ok = server.upgrade(req, {
         data: {
           uuid: "",
           clientType: "",
+          accessAuthenticated: accessIdentity !== null,
+          accessRoles: accessIdentity?.roles ?? [],
+          accessExpiresAt: accessIdentity?.expiresAt ?? null,
           lastHeartbeat: Date.now(),
           screenW: 0,
           screenH: 0,
