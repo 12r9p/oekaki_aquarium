@@ -26,6 +26,7 @@ class WsClient {
   private clientType: string;
   private lastFps = 60;
   private lastMessageAt = Date.now();
+  private lastRevision: number | undefined;
   private reconnectAttempt = 0;
   private destroyed = false;
 
@@ -77,6 +78,7 @@ class WsClient {
         // screen.width/height は物理解像度（HiDPIで実際と異なる場合がある）。
         // ブラウザの表示領域(innerWidth/Height)をAR算出に使いたいためこちらを送る。
         hardware: { w: window.innerWidth, h: window.innerHeight },
+        ...(this.lastRevision === undefined ? {} : { lastRevision: this.lastRevision }),
       });
       // 10秒ごとにハートビートを送信（タイムアウト30秒に対して余裕を持たせる）
       this.startHeartbeat();
@@ -87,6 +89,13 @@ class WsClient {
       this.lastMessageAt = Date.now();
       try {
         const msg = JSON.parse(ev.data as string) as WsServerMessage;
+        if (
+          typeof msg.revision === "number" &&
+          Number.isSafeInteger(msg.revision) &&
+          msg.revision >= 0
+        ) {
+          this.lastRevision = Math.max(this.lastRevision ?? 0, msg.revision);
+        }
         if (msg.event === "ping_probe") {
           this.send({ event: "ping_response", sentAt: msg.sentAt });
           return;

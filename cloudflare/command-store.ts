@@ -19,15 +19,17 @@ export interface AquariumCommandInput {
 
 export type ClaimResult =
   | { kind: "accepted" }
+  | { kind: "capacity_exceeded"; revision: number }
   | { kind: "replay"; status: number; body: string | null; contentType: string | null; revision: number }
   | { kind: "result_unavailable"; revision: number }
   | { kind: "in_progress"; revision: number }
   | { kind: "conflict"; revision: number };
 
-const RESPONSE_BODY_LIMIT = 48 * 1024;
+const RESPONSE_BODY_LIMIT = 16 * 1024;
 const SNAPSHOT_CHUNK_LIMIT = 16 * 1024;
 const SNAPSHOT_SIZE_LIMIT = 8 * 1024 * 1024;
-const RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+export const AQUARIUM_COMMAND_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_COMMAND_RECEIPTS = 50_000;
 const PENDING_COMMAND_TIMEOUT_MS = 2 * 60 * 1000;
 
 function firstRow<T extends Record<string, unknown>>(cursor: SqlCursorLike): T | undefined {
@@ -81,6 +83,14 @@ export class AquariumCommandStore {
     sql.exec("INSERT OR IGNORE INTO aquarium_meta (key, value) VALUES ('snapshot_saved_at', 0)");
     sql.exec("INSERT OR IGNORE INTO aquarium_meta (key, value) VALUES ('snapshot_revision', 0)");
     sql.exec("INSERT OR IGNORE INTO aquarium_meta (key, value) VALUES ('state_uncertain', 0)");
+    const commandCount = firstRow<{ value: number }>(sql.exec("SELECT value FROM aquarium_meta WHERE key = 'command_count'"));
+    if (!commandCount) {
+      const existingCount = firstRow<{ count: number }>(sql.exec("SELECT COUNT(*) AS count FROM aquarium_commands"));
+      sql.exec(
+        "INSERT OR IGNORE INTO aquarium_meta (key, value) VALUES ('command_count', ?)",
+        Number(existingCount?.count ?? 0),
+      );
+    }
     sql.exec("CREATE INDEX IF NOT EXISTS aquarium_commands_created_at ON aquarium_commands(created_at)");
     sql.exec(`
       CREATE TABLE IF NOT EXISTS aquarium_snapshot_chunks (
@@ -146,6 +156,7 @@ export class AquariumCommandStore {
 
   claim(input: AquariumCommandInput, now = Date.now()): ClaimResult {
     return runTransaction(this.sql, () => {
+      this.pruneExpiredCommands(now);
       const existing = firstRow<{
         request_hash: string;
         actor_id: string;
@@ -189,14 +200,12 @@ export class AquariumCommandStore {
         return { kind: "in_progress", revision };
       }
 
-      // Keep compact receipts permanently so a very late retry can never execute twice.
-      // Only the small response body has a seven-day replay window.
-      this.sql.exec(
-        `UPDATE aquarium_commands
-         SET response_body = NULL, response_content_type = NULL
-         WHERE status = 'completed' AND response_body IS NOT NULL AND created_at < ?`,
-        now - RETENTION_MS,
+      const commandCount = firstRow<{ value: number }>(
+        this.sql.exec("SELECT value FROM aquarium_meta WHERE key = 'command_count'"),
       );
+      if (Number(commandCount?.value ?? 0) >= MAX_COMMAND_RECEIPTS) {
+        return { kind: "capacity_exceeded", revision };
+      }
       this.sql.exec(
         `INSERT INTO aquarium_commands
           (command_id, method, path, request_hash, actor_id, actor_roles, status, created_at)
@@ -209,8 +218,30 @@ export class AquariumCommandStore {
         JSON.stringify(input.actorRoles),
         now,
       );
+      this.sql.exec("UPDATE aquarium_meta SET value = value + 1 WHERE key = 'command_count'");
       return { kind: "accepted" };
     });
+  }
+
+  private pruneExpiredCommands(now: number): void {
+    const cutoff = now - AQUARIUM_COMMAND_RETENTION_MS;
+    const expiredPending = firstRow<{ command_id: string }>(this.sql.exec(
+      "SELECT command_id FROM aquarium_commands WHERE status = 'pending' AND created_at < ? LIMIT 1",
+      cutoff,
+    ));
+    if (expiredPending) this.markStateUncertain();
+
+    const expiredCount = Number(firstRow<{ count: number }>(this.sql.exec(
+      "SELECT COUNT(*) AS count FROM aquarium_commands WHERE created_at < ?",
+      cutoff,
+    ))?.count ?? 0);
+    if (expiredCount === 0) return;
+
+    this.sql.exec("DELETE FROM aquarium_commands WHERE created_at < ?", cutoff);
+    this.sql.exec(
+      "UPDATE aquarium_meta SET value = MAX(0, value - ?) WHERE key = 'command_count'",
+      expiredCount,
+    );
   }
 
   complete(

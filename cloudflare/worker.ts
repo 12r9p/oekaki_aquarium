@@ -1,6 +1,6 @@
 import { DurableObject, WorkerEntrypoint } from "cloudflare:workers";
 import { AccessAuthError, authenticateAccessRequest, type AccessAuthEnv, type AccessIdentity } from "./access-auth";
-import { AquariumCommandStore, type ClaimResult, type SqlStorageLike } from "./command-store";
+import { AQUARIUM_COMMAND_RETENTION_MS, AquariumCommandStore, type ClaimResult, type SqlStorageLike } from "./command-store";
 
 interface Env extends AccessAuthEnv {
   ASSETS: { fetch(request: Request): Promise<Response> };
@@ -24,8 +24,9 @@ const IMMUTABLE_IMAGE = /^\/images\/(?:artwork_[\w-]+\.png|fish_\d+\.png|scene\/
 const LIBRARY_IMAGE = /^\/lib-images\/[\w.-]+\.png$/i;
 const IMMUTABLE_TTL_SECONDS = 60 * 60 * 24 * 30;
 const COMMAND_REQUEST_BODY_LIMIT = 32 * 1024 * 1024;
-const COMMAND_REPLAY_BODY_LIMIT = 48 * 1024;
+const COMMAND_REPLAY_BODY_LIMIT = 16 * 1024;
 const AQUARIUM_SNAPSHOT_LIMIT = 8 * 1024 * 1024;
+const COMMAND_ID_CLOCK_SKEW_MS = 5 * 60 * 1000;
 const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const APP_ROUTES: Record<string, string> = { "/": "/index.html", "/display": "/display.html", "/controller": "/controller.html", "/guest": "/guest.html", "/manage": "/manage.html" };
 const edgeCache = (caches as CacheStorage & { default: Cache }).default;
@@ -187,8 +188,17 @@ function getCommandId(headers: Headers): string | null {
   const idempotencyHeader = headers.get(IDEMPOTENCY_KEY_HEADER)?.trim();
   if (commandHeader && idempotencyHeader && commandHeader !== idempotencyHeader) return null;
   const supplied = commandHeader || idempotencyHeader;
-  if (!supplied) return crypto.randomUUID();
-  if (supplied.length > 200 || !/^[A-Za-z0-9][A-Za-z0-9._:-]*$/.test(supplied)) return null;
+  if (!supplied) return null;
+  const match = /^cmd_([0-9a-z]{1,12})_([a-z0-9-]{8,128})$/i.exec(supplied);
+  if (!match) return null;
+  const issuedAt = Number.parseInt(match[1], 36);
+  const now = Date.now();
+  // Reserve the accepted clock skew from the age window so receipt cleanup cannot precede ID expiry.
+  if (
+    !Number.isSafeInteger(issuedAt)
+    || issuedAt > now + COMMAND_ID_CLOCK_SKEW_MS
+    || now - issuedAt > AQUARIUM_COMMAND_RETENTION_MS - COMMAND_ID_CLOCK_SKEW_MS
+  ) return null;
   return supplied;
 }
 
@@ -314,9 +324,15 @@ function commandClaimResponse(claim: Exclude<ClaimResult, { kind: "accepted" }>,
     ? "result_unavailable"
     : claim.kind === "in_progress"
       ? "command_in_progress"
-      : "command_conflict";
-  const status = claim.kind === "in_progress" ? 425 : 409;
-  return commandErrorResponse(error, status, commandId, claim.revision);
+      : claim.kind === "capacity_exceeded"
+        ? "command_capacity_reached"
+        : "command_conflict";
+  const status = claim.kind === "in_progress" ? 425 : claim.kind === "capacity_exceeded" ? 503 : 409;
+  const response = commandErrorResponse(error, status, commandId, claim.revision);
+  if (claim.kind !== "capacity_exceeded") return response;
+  const headers = new Headers(response.headers);
+  headers.set("Retry-After", "60");
+  return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
 }
 
 function commandErrorResponse(error: string, status: number, commandId: string, revision: number): Response {
@@ -556,6 +572,12 @@ export class AquariumContainer extends DurableObject<Env> {
     const url = new URL(request.url);
     const requestHash = await hashCommandRequest(request, body);
     const commandStore = this.getCommandStore();
+    try {
+      await this.ensureContainerStarted();
+    } catch (error) {
+      console.error("[AquariumContainer] Container startup failed before command claim:", error);
+      return commandErrorResponse("container_starting", 503, commandId, commandStore.getRevision());
+    }
     const claim = commandStore.claim({
       commandId,
       method: request.method.toUpperCase(),
@@ -646,17 +668,11 @@ export class AquariumContainer extends DurableObject<Env> {
     const container = this.ctx.container;
     if (!container) return new Response("Container binding is unavailable", { status: 503 });
 
-    if (Date.now() > this.readyUntil) {
-      this.starting ??= this.startAndWaitForPort(restoreCommandId).finally(() => {
-        this.starting = undefined;
-      });
-      try {
-        await this.starting;
-        this.readyUntil = Date.now() + 5_000;
-      } catch (error) {
-        console.error("[AquariumContainer] Container startup failed:", error);
-        return new Response("Aquarium runtime is starting; retry shortly", { status: 503, headers: { "Retry-After": "2", "Cache-Control": "no-store" } });
-      }
+    try {
+      await this.ensureContainerStarted(restoreCommandId);
+    } catch (error) {
+      console.error("[AquariumContainer] Container startup failed:", error);
+      return new Response("Aquarium runtime is starting; retry shortly", { status: 503, headers: { "Retry-After": "2", "Cache-Control": "no-store" } });
     }
 
     const upstreamUrl = new URL(request.url);
@@ -670,6 +686,17 @@ export class AquariumContainer extends DurableObject<Env> {
     } catch (error) {
       this.readyUntil = 0;
       throw error;
+    }
+  }
+
+  private async ensureContainerStarted(restoreCommandId?: string): Promise<void> {
+    if (!this.ctx.container) throw new Error("Container binding is unavailable");
+    if (Date.now() > this.readyUntil) {
+      this.starting ??= this.startAndWaitForPort(restoreCommandId).finally(() => {
+        this.starting = undefined;
+      });
+      await this.starting;
+      this.readyUntil = Date.now() + 5_000;
     }
   }
 
