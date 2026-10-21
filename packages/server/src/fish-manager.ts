@@ -13,6 +13,7 @@ import { getWorld } from "./world";
 import { resetTunaState } from "./physics/tuna";
 import { removeWanderState } from "./physics/wander";
 import { updateFishLayers } from "./layer-manager";
+import { loadFishMetadataIndex, upsertFishMetadataIndex, removeFishMetadataIndex } from "./fish-library";
 
 function normalizeFishType(type: unknown): FishType {
   if (type === "swimmer") return "school";
@@ -36,14 +37,14 @@ function getLocalPathFromUrl(url: string): string | null {
 }
 
 /** ActiveFishを永続化（PNG作成＋メタ書き込み） */
-function saveActiveFishToDisk(fish: ActiveFish) {
+function saveActiveFishToDisk(fish: ActiveFish, sourceBuffer?: Buffer) {
   if (!existsSync(DATA_FISH_DIR)) mkdirSync(DATA_FISH_DIR, { recursive: true });
   const srcPath = getLocalPathFromUrl(fish.textureUrl);
-  if (!srcPath || !existsSync(srcPath)) return;
+  if (!sourceBuffer && (!srcPath || !existsSync(srcPath))) return;
 
   const destPath = join(DATA_FISH_DIR, `${fish.id}.png`);
   try {
-    let buf = readFileSync(srcPath) as Buffer;
+    let buf = sourceBuffer ?? readFileSync(srcPath!) as Buffer;
     const meta: FishMeta = {
       version: 1,
       author: fish.author || "anonymous",
@@ -60,6 +61,10 @@ function saveActiveFishToDisk(fish: ActiveFish) {
       createdAt: fish.createdAt,
       releasedAt: fish.releasedAt,
       archivedAt: fish.archivedAt,
+      senderId: fish.fishMeta?.senderId,
+      logoScale: fish.fishMeta?.logoScale,
+      logoX: fish.fishMeta?.logoX,
+      logoY: fish.fishMeta?.logoY,
     };
     buf = writeFishMeta(buf, meta);
     // URLを公開する前に書き込みを完了させ、初回リクエストの404を防ぐ。
@@ -67,6 +72,7 @@ function saveActiveFishToDisk(fish: ActiveFish) {
     // キャッシュ用JSONの書き出し（起動・管理を高速化しメモリ使用量を削減するため）
     const jsonPath = join(DATA_FISH_DIR, `${fish.id}.json`);
     writeFileSync(jsonPath, JSON.stringify(meta, null, 2), "utf-8");
+    upsertFishMetadataIndex(`${fish.id}.png`, meta);
     // 永続化されたファイルのURLに差し替え
     fish.textureUrl = `/lib-images/${fish.id}.png`;
   } catch (e) {
@@ -77,9 +83,7 @@ function saveActiveFishToDisk(fish: ActiveFish) {
 /** 永続化されたメタデータ（PNG tEXt）のプロパティを更新 */
 function updateActiveFishOnDisk(fish: ActiveFish) {
   const destPath = join(DATA_FISH_DIR, `${fish.id}.png`);
-  if (!existsSync(destPath)) return;
   try {
-    let buf = readFileSync(destPath) as Buffer;
     const meta: FishMeta = {
       version: 1,
       author: fish.author || "anonymous",
@@ -96,12 +100,19 @@ function updateActiveFishOnDisk(fish: ActiveFish) {
       createdAt: fish.createdAt,
       releasedAt: fish.releasedAt,
       archivedAt: fish.archivedAt,
+      senderId: fish.fishMeta?.senderId,
+      logoScale: fish.fishMeta?.logoScale,
+      logoX: fish.fishMeta?.logoX,
+      logoY: fish.fishMeta?.logoY,
     };
-    buf = writeFishMeta(buf, meta);
-    writeFileSync(destPath, buf);
-    // キャッシュ用JSONの更新
-    const jsonPath = join(DATA_FISH_DIR, `${fish.id}.json`);
-    writeFileSync(jsonPath, JSON.stringify(meta, null, 2), "utf-8");
+    if (existsSync(destPath)) {
+      const buf = writeFishMeta(readFileSync(destPath) as Buffer, meta);
+      writeFileSync(destPath, buf);
+      // キャッシュ用JSONの更新
+      const jsonPath = join(DATA_FISH_DIR, `${fish.id}.json`);
+      writeFileSync(jsonPath, JSON.stringify(meta, null, 2), "utf-8");
+    }
+    upsertFishMetadataIndex(`${fish.id}.png`, meta);
   } catch (e) {
     console.error(`[FishManager] Failed to update fish ${fish.id} on disk:`, e);
   }
@@ -125,6 +136,7 @@ function removeActiveFishFromDisk(fishId: string) {
       console.error(`[FishManager] Failed to remove fish json ${fishId} from disk:`, e);
     }
   }
+  removeFishMetadataIndex(`${fishId}.png`);
 }
 
 /** 待機キュー（スキャン済み・未放流） */
@@ -152,6 +164,15 @@ export function addToPending(imageUrl: string, fishMeta?: FishMeta): PendingFish
 /** 待機リスト全件取得 */
 export function getPendingQueue(): PendingFish[] {
   return [...pendingQueue];
+}
+
+/** Update the image and embedded metadata for a fish that is still being edited. */
+export function updatePendingArtwork(fishId: string, imageUrl: string, fishMeta?: FishMeta): PendingFish | null {
+  const fish = pendingQueue.find((item) => item.id === fishId);
+  if (!fish) return null;
+  fish.imageUrl = imageUrl;
+  if (fishMeta) fish.fishMeta = fishMeta;
+  return fish;
 }
 
 /** 排他ロック取得（iPad が編集を開始するときに呼ぶ） */
@@ -213,7 +234,8 @@ function initialVelForType(type: FishType): { x: number; y: number } {
  */
 export function releaseFish(
   config: FishConfig,
-  spawnPos: Vector2
+  spawnPos: Vector2,
+  sourceBuffer?: Buffer,
 ): ActiveFish {
   // 待機リストから除去
   const pendingIdx = pendingQueue.findIndex((f) => f.id === config.id);
@@ -250,7 +272,7 @@ export function releaseFish(
   updateFishLayers(getAllActiveFish());
   
   // 永続化処理（/data/fish に保存し魚のtextureUrlを差し替える）
-  saveActiveFishToDisk(fish);
+  saveActiveFishToDisk(fish, sourceBuffer);
   
   return fish;
 }
@@ -410,11 +432,33 @@ export function redistributeFish(): number {
 export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: number }> = []) {
   if (!existsSync(DATA_FISH_DIR)) return;
   try {
-    const files = readdirSync(DATA_FISH_DIR).filter(f => f.toLowerCase().endsWith(".png"));
+    const metadataIndex = loadFishMetadataIndex();
+    const files = metadataIndex
+      ? Object.keys(metadataIndex)
+      : readdirSync(DATA_FISH_DIR).filter(f => f.toLowerCase().endsWith(".png"));
+    const checkpointPath = join(DATA_FISH_DIR, "..", "fish-positions.json");
+    let checkpointFish: Record<string, { x: number; y: number; vx: number; vy: number }> = {};
+    try {
+      const checkpoint = JSON.parse(readFileSync(checkpointPath, "utf-8")) as {
+        savedAt?: number;
+        fish?: Record<string, { x?: number; y?: number; vx?: number; vy?: number }>;
+      };
+      const isRecent = Number.isFinite(checkpoint.savedAt) && Date.now() - Number(checkpoint.savedAt) < 30 * 24 * 60 * 60 * 1000;
+      if (isRecent && checkpoint.fish && typeof checkpoint.fish === "object") {
+        checkpointFish = Object.fromEntries(Object.entries(checkpoint.fish).flatMap(([id, position]) => {
+          if ([position.x, position.y, position.vx, position.vy].every(Number.isFinite)) {
+            return [[id, { x: position.x!, y: position.y!, vx: position.vx!, vy: position.vy! }]];
+          }
+          return [];
+        }));
+      }
+    } catch {
+      // Position snapshots are optional; older installs and an empty R2 bucket spawn normally.
+    }
     let restoredCount = 0;
     for (const file of files) {
       const filePath = join(DATA_FISH_DIR, file);
-      const fishId = file.replace(".png", "");
+      const fishId = file.replace(/\.png$/i, "");
 
       // 既に泳いでいる魚はスキップ（再読み込み時の重複防止）
       if (activePool.has(fishId)) continue;
@@ -423,8 +467,10 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
         let meta: FishMeta;
         const jsonPath = join(DATA_FISH_DIR, `${fishId}.json`);
 
+        if (metadataIndex) {
+          meta = { ...DEFAULT_FISH_META, ...metadataIndex[file] };
         // JSONキャッシュがあればそれを読み込み、PNG解析に伴う大量のBuffer確保を回避する
-        if (existsSync(jsonPath)) {
+        } else if (existsSync(jsonPath)) {
           meta = JSON.parse(readFileSync(jsonPath, "utf-8"));
         } else {
           const buf = readFileSync(filePath) as Buffer;
@@ -457,6 +503,16 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           x: Math.max(margin, Math.min(ww - margin, spawnX)),
           y: Math.max(margin, Math.min(wh - margin, spawnY))
         };
+        const savedPosition = checkpointFish[fishId];
+        const position = savedPosition
+          ? {
+            x: Math.max(0, Math.min(ww, savedPosition.x)),
+            y: Math.max(0, Math.min(wh, savedPosition.y)),
+          }
+          : sp;
+        const velocity = savedPosition
+          ? { x: savedPosition.vx, y: savedPosition.vy }
+          : initialVelForType(normalizeFishType(meta.type));
 
         const fish: ActiveFish = {
           id: fishId,
@@ -478,8 +534,8 @@ export function restoreActiveFishFromDisk(spawnPoints: Array<{ x: number; y: num
           },
           customMotion: meta.customMotion,
           physics: {
-            pos: { x: sp.x, y: sp.y },
-            vel: initialVelForType(normalizeFishType(meta.type)),
+            pos: position,
+            vel: velocity,
             speedMultiplier: 1.0,
           },
           layerIndex: 0,

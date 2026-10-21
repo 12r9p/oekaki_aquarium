@@ -10,5 +10,8 @@ scanner/input/
 scanner/output/
 packages/server/public/images/
 data/fish
+data/fish-positions.json
 .claude/
 .codebase-memory/
+.wrangler/
+.dev.vars

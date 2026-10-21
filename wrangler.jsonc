@@ -1,0 +1,46 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "oekaki-aquarium-edge",
+  "account_id": "9d0ee87b7634a2050153d0d261815ce0",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-10-21",
+  "assets": {
+    "directory": "packages/server/public/app",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*", "/ws", "/health", "/images/*", "/lib-images/*"]
+  },
+  "r2_buckets": [
+    {
+      "binding": "AQUARIUM_R2",
+      "bucket_name": "oekaki-aquarium-data"
+    }
+  ],
+  "containers": [
+    {
+      "class_name": "AquariumContainer",
+      "scheduling_policy": "durable_object",
+      "images": {
+        "base": {
+          "dockerfile": "./Dockerfile"
+        }
+      }
+    }
+  ],
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "AQUARIUM",
+        "class_name": "AquariumContainer"
+      }
+    ]
+  },
+  "exports": {
+    "AquariumContainer": {
+      "type": "durable-object",
+      "storage": "sqlite"
+    }
+  },
+  "observability": {
+    "enabled": true
+  }
+}

@@ -8,6 +8,7 @@ import { tailBeatForFish } from "./physics/swim-dynamics";
 import { broadcastToRenderClients } from "./ws-handler";
 import { getDisplayClientInfoList } from "./ws-handler";
 import { recordSystemMetric } from "./system-metrics";
+import { saveFishPositionCheckpoint } from "./r2-persistence";
 
 // ============================================================
 // game-loop.ts
@@ -16,6 +17,7 @@ import { recordSystemMetric } from "./system-metrics";
 
 let loopInterval: ReturnType<typeof setInterval> | null = null;
 let frameCount = 0;
+let lastPositionCheckpointAt = 0;
 const fishFacing = new Map<string, 1 | -1>();
 const fishRenderRotation = new Map<string, number>();
 
@@ -32,6 +34,19 @@ function tick(): void {
   const calculationStartedAt = performance.now();
   frameCount++;
   const allFish = getAllActiveFish();
+  const now = Date.now();
+  if (now - lastPositionCheckpointAt >= 15_000) {
+    lastPositionCheckpointAt = now;
+    const fish = Object.fromEntries(allFish.map((item) => [item.id, {
+      x: item.physics.pos.x,
+      y: item.physics.pos.y,
+      vx: item.physics.vel.x,
+      vy: item.physics.vel.y,
+    }]));
+    void saveFishPositionCheckpoint({ savedAt: now, fish }).catch((error) => {
+      console.error("[GameLoop] Failed to write position checkpoint:", error);
+    });
+  }
   // レイヤー更新は10フレームに1回（重い処理なので間引く）
   if (frameCount % 10 === 0) {
     updateFishLayers(allFish);

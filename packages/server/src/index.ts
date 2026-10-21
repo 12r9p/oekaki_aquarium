@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serve } from "bun";
 import { cors } from "hono/cors";
 import { join } from "node:path";
-import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { LAYER_CONFIG, PORTS } from "@aquarium/shared";
 import type { FishConfig, FishType, LayerConfig } from "@aquarium/shared";
@@ -38,15 +38,17 @@ import {
   removeFish,
   updateFishParams,
   removePendingFish,
+  updatePendingArtwork,
   duplicateFish,
   redistributeFish,
 } from "./fish-manager";
 import { getWorld, updateFishLayerConfig, updateWorldMotionSettings } from "./world";
-import { loadFishLibrary, getLibraryFileBuffer, DATA_FISH_DIR } from "./fish-library";
+import { loadFishLibrary, getLibraryFileBuffer, getLibraryFileBufferAsync, DATA_FISH_DIR } from "./fish-library";
 import { readFishMeta, writeFishMeta, DEFAULT_FISH_META } from "./png-metadata";
 import { updatePersistedSettings } from "./settings-store";
 import { updateFishLayers } from "./layer-manager";
 import { getSystemMetrics } from "./system-metrics";
+import { closeR2FilesystemMirror, flushR2FilesystemMirror, startR2FilesystemMirror } from "./r2-persistence";
 
 // ============================================================
 // サーバーエントリーポイント（Bun 単一ポート統合版）
@@ -64,6 +66,7 @@ const APP_DIR = join(import.meta.dir, "..", "public", "app");
 mkdirSync(PUBLIC_IMAGES_DIR, { recursive: true });
 mkdirSync(SCENE_IMAGES_DIR, { recursive: true });
 mkdirSync(DATA_FISH_DIR, { recursive: true }); // /data/fish/ を初期化
+startR2FilesystemMirror();
 
 const app = new Hono();
 app.use("*", cors({ origin: "*" }));
@@ -257,6 +260,34 @@ app.delete("/api/pending/:id", (c) => {
   return c.json({ success: ok });
 });
 
+// The controller composes the logo on-device, then persists the final PNG before release.
+app.put("/api/pending/:id/artwork", async (c) => {
+  const form = await c.req.formData();
+  const image = form.get("image");
+  if (!(image instanceof File) || image.type !== "image/png") return c.json({ error: "PNG artwork is required" }, 400);
+
+  let meta: import("./png-metadata").FishMeta;
+  try {
+    meta = { ...DEFAULT_FISH_META, ...JSON.parse(String(form.get("meta") ?? "{}")) };
+  } catch {
+    return c.json({ error: "Invalid fish metadata" }, 400);
+  }
+
+  const bytes = Buffer.from(await image.arrayBuffer());
+  if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return c.json({ error: "Invalid PNG" }, 400);
+  }
+  const filename = `artwork_${crypto.randomUUID()}.png`;
+  writeFileSync(join(PUBLIC_IMAGES_DIR, filename), writeFishMeta(bytes, meta));
+  const fish = updatePendingArtwork(c.req.param("id"), `/images/${filename}`, meta);
+  if (!fish) {
+    unlinkSync(join(PUBLIC_IMAGES_DIR, filename));
+    return c.json({ error: "Pending fish not found" }, 404);
+  }
+  pushClientListToManagers();
+  return c.json({ success: true, fish });
+});
+
 // Viewport 設定（display クライアントのViewportをサーバー側に保持しつつ更新）
 app.put("/api/clients/:uuid/viewport", async (c) => {
   // クライアント側で encodeURIComponent されているため、ここでデコードして元のUUIDに戻す
@@ -348,7 +379,22 @@ app.get("/api/gallery", async (c) => {
 
 // PNGへ魚パラメーターを埋め込み、ダウンロード用ファイルとして返す。
 app.post("/api/png/configure", async (c) => {
-  const { imageUrl, meta } = await c.req.json<{ imageUrl: string; meta: Partial<import("./png-metadata").FishMeta> }>();
+  const { imageUrl, imageData, meta } = await c.req.json<{ imageUrl?: string; imageData?: string; meta: Partial<import("./png-metadata").FishMeta> }>();
+  if (imageData?.startsWith("data:image/png;base64,")) {
+    try {
+      const source = Buffer.from(imageData.slice("data:image/png;base64,".length), "base64");
+      const configured = writeFishMeta(source, { ...DEFAULT_FISH_META, ...meta });
+      return new Response(configured, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-store",
+          "Content-Disposition": 'attachment; filename="aquarium-fish.png"',
+        },
+      });
+    } catch {
+      return c.json({ error: "Could not configure PNG" }, 400);
+    }
+  }
   let sourcePath: string | null = null;
   if (imageUrl?.startsWith("/images/")) sourcePath = join(PUBLIC_IMAGES_DIR, imageUrl.slice("/images/".length));
   if (imageUrl?.startsWith("/lib-images/")) sourcePath = join(DATA_FISH_DIR, decodeURIComponent(imageUrl.slice("/lib-images/".length)));
@@ -358,7 +404,8 @@ app.post("/api/png/configure", async (c) => {
     return new Response(configured, {
       headers: {
         "Content-Type": "image/png",
-        "Content-Disposition": 'attachment; filename="aquarium-fish.png"',
+      "Cache-Control": "no-store",
+      "Content-Disposition": 'attachment; filename="aquarium-fish.png"',
       },
     });
   } catch {
@@ -391,7 +438,7 @@ app.post("/api/library/reload", (c) => {
 // ---- 魚ライブラリ: ファイルから直接放流 ----
 app.post("/api/library/:filename/release", async (c) => {
   const filename = decodeURIComponent(c.req.param("filename"));
-  const buf = getLibraryFileBuffer(filename);
+  const buf = await getLibraryFileBufferAsync(filename);
   if (!buf) return c.json({ error: "File not found" }, 404);
 
   const meta = readFishMeta(buf);
@@ -424,7 +471,7 @@ app.post("/api/library/:filename/release", async (c) => {
     pinnedLayerId: meta?.pinnedLayerId ?? undefined,
   };
 
-  const activeFish = releaseFish(config, sp);
+  const activeFish = releaseFish(config, sp, buf);
   broadcastToAll({ event: "fish_released", fish: activeFish });
   pushClientListToManagers();
 
@@ -474,7 +521,6 @@ app.get("/api/state", (c) => {
 app.get("/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
 
 // ---- ゲームループ起動 ----------------------------------------
-startGameLoop();
 startHeartbeatWatcher();
 
 // ---- Bun サーバー（HTTP + WS 統合） ------------------------
@@ -570,8 +616,22 @@ const server = Bun.serve({
   },
 });
 
+const flushBeforeExit = () => {
+  closeR2FilesystemMirror();
+  void flushR2FilesystemMirror().then(
+    () => process.exit(0),
+    (error) => {
+      console.error("[R2] Could not flush pending writes before exit:", error);
+      process.exit(1);
+    },
+  );
+};
+process.once("SIGTERM", flushBeforeExit);
+process.once("SIGINT", flushBeforeExit);
+
 // サーバー起動時に /data/fish/ から泳いでいる魚を復元
 restoreActiveFishFromDisk(getWorld().spawnPoints);
+startGameLoop();
 
 console.log(`[Server] Listening on http://0.0.0.0:${PORTS.HTTP}`);
 console.log(`[Server] WebSocket on ws://0.0.0.0:${PORTS.HTTP}/ws`);

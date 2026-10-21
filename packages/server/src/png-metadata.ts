@@ -41,6 +41,10 @@ export interface FishMeta {
   createdAt?: number;
   releasedAt?: number;
   archivedAt?: number;
+  senderId?: string;
+  logoScale?: number;
+  logoX?: number;
+  logoY?: number;
 }
 
 export const DEFAULT_FISH_META: FishMeta = {

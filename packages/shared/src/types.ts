@@ -33,6 +33,12 @@ export interface FishMeta {
   createdAt?: number;
   releasedAt?: number;
   archivedAt?: number;
+  /** Anonymous stable ID generated on the sending device. */
+  senderId?: string;
+  /** Logo placement baked into the artwork, normalized to image dimensions. */
+  logoScale?: number;
+  logoX?: number;
+  logoY?: number;
 }
 
 export type FishDirection = "auto" | "left" | "right";
