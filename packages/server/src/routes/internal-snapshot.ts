@@ -1,13 +1,22 @@
 import type { Context } from "hono";
-import type { WorldObject } from "@aquarium/shared";
+import type { ClientConfig, WorldObject } from "@aquarium/shared";
 import { LAYER_CONFIG } from "@aquarium/shared";
 import {
   getFishStateSnapshot,
-  restorePendingFishFromSnapshot,
-  validatePendingFishSnapshot,
+  mergeNewerFishPositionCheckpoint,
+  prepareFishSnapshotForRestore,
+  restorePreparedFishSnapshot,
 } from "../fish-manager";
-import { getWorld } from "../world";
-import { getCurrentBgUrl, getScene } from "../ws-handler";
+import { getWorld, prepareWorldStateSnapshot, restorePreparedWorldSnapshot } from "../world";
+import {
+  getCurrentBgUrl,
+  getScene,
+  getViewportSnapshot,
+  replaceScene,
+  restoreViewportSnapshot,
+  setCurrentBgUrl,
+} from "../ws-handler";
+import type { ViewportSnapshot } from "../ws-handler";
 
 const MAX_SNAPSHOT_BYTES = 8 * 1024 * 1024;
 
@@ -78,6 +87,24 @@ function parseScene(value: unknown): WorldObject[] | undefined {
   return result;
 }
 
+function parseViewports(input: unknown): ViewportSnapshot | undefined {
+  if (!isRecord(input) || Object.keys(input).length > 500) return undefined;
+  const viewports: ViewportSnapshot = {};
+  for (const [uuid, viewportValue] of Object.entries(input)) {
+    if (!uuid || uuid.length > 256 || !isRecord(viewportValue)) return undefined;
+    const { x, y, width, height, scale } = viewportValue;
+    if (
+      !isFiniteNumber(x) || Math.abs(x) > 1_000_000
+      || !isFiniteNumber(y) || Math.abs(y) > 1_000_000
+      || !isFiniteNumber(width) || width <= 0 || width > 100_000
+      || !isFiniteNumber(height) || height <= 0 || height > 100_000
+      || !isFiniteNumber(scale) || scale <= 0 || scale > 1_000
+    ) return undefined;
+    viewports[uuid] = { x, y, width, height, scale } satisfies ClientConfig["viewport"];
+  }
+  return viewports;
+}
+
 function jsonNoStore(c: Context, value: unknown, status: 200 | 400 | 413 | 500 = 200): Response {
   return c.json(value, status, { "Cache-Control": "no-store" });
 }
@@ -92,6 +119,7 @@ export function getInternalSnapshotRoute(c: Context): Response {
   }
   const world = getWorld();
   const scene = parseScene(getScene());
+  const viewports = getViewportSnapshot();
   const bgUrl = getCurrentBgUrl();
   if (
     !scene
@@ -141,10 +169,11 @@ export function getInternalSnapshotRoute(c: Context): Response {
     },
     fishLayers: LAYER_CONFIG.map(({ id, maxCount, scale, opacity, speedFactor, zIndex }) => ({ id, maxCount, scale, opacity, speedFactor, zIndex })),
     scene,
+    viewports,
   });
 }
 
-/** Restore only transient pending work; R2 remains authoritative for active fish and configuration. */
+/** Restore a validated full snapshot, with pending-only compatibility for older R2 seeds. */
 export async function postInternalSnapshotRoute(c: Context): Promise<Response> {
   const contentLength = Number(c.req.header("content-length"));
   if (Number.isFinite(contentLength) && contentLength > MAX_SNAPSHOT_BYTES) {
@@ -168,17 +197,52 @@ export async function postInternalSnapshotRoute(c: Context): Promise<Response> {
     || !isFiniteNumber(snapshot.savedAt)
   ) return jsonNoStore(c, { error: "Invalid snapshot envelope" }, 400);
 
-  const fishValidation = validatePendingFishSnapshot(snapshot);
-  if (!fishValidation || fishValidation.rejectedPendingFish > 0) {
-    return jsonNoStore(c, { error: "Snapshot contains invalid pending fish entries" }, 400);
+  let fishSnapshot: ReturnType<typeof prepareFishSnapshotForRestore>;
+  let worldSnapshot: ReturnType<typeof prepareWorldStateSnapshot>;
+  let scene: WorldObject[] | undefined;
+  let viewports: ViewportSnapshot | undefined;
+  let bgUrl: string | undefined;
+  try {
+    fishSnapshot = prepareFishSnapshotForRestore(snapshot);
+    if (fishSnapshot.rejectedActiveFish > 0 || fishSnapshot.rejectedPendingFish > 0) {
+      return jsonNoStore(c, { error: "Snapshot contains invalid fish entries" }, 400);
+    }
+
+    worldSnapshot = prepareWorldStateSnapshot(snapshot);
+    if (snapshot.scene !== undefined) {
+      scene = parseScene(snapshot.scene);
+      if (!scene) return jsonNoStore(c, { error: "Snapshot contains an invalid scene" }, 400);
+    }
+    if (snapshot.viewports !== undefined) {
+      viewports = parseViewports(snapshot.viewports);
+      if (!viewports) return jsonNoStore(c, { error: "Snapshot contains invalid viewports" }, 400);
+    }
+    if (isRecord(snapshot.settings) && snapshot.settings.bgUrl !== undefined) {
+      if (!isAssetReference(snapshot.settings.bgUrl, true)) {
+        return jsonNoStore(c, { error: "Snapshot contains an invalid background URL" }, 400);
+      }
+      bgUrl = snapshot.settings.bgUrl;
+    }
+  } catch {
+    return jsonNoStore(c, { error: "Snapshot contains invalid aquarium state" }, 400);
   }
 
-  const restoredFish = restorePendingFishFromSnapshot(snapshot);
+  const positionMerge = mergeNewerFishPositionCheckpoint(fishSnapshot.activeFish, snapshot.savedAt);
+
+  // All sections have been staged and validated before any live state is changed.
+  if (worldSnapshot) restorePreparedWorldSnapshot(worldSnapshot);
+  const restoredFish = restorePreparedFishSnapshot(fishSnapshot);
+  if (bgUrl !== undefined) setCurrentBgUrl(bgUrl);
+  if (scene !== undefined) replaceScene(scene);
+  if (viewports !== undefined) restoreViewportSnapshot(viewports);
 
   return jsonNoStore(c, {
     success: true,
     preservedActiveFish: restoredFish.preservedActiveFish,
+    restoredActiveFish: restoredFish.restoredActiveFish,
     restoredPendingFish: restoredFish.restoredPendingFish,
     savedAt: snapshot.savedAt,
+    positionCheckpointSavedAt: positionMerge.checkpointSavedAt ?? null,
+    positionsMergedFromCheckpoint: positionMerge.mergedPositions,
   });
 }

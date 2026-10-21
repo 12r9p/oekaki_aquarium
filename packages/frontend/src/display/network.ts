@@ -7,10 +7,11 @@ import {
   updateFishTargets,
   type FishEntry
 } from "./renderer/fish-renderer";
+import { LAYER_CONFIG } from "@aquarium/shared";
 import { renderSceneObjects, updateBackground } from "./renderer/scene-renderer";
 import { drawTestPattern, currentPattern, setDisplayNumber } from "./renderer/test-pattern-overlay";
 import { applyViewport } from "./renderer/viewport";
-import type { WsServerMessage, UdpPacket } from "@aquarium/shared";
+import type { ActiveFish, WsServerMessage, UdpFishData, UdpPacket } from "@aquarium/shared";
 import { Application } from "pixi.js";
 
 // ============================================================
@@ -21,9 +22,78 @@ import { Application } from "pixi.js";
 export const ws = createWsClient(`display:${DISPLAY_ID}`);
 
 export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) {
+  const applyFrame = (packet: UdpPacket): void => {
+    const receivedIds = new Set<string>();
+
+    for (const fd of packet.f) {
+      receivedIds.add(fd.i);
+      const screenX = (fd.x - STATE.VP.x) * STATE.scaleX;
+      const screenY = (fd.y - STATE.VP.y) * STATE.scaleY;
+      const inView = fd.x >= STATE.VP.x - 200 && fd.x <= STATE.VP.x + STATE.VP.width + 200 &&
+                     fd.y >= STATE.VP.y - 200 && fd.y <= STATE.VP.y + STATE.VP.height + 200;
+      if (!inView) { destroyFish(fishMap, fd.i); continue; }
+
+      const fishScale = fd.s * Math.min(STATE.scaleX, STATE.scaleY);
+
+      if (!fishMap.has(fd.i)) {
+        spawnFish(app, fishMap, fd, screenX, screenY, fishScale);
+      } else {
+        const entry = fishMap.get(fd.i)!;
+        updateFishTargets(entry, fd, screenX, screenY, fishScale);
+        if (fd.u && (!entry.textureReady || entry.textureUrl !== fd.u)) {
+          updateFishTexture(fd.i, fd.u, fishMap);
+        }
+      }
+    }
+    for (const id of fishMap.keys()) {
+      if (!receivedIds.has(id)) destroyFish(fishMap, id);
+    }
+  };
+
+  const createSnapshotFrame = (fish: ActiveFish[]): UdpPacket => ({
+    t: Date.now(),
+    e: [],
+    f: fish
+      .filter((item) => !item.isArchived && !item.isAutoHidden)
+      .map((item): UdpFishData => {
+        const layer = LAYER_CONFIG[item.layerIndex];
+        const vx = item.physics.vel.x;
+        const vy = item.physics.vel.y;
+        const direction = item.userParams.direction === "left" ? -1 : item.userParams.direction === "right" ? 1 : vx < 0 ? -1 : 1;
+        return {
+          i: item.id.slice(0, 8),
+          x: item.physics.pos.x,
+          y: item.physics.pos.y,
+          r: Math.max(-0.55, Math.min(0.55, Math.atan2(vy, Math.max(Math.abs(vx), 0.25)))),
+          s: item.targetScale,
+          o: item.targetOpacity,
+          z: layer?.zIndex ?? 50,
+          l: item.layerIndex,
+          u: item.textureUrl,
+          d: direction,
+          fx: item.userParams.flipX ?? false,
+          br: layer?.opacity ?? 1,
+          vx,
+        };
+      }),
+  });
+
   ws.onMessage((msg: WsServerMessage) => {
     if (msg.event === "reload_images") {
       location.reload();
+      return;
+    }
+
+    if (msg.event === "state_snapshot") {
+      if (msg.displayNumber !== undefined) document.title = `Display:${msg.displayNumber}`;
+      if (msg.viewport) updateStateVP(msg.viewport);
+      updateWorldSize(msg.worldW, msg.worldH);
+      updateLayers(msg.layers);
+      updateBackground(app, msg.bgUrl);
+      applyViewport(app);
+      renderSceneObjects(app, msg.scene);
+      if (currentPattern === "worldmap") drawTestPattern(app, "worldmap");
+      else if (currentPattern === "off") applyFrame(createSnapshotFrame(msg.activeFish));
       return;
     }
     // Viewport設定・更新
@@ -114,31 +184,7 @@ export function setupNetwork(app: Application, fishMap: Map<string, FishEntry>) 
     if (msg.event === "frame") {
       if (currentPattern !== "off") return;
       const packet = msg as unknown as { event: "frame" } & UdpPacket;
-      const receivedIds = new Set<string>();
-
-      for (const fd of packet.f) {
-        receivedIds.add(fd.i);
-        const screenX = (fd.x - STATE.VP.x) * STATE.scaleX;
-        const screenY = (fd.y - STATE.VP.y) * STATE.scaleY;
-        const inView = fd.x >= STATE.VP.x - 200 && fd.x <= STATE.VP.x + STATE.VP.width + 200 &&
-                       fd.y >= STATE.VP.y - 200 && fd.y <= STATE.VP.y + STATE.VP.height + 200;
-        if (!inView) { destroyFish(fishMap, fd.i); continue; }
-        
-        const fishScale = fd.s * Math.min(STATE.scaleX, STATE.scaleY);
-
-        if (!fishMap.has(fd.i)) {
-          spawnFish(app, fishMap, fd, screenX, screenY, fishScale);
-        } else {
-          const e = fishMap.get(fd.i)!;
-          updateFishTargets(e, fd, screenX, screenY, fishScale);
-          if (fd.u && (!e.textureReady || e.textureUrl !== fd.u)) {
-            updateFishTexture(fd.i, fd.u, fishMap);
-          }
-        }
-      }
-      for (const id of fishMap.keys()) {
-        if (!receivedIds.has(id)) destroyFish(fishMap, id);
-      }
+      applyFrame(packet);
       return;
     }
 

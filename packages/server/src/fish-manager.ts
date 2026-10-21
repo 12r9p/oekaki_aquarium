@@ -368,6 +368,14 @@ export interface RestorePendingFishResult {
   rejectedPendingFish: number;
 }
 
+/** A validated snapshot update. Missing activeFish means a legacy R2 seed. */
+export interface PreparedFishSnapshot {
+  activeFish?: ActiveFish[];
+  pendingFish: PendingFish[];
+  rejectedActiveFish: number;
+  rejectedPendingFish: number;
+}
+
 interface PreparedFishState {
   activeFish: ActiveFish[];
   pendingFish: PendingFish[];
@@ -421,6 +429,110 @@ export function validateFishStateSnapshot(snapshot: unknown): RestoreFishStateRe
     rejectedActiveFish: prepared.rejectedActiveFish,
     rejectedPendingFish: prepared.rejectedPendingFish,
   };
+}
+
+/** Parse a full snapshot, while accepting pending-only snapshots written by older R2 seeds. */
+export function prepareFishSnapshotForRestore(snapshot: unknown): PreparedFishSnapshot {
+  if (!isRecord(snapshot) || !Array.isArray(snapshot.pendingFish)) {
+    throw new TypeError("Invalid aquarium fish snapshot: pendingFish array is required");
+  }
+  if (snapshot.activeFish === undefined) {
+    const prepared = preparePendingFishSnapshot(snapshot);
+    return {
+      pendingFish: prepared.pendingFish,
+      rejectedActiveFish: 0,
+      rejectedPendingFish: prepared.rejectedPendingFish,
+    };
+  }
+
+  const prepared = prepareFishStateSnapshot(snapshot);
+  return {
+    activeFish: prepared.activeFish,
+    pendingFish: prepared.pendingFish,
+    rejectedActiveFish: prepared.rejectedActiveFish,
+    rejectedPendingFish: prepared.rejectedPendingFish,
+  };
+}
+
+/** Apply an already validated snapshot. Validation is deliberately separate so callers can
+ * stage every snapshot section before changing live fish state. */
+export function restorePreparedFishSnapshot(snapshot: PreparedFishSnapshot): {
+  preservedActiveFish: number;
+  restoredActiveFish: number;
+  restoredPendingFish: number;
+} {
+  const replacedActiveFish = snapshot.activeFish !== undefined;
+  const preservedActiveFish = replacedActiveFish ? 0 : activePool.size;
+
+  if (replacedActiveFish) {
+    activePool.clear();
+    for (const fish of snapshot.activeFish!) activePool.set(fish.id, fish);
+  }
+
+  pendingQueue.length = 0;
+  for (const fish of snapshot.pendingFish) {
+    // Editor locks belong to a running browser session, not to durable queue state.
+    delete fish.lockedBy;
+    pendingQueue.push(fish);
+  }
+
+  // Full snapshots carry the layer-derived values too. Preserve them exactly. Legacy R2
+  // snapshots omit activeFish, so recompute the preloaded fish after restoring any settings.
+  if (!replacedActiveFish) updateFishLayers(getAllActiveFish());
+
+  return {
+    preservedActiveFish,
+    restoredActiveFish: snapshot.activeFish?.length ?? 0,
+    restoredPendingFish: snapshot.pendingFish.length,
+  };
+}
+
+export interface PositionCheckpointMergeResult {
+  checkpointSavedAt?: number;
+  mergedPositions: number;
+}
+
+/**
+ * Apply a newer R2 position checkpoint to a prepared DO snapshot. Metadata and status stay
+ * with the DO snapshot; only the position/velocity values are merged by fish ID.
+ */
+export function mergeNewerFishPositionCheckpoint(
+  activeFish: ActiveFish[] | undefined,
+  snapshotSavedAt: number,
+): PositionCheckpointMergeResult {
+  if (!activeFish?.length) return { mergedPositions: 0 };
+
+  const checkpointPath = join(DATA_FISH_DIR, "..", "fish-positions.json");
+  try {
+    const checkpoint = JSON.parse(readFileSync(checkpointPath, "utf-8")) as unknown;
+    const now = Date.now();
+    if (
+      !isRecord(checkpoint)
+      || !isFiniteNumber(checkpoint.savedAt)
+      || checkpoint.savedAt <= snapshotSavedAt
+      || checkpoint.savedAt > now + 5 * 60 * 1000
+      || now - checkpoint.savedAt > 30 * 24 * 60 * 60 * 1000
+      || !isRecord(checkpoint.fish)
+    ) return { mergedPositions: 0 };
+
+    const checkpointFish = checkpoint.fish;
+    let mergedPositions = 0;
+    for (const fish of activeFish) {
+      const position = checkpointFish[fish.id];
+      if (
+        !isRecord(position)
+        || !isFiniteNumber(position.x) || !isFiniteNumber(position.y)
+        || !isFiniteNumber(position.vx) || !isFiniteNumber(position.vy)
+      ) continue;
+      fish.physics.pos = { x: position.x, y: position.y };
+      fish.physics.vel = { x: position.vx, y: position.vy };
+      mergedPositions++;
+    }
+    return { checkpointSavedAt: checkpoint.savedAt, mergedPositions };
+  } catch {
+    // Position checkpoints are optional; the validated DO snapshot remains usable.
+    return { mergedPositions: 0 };
+  }
 }
 
 /** Restore the transient queue while keeping R2-loaded active fish and their latest positions intact. */

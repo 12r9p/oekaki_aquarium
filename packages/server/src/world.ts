@@ -284,17 +284,31 @@ function parseSnapshotFishLayers(value: unknown): LayerConfig[] | undefined {
   return layers;
 }
 
-/** Restore persisted aquarium dimensions, world layers, and fish layer configuration. */
-export function restoreWorldStateFromSnapshot(snapshot: unknown): void {
-  if (!isRecord(snapshot) || !isRecord(snapshot.settings) || !isRecord(snapshot.settings.world)) {
-    throw new TypeError("Invalid aquarium world snapshot: settings.world is required");
+export interface PreparedWorldSnapshot {
+  settings: Partial<Omit<WorldConfig, "validZones">>;
+  fishLayers?: LayerConfig[];
+}
+
+/** Parse settings without changing process state, allowing callers to stage the full snapshot. */
+export function prepareWorldStateSnapshot(snapshot: unknown): PreparedWorldSnapshot | undefined {
+  if (!isRecord(snapshot)) throw new TypeError("Invalid aquarium world snapshot");
+
+  const hasFishLayers = snapshot.fishLayers !== undefined;
+  const fishLayers = hasFishLayers ? parseSnapshotFishLayers(snapshot.fishLayers) : undefined;
+  if (hasFishLayers && !fishLayers) throw new TypeError("Invalid aquarium world snapshot: fishLayers is invalid");
+
+  let worldSnapshot: Record<string, unknown> | undefined;
+  if (snapshot.settings !== undefined) {
+    if (!isRecord(snapshot.settings)) throw new TypeError("Invalid aquarium world snapshot: settings is invalid");
+    if (snapshot.settings.world !== undefined) {
+      if (!isRecord(snapshot.settings.world)) throw new TypeError("Invalid aquarium world snapshot: settings.world is invalid");
+      worldSnapshot = snapshot.settings.world;
+    }
   }
-  const worldSnapshot = snapshot.settings.world;
-  const fishLayers = parseSnapshotFishLayers(snapshot.fishLayers);
-  if (!fishLayers) throw new TypeError("Invalid aquarium world snapshot: fishLayers is invalid");
+  if (!worldSnapshot && !fishLayers) return undefined;
 
   const settings: Partial<Omit<WorldConfig, "validZones">> = {};
-  if (worldSnapshot.width !== undefined || worldSnapshot.height !== undefined) {
+  if (worldSnapshot && (worldSnapshot.width !== undefined || worldSnapshot.height !== undefined)) {
     if (
       !isFiniteNumber(worldSnapshot.width) || worldSnapshot.width <= 0 || worldSnapshot.width > 1_000_000
       || !isFiniteNumber(worldSnapshot.height) || worldSnapshot.height <= 0 || worldSnapshot.height > 1_000_000
@@ -303,7 +317,7 @@ export function restoreWorldStateFromSnapshot(snapshot: unknown): void {
     settings.height = worldSnapshot.height;
   }
 
-  if (worldSnapshot.forbiddenZones !== undefined) {
+  if (worldSnapshot?.forbiddenZones !== undefined) {
     if (!Array.isArray(worldSnapshot.forbiddenZones) || worldSnapshot.forbiddenZones.length > 10_000) {
       throw new TypeError("Invalid aquarium world snapshot: forbiddenZones is invalid");
     }
@@ -320,7 +334,7 @@ export function restoreWorldStateFromSnapshot(snapshot: unknown): void {
     settings.forbiddenZones = zones;
   }
 
-  if (worldSnapshot.spawnPoints !== undefined) {
+  if (worldSnapshot?.spawnPoints !== undefined) {
     if (!Array.isArray(worldSnapshot.spawnPoints) || worldSnapshot.spawnPoints.length > 10_000) {
       throw new TypeError("Invalid aquarium world snapshot: spawnPoints is invalid");
     }
@@ -334,35 +348,46 @@ export function restoreWorldStateFromSnapshot(snapshot: unknown): void {
     settings.spawnPoints = points;
   }
 
-  if (worldSnapshot.layers !== undefined) {
+  if (worldSnapshot?.layers !== undefined) {
     const layers = parseSnapshotWorldLayers(worldSnapshot.layers);
     if (!layers) throw new TypeError("Invalid aquarium world snapshot: layers is invalid");
     settings.layers = layers;
   }
 
-  if (worldSnapshot.horizontalBoundaryMode !== undefined) {
+  if (worldSnapshot?.horizontalBoundaryMode !== undefined) {
     if (worldSnapshot.horizontalBoundaryMode !== "bounce" && worldSnapshot.horizontalBoundaryMode !== "wrap") {
       throw new TypeError("Invalid aquarium world snapshot: horizontalBoundaryMode is invalid");
     }
     settings.horizontalBoundaryMode = worldSnapshot.horizontalBoundaryMode as HorizontalBoundaryMode;
   }
-  if (worldSnapshot.fishSpeedMultiplier !== undefined) {
+  if (worldSnapshot?.fishSpeedMultiplier !== undefined) {
     if (!isFiniteNumber(worldSnapshot.fishSpeedMultiplier)) throw new TypeError("Invalid aquarium world snapshot: fishSpeedMultiplier is invalid");
     settings.fishSpeedMultiplier = worldSnapshot.fishSpeedMultiplier;
   }
-  if (worldSnapshot.fishScaleMultiplier !== undefined) {
+  if (worldSnapshot?.fishScaleMultiplier !== undefined) {
     if (!isFiniteNumber(worldSnapshot.fishScaleMultiplier)) throw new TypeError("Invalid aquarium world snapshot: fishScaleMultiplier is invalid");
     settings.fishScaleMultiplier = worldSnapshot.fishScaleMultiplier;
   }
-  if (worldSnapshot.motionSettings !== undefined) {
+  if (worldSnapshot?.motionSettings !== undefined) {
     const motionSettings = parseSnapshotMotionSettings(worldSnapshot.motionSettings);
     if (!motionSettings) throw new TypeError("Invalid aquarium world snapshot: motionSettings is invalid");
     settings.motionSettings = motionSettings;
   }
 
+  return { settings, ...(fishLayers === undefined ? {} : { fishLayers }) };
+}
+
+/** Apply a previously validated world snapshot. */
+export function restorePreparedWorldSnapshot(snapshot: PreparedWorldSnapshot): void {
   // Update the fish layer source first, then restore saved app-layer visibility and ordering.
-  updateFishLayerConfig(fishLayers);
-  restoreWorldSettings(settings);
+  if (snapshot.fishLayers) updateFishLayerConfig(snapshot.fishLayers);
+  restoreWorldSettings(snapshot.settings);
+}
+
+/** Restore persisted aquarium dimensions, world layers, and fish layer configuration. */
+export function restoreWorldStateFromSnapshot(snapshot: unknown): void {
+  const prepared = prepareWorldStateSnapshot(snapshot);
+  if (prepared) restorePreparedWorldSnapshot(prepared);
 }
 
 function updateFishLayersInAppLayers(): void {

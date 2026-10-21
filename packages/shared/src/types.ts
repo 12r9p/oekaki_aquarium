@@ -299,21 +299,30 @@ export interface UdpEvent {
 // WebSocket メッセージ型
 // -------------------------------------------------------
 export type WsClientMessage =
-  | { event: "register"; uuid: string; hardware: { w: number; h: number }; lastRevision?: number }
+  | {
+      event: "register";
+      uuid: string;
+      hardware: { w: number; h: number };
+      lastRevision?: number;
+      lastRevisionEpoch?: string;
+      lastRevisionSequence?: number;
+      lastFrameEpoch?: string;
+      lastFrameSequence?: number;
+    }
+  | {
+      /** サーバー状態のrevisionに欠落があった場合、最新snapshotを要求する */
+      event: "sync_request";
+      lastRevision?: number;
+      lastRevisionEpoch?: string;
+      lastRevisionSequence?: number;
+    }
   | { event: "heartbeat"; fps: number; sentAt?: number }
   | { event: "ping_response"; sentAt: number }
   | { event: "spawn_food"; x: number; y: number }
   /** 管理画面がドラッグ中にリアルタイムでdisplayへViewportを仮送信する */
   | { event: "viewport_preview"; displayUuid: string; viewport: ClientConfig["viewport"] }
-  /** 管理画面からの永続Viewport更新 / Display側のドラッグ確定時 */
-  | { event: "update_viewport"; clientInfo: ClientConfig }
   /** 管理画面でマウスホバー中の座標（ワールド座標）を送信する */
-  | { event: "pointer_move"; x: number; y: number }
-  /** 管理画面から全クライアントのWorldサイズを更新する */
-  | { event: "update_world_size"; width: number; height: number }
-  // -------------------------
-  // 以下のイベントで、BackgroundとForbiddenZoneを一括で同期する
-  | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; fishScaleMultiplier?: number; motionSettings?: MotionSettings };
+  | { event: "pointer_move"; x: number; y: number };
 
 export type WsServerMessage = (
   | {
@@ -361,6 +370,30 @@ export type WsServerMessage = (
       motionSettings?: MotionSettings;
       systemMetrics?: SystemMetrics;
     }
+  /** 接続直後や同期欠落時に送る、全クライアント共通の最新状態スナップショット */
+  | {
+      event: "state_snapshot";
+      clients: DisplayClientInfo[];
+      activeFish: ActiveFish[];
+      pendingFish: PendingFish[];
+      worldW: number;
+      worldH: number;
+      bgUrl: string;
+      forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[];
+      spawnPoints: { id: string; x: number; y: number }[];
+      layers: AppLayerConfig[];
+      fishLayers: LayerConfig[];
+      horizontalBoundaryMode: HorizontalBoundaryMode;
+      fishSpeedMultiplier: number;
+      fishScaleMultiplier: number;
+      motionSettings: MotionSettings;
+      systemMetrics: SystemMetrics;
+      scene: WorldObject[];
+      viewport?: ClientConfig["viewport"];
+      debug?: ClientConfig["debug"];
+      displayNumber?: number;
+      frameSequence: number;
+    }
   /** WebSocketによる背景 / 禁止エリア のブロードキャスト更新通知 */
   | { event: "update_world_config"; bgUrl: string; forbiddenZones: { id: string; x: number; y: number; width: number; height: number }[]; spawnPoints: { id: string; x: number; y: number }[]; layers?: AppLayerConfig[]; horizontalBoundaryMode?: HorizontalBoundaryMode; fishSpeedMultiplier?: number; fishScaleMultiplier?: number; motionSettings?: MotionSettings }
   /** display クライアントへテストパターン表示指示 */
@@ -379,7 +412,17 @@ export type WsServerMessage = (
   | { event: "pointer_move"; x: number; y: number }
   /** 全クライアント向けWorld サイズ更新 */
   | { event: "update_world_size"; width: number; height: number }
-) & { revision?: number };
+) & {
+  /** Cloudflare DOが管理する状態revision */
+  revision?: number;
+  /** サーバープロセスの世代。再起動時はrevision/sequenceをsnapshotから再同期する */
+  revisionEpoch?: string;
+  /** クライアントごとの同期メッセージ連番 */
+  revisionSequence?: number;
+  /** 位置フレーム専用の世代・連番。revisionとは独立している */
+  frameEpoch?: string;
+  frameSequence?: number;
+};
 
 /** テストパターンの種類 */
 export type TestPattern = "off" | "identify" | "gradient" | "grid" | "colorbars" | "white" | "black" | "crosshair" | "worldmap" | "calibration";
