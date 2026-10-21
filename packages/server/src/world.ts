@@ -1,4 +1,4 @@
-import type { ClientConfig, AppLayerConfig, HorizontalBoundaryMode, MotionSettings } from "@aquarium/shared";
+import type { ClientConfig, AppLayerConfig, HorizontalBoundaryMode, LayerConfig, MotionSettings, MotionTypeProfile, FishType } from "@aquarium/shared";
 import { DEFAULT_WORLD, LAYER_CONFIG, replaceLayerConfig } from "@aquarium/shared";
 
 // ============================================================
@@ -162,6 +162,232 @@ export function restoreWorldSettings(settings: Partial<Omit<WorldConfig, "validZ
 export function updateFishLayerConfig(layers: import("@aquarium/shared").LayerConfig[]): void {
   replaceLayerConfig(layers);
   updateFishLayersInAppLayers();
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === "number" && Number.isFinite(value);
+}
+
+function parseSnapshotWorldLayers(value: unknown): AppLayerConfig[] | undefined {
+  if (!Array.isArray(value) || value.length > 10_000) return undefined;
+  const layers: AppLayerConfig[] = [];
+  for (const layer of value) {
+    if (
+      !isRecord(layer)
+      || typeof layer.id !== "string" || layer.id.length === 0 || layer.id.length > 200
+      || typeof layer.name !== "string" || layer.name.length > 500
+      || (layer.type !== "image" && layer.type !== "fish" && layer.type !== "foreground")
+      || !isFiniteNumber(layer.zIndex)
+      || typeof layer.visible !== "boolean"
+      || !isFiniteNumber(layer.opacity) || layer.opacity < 0 || layer.opacity > 1
+      || (layer.url !== undefined && (typeof layer.url !== "string" || layer.url.length > 4096 || /^data:|^blob:/i.test(layer.url)))
+      || (layer.x !== undefined && !isFiniteNumber(layer.x))
+      || (layer.y !== undefined && !isFiniteNumber(layer.y))
+      || (layer.width !== undefined && (!isFiniteNumber(layer.width) || layer.width < 0))
+      || (layer.height !== undefined && (!isFiniteNumber(layer.height) || layer.height < 0))
+      || (layer.aspectRatioLocked !== undefined && typeof layer.aspectRatioLocked !== "boolean")
+    ) return undefined;
+    layers.push({
+      id: layer.id,
+      name: layer.name,
+      type: layer.type,
+      zIndex: layer.zIndex,
+      visible: layer.visible,
+      opacity: layer.opacity,
+      ...(layer.url === undefined ? {} : { url: layer.url as string }),
+      ...(layer.x === undefined ? {} : { x: layer.x as number }),
+      ...(layer.y === undefined ? {} : { y: layer.y as number }),
+      ...(layer.width === undefined ? {} : { width: layer.width as number }),
+      ...(layer.height === undefined ? {} : { height: layer.height as number }),
+      ...(layer.aspectRatioLocked === undefined ? {} : { aspectRatioLocked: layer.aspectRatioLocked as boolean }),
+    });
+  }
+  return layers;
+}
+
+function parseSnapshotMotionSettings(value: unknown): MotionSettings | undefined {
+  if (!isRecord(value) || !isFiniteNumber(value.verticalSpread) || !isFiniteNumber(value.turnStrength)) return undefined;
+  let typeProfiles: MotionSettings["typeProfiles"];
+  if (value.typeProfiles !== undefined) {
+    if (!isRecord(value.typeProfiles)) return undefined;
+    const profiles: Partial<Record<FishType, MotionTypeProfile>> = {};
+    const knownTypes = new Set<FishType>(["anchor", "tuna", "school", "squid", "jellyfish", "shark", "custom"]);
+    for (const [type, profile] of Object.entries(value.typeProfiles)) {
+      if (!knownTypes.has(type as FishType)) continue;
+      if (!isRecord(profile)) return undefined;
+      const keys = ["speedMultiplier", "verticalSpread", "turnStrength", "tailBeat", "glide"] as const;
+      if (keys.some((key) => profile[key] !== undefined && !isFiniteNumber(profile[key]))) return undefined;
+      profiles[type as FishType] = {
+        speedMultiplier: isFiniteNumber(profile.speedMultiplier) ? profile.speedMultiplier : 1,
+        verticalSpread: isFiniteNumber(profile.verticalSpread) ? profile.verticalSpread : 1,
+        turnStrength: isFiniteNumber(profile.turnStrength) ? profile.turnStrength : 1,
+        tailBeat: isFiniteNumber(profile.tailBeat) ? profile.tailBeat : 1,
+        glide: isFiniteNumber(profile.glide) ? profile.glide : 1,
+      };
+    }
+    typeProfiles = profiles;
+  }
+
+  if (value.customCode !== undefined && typeof value.customCode !== "string") return undefined;
+  if (value.currentCustomPresetId !== undefined && typeof value.currentCustomPresetId !== "string") return undefined;
+  let customPresets: MotionSettings["customPresets"];
+  if (value.customPresets !== undefined) {
+    if (!Array.isArray(value.customPresets) || value.customPresets.length > 50) return undefined;
+    customPresets = [];
+    for (const preset of value.customPresets) {
+      if (
+        !isRecord(preset)
+        || typeof preset.id !== "string"
+        || typeof preset.name !== "string"
+        || typeof preset.code !== "string"
+      ) return undefined;
+      customPresets.push({ id: preset.id, name: preset.name, code: preset.code });
+    }
+  }
+
+  return {
+    verticalSpread: value.verticalSpread,
+    turnStrength: value.turnStrength,
+    ...(typeProfiles === undefined ? {} : { typeProfiles }),
+    ...(value.customCode === undefined ? {} : { customCode: value.customCode as string }),
+    ...(customPresets === undefined ? {} : { customPresets }),
+    ...(value.currentCustomPresetId === undefined ? {} : { currentCustomPresetId: value.currentCustomPresetId as string }),
+  };
+}
+
+function parseSnapshotFishLayers(value: unknown): LayerConfig[] | undefined {
+  if (!Array.isArray(value) || value.length === 0 || value.length > 1000) return undefined;
+  const layers: LayerConfig[] = [];
+  for (const layer of value) {
+    if (
+      !isRecord(layer)
+      || !isFiniteNumber(layer.id) || !Number.isInteger(layer.id)
+      || !isFiniteNumber(layer.maxCount) || layer.maxCount <= 0
+      || !isFiniteNumber(layer.scale)
+      || !isFiniteNumber(layer.opacity)
+      || !isFiniteNumber(layer.speedFactor)
+      || !isFiniteNumber(layer.zIndex)
+    ) return undefined;
+    layers.push({
+      id: layer.id,
+      maxCount: layer.maxCount,
+      scale: layer.scale,
+      opacity: layer.opacity,
+      speedFactor: layer.speedFactor,
+      zIndex: layer.zIndex,
+    });
+  }
+  return layers;
+}
+
+export interface PreparedWorldSnapshot {
+  settings: Partial<Omit<WorldConfig, "validZones">>;
+  fishLayers?: LayerConfig[];
+}
+
+/** Parse settings without changing process state, allowing callers to stage the full snapshot. */
+export function prepareWorldStateSnapshot(snapshot: unknown): PreparedWorldSnapshot | undefined {
+  if (!isRecord(snapshot)) throw new TypeError("Invalid aquarium world snapshot");
+
+  const hasFishLayers = snapshot.fishLayers !== undefined;
+  const fishLayers = hasFishLayers ? parseSnapshotFishLayers(snapshot.fishLayers) : undefined;
+  if (hasFishLayers && !fishLayers) throw new TypeError("Invalid aquarium world snapshot: fishLayers is invalid");
+
+  let worldSnapshot: Record<string, unknown> | undefined;
+  if (snapshot.settings !== undefined) {
+    if (!isRecord(snapshot.settings)) throw new TypeError("Invalid aquarium world snapshot: settings is invalid");
+    if (snapshot.settings.world !== undefined) {
+      if (!isRecord(snapshot.settings.world)) throw new TypeError("Invalid aquarium world snapshot: settings.world is invalid");
+      worldSnapshot = snapshot.settings.world;
+    }
+  }
+  if (!worldSnapshot && !fishLayers) return undefined;
+
+  const settings: Partial<Omit<WorldConfig, "validZones">> = {};
+  if (worldSnapshot && (worldSnapshot.width !== undefined || worldSnapshot.height !== undefined)) {
+    if (
+      !isFiniteNumber(worldSnapshot.width) || worldSnapshot.width <= 0 || worldSnapshot.width > 1_000_000
+      || !isFiniteNumber(worldSnapshot.height) || worldSnapshot.height <= 0 || worldSnapshot.height > 1_000_000
+    ) throw new TypeError("Invalid aquarium world snapshot: width and height must be positive finite numbers");
+    settings.width = worldSnapshot.width;
+    settings.height = worldSnapshot.height;
+  }
+
+  if (worldSnapshot?.forbiddenZones !== undefined) {
+    if (!Array.isArray(worldSnapshot.forbiddenZones) || worldSnapshot.forbiddenZones.length > 10_000) {
+      throw new TypeError("Invalid aquarium world snapshot: forbiddenZones is invalid");
+    }
+    const zones: WorldConfig["forbiddenZones"] = [];
+    for (const zone of worldSnapshot.forbiddenZones) {
+      if (
+        !isRecord(zone) || typeof zone.id !== "string"
+        || !isFiniteNumber(zone.x) || !isFiniteNumber(zone.y)
+        || !isFiniteNumber(zone.width) || zone.width < 0
+        || !isFiniteNumber(zone.height) || zone.height < 0
+      ) throw new TypeError("Invalid aquarium world snapshot: forbidden zone is invalid");
+      zones.push({ id: zone.id, x: zone.x, y: zone.y, width: zone.width, height: zone.height });
+    }
+    settings.forbiddenZones = zones;
+  }
+
+  if (worldSnapshot?.spawnPoints !== undefined) {
+    if (!Array.isArray(worldSnapshot.spawnPoints) || worldSnapshot.spawnPoints.length > 10_000) {
+      throw new TypeError("Invalid aquarium world snapshot: spawnPoints is invalid");
+    }
+    const points: WorldConfig["spawnPoints"] = [];
+    for (const point of worldSnapshot.spawnPoints) {
+      if (!isRecord(point) || typeof point.id !== "string" || !isFiniteNumber(point.x) || !isFiniteNumber(point.y)) {
+        throw new TypeError("Invalid aquarium world snapshot: spawn point is invalid");
+      }
+      points.push({ id: point.id, x: point.x, y: point.y });
+    }
+    settings.spawnPoints = points;
+  }
+
+  if (worldSnapshot?.layers !== undefined) {
+    const layers = parseSnapshotWorldLayers(worldSnapshot.layers);
+    if (!layers) throw new TypeError("Invalid aquarium world snapshot: layers is invalid");
+    settings.layers = layers;
+  }
+
+  if (worldSnapshot?.horizontalBoundaryMode !== undefined) {
+    if (worldSnapshot.horizontalBoundaryMode !== "bounce" && worldSnapshot.horizontalBoundaryMode !== "wrap") {
+      throw new TypeError("Invalid aquarium world snapshot: horizontalBoundaryMode is invalid");
+    }
+    settings.horizontalBoundaryMode = worldSnapshot.horizontalBoundaryMode as HorizontalBoundaryMode;
+  }
+  if (worldSnapshot?.fishSpeedMultiplier !== undefined) {
+    if (!isFiniteNumber(worldSnapshot.fishSpeedMultiplier)) throw new TypeError("Invalid aquarium world snapshot: fishSpeedMultiplier is invalid");
+    settings.fishSpeedMultiplier = worldSnapshot.fishSpeedMultiplier;
+  }
+  if (worldSnapshot?.fishScaleMultiplier !== undefined) {
+    if (!isFiniteNumber(worldSnapshot.fishScaleMultiplier)) throw new TypeError("Invalid aquarium world snapshot: fishScaleMultiplier is invalid");
+    settings.fishScaleMultiplier = worldSnapshot.fishScaleMultiplier;
+  }
+  if (worldSnapshot?.motionSettings !== undefined) {
+    const motionSettings = parseSnapshotMotionSettings(worldSnapshot.motionSettings);
+    if (!motionSettings) throw new TypeError("Invalid aquarium world snapshot: motionSettings is invalid");
+    settings.motionSettings = motionSettings;
+  }
+
+  return { settings, ...(fishLayers === undefined ? {} : { fishLayers }) };
+}
+
+/** Apply a previously validated world snapshot. */
+export function restorePreparedWorldSnapshot(snapshot: PreparedWorldSnapshot): void {
+  // Update the fish layer source first, then restore saved app-layer visibility and ordering.
+  if (snapshot.fishLayers) updateFishLayerConfig(snapshot.fishLayers);
+  restoreWorldSettings(snapshot.settings);
+}
+
+/** Restore persisted aquarium dimensions, world layers, and fish layer configuration. */
+export function restoreWorldStateFromSnapshot(snapshot: unknown): void {
+  const prepared = prepareWorldStateSnapshot(snapshot);
+  if (prepared) restorePreparedWorldSnapshot(prepared);
 }
 
 function updateFishLayersInAppLayers(): void {

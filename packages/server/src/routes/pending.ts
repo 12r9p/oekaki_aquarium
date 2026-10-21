@@ -1,5 +1,6 @@
 import type { Context } from "hono";
 import { getPendingQueue, lockPending, unlockPending } from "../fish-manager";
+import { fingerprintCommand, readCommandId, runIdempotentCommand } from "./command-idempotency";
 
 // GET /api/pending — 待機魚一覧を返す
 export async function pendingRoute(c: Context): Promise<Response> {
@@ -8,17 +9,33 @@ export async function pendingRoute(c: Context): Promise<Response> {
 
 // POST /api/pending/lock — 排他ロック取得
 export async function lockRoute(c: Context): Promise<Response> {
-  const { fishId, editorUuid } = await c.req.json<{ fishId: string; editorUuid: string }>();
-  const fish = lockPending(fishId, editorUuid);
-  if (!fish) {
-    return c.json({ error: "Fish not found or already locked" }, 409);
-  }
-  return c.json({ success: true, fish });
+  const { fishId, editorUuid, commandId: bodyCommandId } = await c.req.json<{
+    fishId: string;
+    editorUuid: string;
+    commandId?: string;
+  }>();
+  const parsedCommandId = readCommandId(c, bodyCommandId);
+  if ("error" in parsedCommandId) return parsedCommandId.error;
+  const fingerprint = await fingerprintCommand({ route: "pending-lock", fishId, editorUuid });
+
+  return runIdempotentCommand(c, parsedCommandId.commandId, fingerprint, () => {
+    const fish = lockPending(fishId, editorUuid);
+    if (!fish) {
+      return c.json({ error: "Fish not found or already locked" }, 409);
+    }
+    return c.json({ success: true, fish });
+  });
 }
 
 // POST /api/pending/unlock — ロック解除
 export async function unlockRoute(c: Context): Promise<Response> {
-  const { fishId } = await c.req.json<{ fishId: string }>();
-  unlockPending(fishId);
-  return c.json({ success: true });
+  const { fishId, commandId: bodyCommandId } = await c.req.json<{ fishId: string; commandId?: string }>();
+  const parsedCommandId = readCommandId(c, bodyCommandId);
+  if ("error" in parsedCommandId) return parsedCommandId.error;
+  const fingerprint = await fingerprintCommand({ route: "pending-unlock", fishId });
+
+  return runIdempotentCommand(c, parsedCommandId.commandId, fingerprint, () => {
+    unlockPending(fishId);
+    return c.json({ success: true });
+  });
 }

@@ -2,7 +2,7 @@ import { Hono } from "hono";
 import { serve } from "bun";
 import { cors } from "hono/cors";
 import { join } from "node:path";
-import { mkdirSync, readFileSync, unlinkSync } from "node:fs";
+import { mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { Buffer } from "node:buffer";
 import { LAYER_CONFIG, PORTS } from "@aquarium/shared";
 import type { FishConfig, FishType, LayerConfig } from "@aquarium/shared";
@@ -22,9 +22,12 @@ import {
   addSceneObject,
   updateSceneObject,
   deleteSceneObject,
+  refreshRevisionWatermark,
+  isDisplaySessionAuthorized,
 } from "./ws-handler";
 
 import { scanRoute } from "./routes/scan";
+import { getInternalSnapshotRoute, postInternalSnapshotRoute } from "./routes/internal-snapshot";
 import { pendingRoute, lockRoute, unlockRoute } from "./routes/pending";
 import { releaseRoute } from "./routes/release";
 import { pinRoute } from "./routes/pin";
@@ -38,15 +41,18 @@ import {
   removeFish,
   updateFishParams,
   removePendingFish,
+  updatePendingArtwork,
   duplicateFish,
   redistributeFish,
 } from "./fish-manager";
 import { getWorld, updateFishLayerConfig, updateWorldMotionSettings } from "./world";
-import { loadFishLibrary, getLibraryFileBuffer, DATA_FISH_DIR } from "./fish-library";
+import { loadFishLibrary, getLibraryFileBuffer, getLibraryFileBufferAsync, DATA_FISH_DIR } from "./fish-library";
 import { readFishMeta, writeFishMeta, DEFAULT_FISH_META } from "./png-metadata";
 import { updatePersistedSettings } from "./settings-store";
 import { updateFishLayers } from "./layer-manager";
 import { getSystemMetrics } from "./system-metrics";
+import { closeR2FilesystemMirror, flushR2FilesystemMirror, startR2FilesystemMirror } from "./r2-persistence";
+import { worldSettingsRoute } from "./routes/world-settings";
 
 // ============================================================
 // サーバーエントリーポイント（Bun 単一ポート統合版）
@@ -64,6 +70,44 @@ const APP_DIR = join(import.meta.dir, "..", "public", "app");
 mkdirSync(PUBLIC_IMAGES_DIR, { recursive: true });
 mkdirSync(SCENE_IMAGES_DIR, { recursive: true });
 mkdirSync(DATA_FISH_DIR, { recursive: true }); // /data/fish/ を初期化
+startR2FilesystemMirror();
+
+const ACCESS_IDENTITY_HEADER = "X-Aquarium-Access-Identity";
+const allowUntrustedWs = () => process.env.AQUARIUM_ALLOW_UNTRUSTED_WS === "true";
+
+interface AccessIdentity {
+  subject: string;
+  roles: string[];
+  expiresAt: number;
+}
+
+function readAccessIdentity(request: Request): AccessIdentity | null {
+  const encoded = request.headers.get(ACCESS_IDENTITY_HEADER);
+  if (!encoded) return null;
+
+  try {
+    const identity = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8")) as Partial<AccessIdentity>;
+    if (
+      typeof identity.subject !== "string" ||
+      !Array.isArray(identity.roles) ||
+      !identity.roles.every((role) => typeof role === "string") ||
+      typeof identity.expiresAt !== "number" ||
+      !Number.isFinite(identity.expiresAt) ||
+      identity.expiresAt <= Math.floor(Date.now() / 1000)
+    ) {
+      return null;
+    }
+    return { subject: identity.subject, roles: identity.roles, expiresAt: identity.expiresAt };
+  } catch {
+    return null;
+  }
+}
+
+function hasManagementAccess(request: Request): boolean {
+  const identity = readAccessIdentity(request);
+  if (identity) return identity.roles.includes("manage") || identity.roles.includes("admin");
+  return allowUntrustedWs();
+}
 
 const app = new Hono();
 app.use("*", cors({ origin: "*" }));
@@ -74,6 +118,7 @@ app.get("/api/pending",         pendingRoute);
 app.post("/api/pending/lock",   lockRoute);
 app.post("/api/pending/unlock", unlockRoute);
 app.post("/api/release",        releaseRoute);
+app.put("/api/world/settings",  (c) => worldSettingsRoute(c, hasManagementAccess(c.req.raw)));
 app.post("/api/fish/:id/pin",   pinRoute);
 
 // 魚削除（管理画面用）
@@ -257,10 +302,42 @@ app.delete("/api/pending/:id", (c) => {
   return c.json({ success: ok });
 });
 
+// The controller composes the logo on-device, then persists the final PNG before release.
+app.put("/api/pending/:id/artwork", async (c) => {
+  const form = await c.req.formData();
+  const image = form.get("image");
+  if (!(image instanceof File) || image.type !== "image/png") return c.json({ error: "PNG artwork is required" }, 400);
+
+  let meta: import("./png-metadata").FishMeta;
+  try {
+    meta = { ...DEFAULT_FISH_META, ...JSON.parse(String(form.get("meta") ?? "{}")) };
+  } catch {
+    return c.json({ error: "Invalid fish metadata" }, 400);
+  }
+
+  const bytes = Buffer.from(await image.arrayBuffer());
+  if (!bytes.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+    return c.json({ error: "Invalid PNG" }, 400);
+  }
+  const filename = `artwork_${crypto.randomUUID()}.png`;
+  writeFileSync(join(PUBLIC_IMAGES_DIR, filename), writeFishMeta(bytes, meta));
+  const fish = updatePendingArtwork(c.req.param("id"), `/images/${filename}`, meta);
+  if (!fish) {
+    unlinkSync(join(PUBLIC_IMAGES_DIR, filename));
+    return c.json({ error: "Pending fish not found" }, 404);
+  }
+  pushClientListToManagers();
+  return c.json({ success: true, fish });
+});
+
 // Viewport 設定（display クライアントのViewportをサーバー側に保持しつつ更新）
 app.put("/api/clients/:uuid/viewport", async (c) => {
+  const identity = readAccessIdentity(c.req.raw);
   // クライアント側で encodeURIComponent されているため、ここでデコードして元のUUIDに戻す
   const uuid = decodeURIComponent(c.req.param("uuid"));
+  const authorized = hasManagementAccess(c.req.raw) ||
+    (identity !== null && identity.roles.includes("display") && isDisplaySessionAuthorized(identity.subject, uuid));
+  if (!authorized) return c.json({ error: "Forbidden" }, 403);
   const vp = await c.req.json();
   const ok = updateDisplayViewport(uuid, vp);
   return c.json({ success: ok });
@@ -268,6 +345,7 @@ app.put("/api/clients/:uuid/viewport", async (c) => {
 
 // テストパターン送信（管理画面から）
 app.post("/api/clients/test-pattern", async (c) => {
+  if (!hasManagementAccess(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
   const { pattern, targetUuid } = await c.req.json() as { pattern: string; targetUuid?: string };
   sendTestPattern(pattern as Parameters<typeof sendTestPattern>[0], targetUuid);
   return c.json({ success: true });
@@ -348,7 +426,22 @@ app.get("/api/gallery", async (c) => {
 
 // PNGへ魚パラメーターを埋め込み、ダウンロード用ファイルとして返す。
 app.post("/api/png/configure", async (c) => {
-  const { imageUrl, meta } = await c.req.json<{ imageUrl: string; meta: Partial<import("./png-metadata").FishMeta> }>();
+  const { imageUrl, imageData, meta } = await c.req.json<{ imageUrl?: string; imageData?: string; meta: Partial<import("./png-metadata").FishMeta> }>();
+  if (imageData?.startsWith("data:image/png;base64,")) {
+    try {
+      const source = Buffer.from(imageData.slice("data:image/png;base64,".length), "base64");
+      const configured = writeFishMeta(source, { ...DEFAULT_FISH_META, ...meta });
+      return new Response(configured, {
+        headers: {
+          "Content-Type": "image/png",
+          "Cache-Control": "no-store",
+          "Content-Disposition": 'attachment; filename="aquarium-fish.png"',
+        },
+      });
+    } catch {
+      return c.json({ error: "Could not configure PNG" }, 400);
+    }
+  }
   let sourcePath: string | null = null;
   if (imageUrl?.startsWith("/images/")) sourcePath = join(PUBLIC_IMAGES_DIR, imageUrl.slice("/images/".length));
   if (imageUrl?.startsWith("/lib-images/")) sourcePath = join(DATA_FISH_DIR, decodeURIComponent(imageUrl.slice("/lib-images/".length)));
@@ -358,7 +451,8 @@ app.post("/api/png/configure", async (c) => {
     return new Response(configured, {
       headers: {
         "Content-Type": "image/png",
-        "Content-Disposition": 'attachment; filename="aquarium-fish.png"',
+      "Cache-Control": "no-store",
+      "Content-Disposition": 'attachment; filename="aquarium-fish.png"',
       },
     });
   } catch {
@@ -391,7 +485,7 @@ app.post("/api/library/reload", (c) => {
 // ---- 魚ライブラリ: ファイルから直接放流 ----
 app.post("/api/library/:filename/release", async (c) => {
   const filename = decodeURIComponent(c.req.param("filename"));
-  const buf = getLibraryFileBuffer(filename);
+  const buf = await getLibraryFileBufferAsync(filename);
   if (!buf) return c.json({ error: "File not found" }, 404);
 
   const meta = readFishMeta(buf);
@@ -424,7 +518,7 @@ app.post("/api/library/:filename/release", async (c) => {
     pinnedLayerId: meta?.pinnedLayerId ?? undefined,
   };
 
-  const activeFish = releaseFish(config, sp);
+  const activeFish = releaseFish(config, sp, buf);
   broadcastToAll({ event: "fish_released", fish: activeFish });
   pushClientListToManagers();
 
@@ -471,10 +565,14 @@ app.get("/api/state", (c) => {
   });
 });
 
+// Worker Durable Object internal state transfer. These paths are called only
+// over the Container loopback and are not part of the public /api surface.
+app.get("/__internal/snapshot", getInternalSnapshotRoute);
+app.post("/__internal/snapshot", postInternalSnapshotRoute);
+
 app.get("/health", (c) => c.json({ status: "ok", timestamp: Date.now() }));
 
 // ---- ゲームループ起動 ----------------------------------------
-startGameLoop();
 startHeartbeatWatcher();
 
 // ---- Bun サーバー（HTTP + WS 統合） ------------------------
@@ -487,13 +585,25 @@ const server = Bun.serve({
 
   async fetch(req, server) {
     const url = new URL(req.url);
+    const revisionHeader = req.headers.get("X-Aquarium-Revision");
+    if (revisionHeader !== null && /^\d+$/.test(revisionHeader)) {
+      const revision = Number(revisionHeader);
+      if (Number.isSafeInteger(revision)) refreshRevisionWatermark(revision);
+    }
 
     // WS アップグレード
     if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
+      const accessIdentity = readAccessIdentity(req);
       const ok = server.upgrade(req, {
         data: {
           uuid: "",
           clientType: "",
+          accessAuthenticated: accessIdentity !== null,
+          accessSubject: accessIdentity?.subject ?? null,
+          accessRoles: accessIdentity?.roles ?? [],
+          accessExpiresAt: accessIdentity?.expiresAt ?? null,
+          revisionSequence: 0,
+          frameSequence: 0,
           lastHeartbeat: Date.now(),
           screenW: 0,
           screenH: 0,
@@ -570,8 +680,22 @@ const server = Bun.serve({
   },
 });
 
+const flushBeforeExit = () => {
+  closeR2FilesystemMirror();
+  void flushR2FilesystemMirror().then(
+    () => process.exit(0),
+    (error) => {
+      console.error("[R2] Could not flush pending writes before exit:", error);
+      process.exit(1);
+    },
+  );
+};
+process.once("SIGTERM", flushBeforeExit);
+process.once("SIGINT", flushBeforeExit);
+
 // サーバー起動時に /data/fish/ から泳いでいる魚を復元
 restoreActiveFishFromDisk(getWorld().spawnPoints);
+startGameLoop();
 
 console.log(`[Server] Listening on http://0.0.0.0:${PORTS.HTTP}`);
 console.log(`[Server] WebSocket on ws://0.0.0.0:${PORTS.HTTP}/ws`);

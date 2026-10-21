@@ -1,0 +1,9 @@
+.git
+.wrangler
+.dev.vars
+node_modules
+**/node_modules
+dist
+build
+data/**
+packages/server/public/images/**

@@ -3,8 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "bun run --hot src/index.ts",
-    "start": "bun run src/index.ts",
+    "dev": "bun run src/r2-restore.ts && bun run --hot src/index.ts",
+    "start": "bun run src/cloudflare-start.ts",
+    "r2:seed": "bun run src/r2-seed.ts",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {

@@ -6,8 +6,10 @@
   "scripts": {
     "dev:server":   "bun run --cwd packages/server dev",
     "dev:frontend": "bun run --cwd packages/frontend dev",
+    "dev:worker":   "bunx wrangler dev",
     "dev":          "bun run --filter '*' dev",
     "build":        "cd packages/frontend && bun run build",
+    "deploy:worker": "bun run build && bunx wrangler deploy",
     "typecheck":    "bun run --filter '*' typecheck"
   }
 }

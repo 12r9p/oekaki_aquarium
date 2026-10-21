@@ -158,6 +158,18 @@ function ManageApp(): React.ReactElement {
         return () => clearInterval(t);
     }, [poll]);
 
+    const saveWorldSettings = async (patch: Record<string, unknown>): Promise<void> => {
+        try {
+            const response = await api.put("/api/world/settings", patch);
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        } catch (error) {
+            console.error("[Manage] World settings save failed:", error);
+            setLastError("水槽設定を保存できませんでした。接続を確認して、もう一度保存してください。");
+            showAlert("水槽設定を保存できませんでした");
+            void poll();
+        }
+    };
+
     const sendTestPattern = async (pattern: TestPattern, targetUuid?: string): Promise<void> => {
         await api.request("/api/clients/test-pattern", {
             method: "POST",
@@ -292,14 +304,12 @@ function ManageApp(): React.ReactElement {
                 {tab === "layout" && (
                     <LayoutTab
                         state={layoutTabState}
-                        connected={connected}
                         onSaveViewport={saveViewport}
                         onTestPattern={sendTestPattern}
                         onUpdateWorldSize={(w, h) => {
-                            if (connected) {
-                                ws.send({ event: "update_world_size", width: w, height: h });
-                            }
+                            void saveWorldSettings({ width: w, height: h });
                         }}
+                        onSaveWorldSettings={saveWorldSettings}
                     />
                 )}
                 {tab === "fish" && (
@@ -311,7 +321,7 @@ function ManageApp(): React.ReactElement {
                 {tab === "motion" && (
                     <MotionPage settings={motionSettings} onChange={(next) => {
                         setMotionSettings(next);
-                        if (connected) ws.send({ event: "update_world_config", bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, fishScaleMultiplier, motionSettings: next });
+                        void saveWorldSettings({ bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, fishScaleMultiplier, motionSettings: next });
                     }} />
                 )}
                 {tab === "settings" && (
@@ -384,14 +394,14 @@ interface LayoutTabProps {
         redoStackRef: React.MutableRefObject<any[]>;
         snapshotViewports: () => { uuid: string; viewport: NonNullable<DisplayClientInfo["viewport"]> }[];
     };
-    connected: boolean;
     onSaveViewport: (uuid: string, vp: NonNullable<DisplayClientInfo["viewport"]>) => Promise<void>;
     onTestPattern: (pattern: TestPattern, uuid?: string) => Promise<void>;
     onUpdateWorldSize: (w: number, h: number) => void;
+    onSaveWorldSettings: (patch: Record<string, unknown>) => Promise<void>;
 }
 
 // ====== タブ 1: レイアウト管理 ======
-function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWorldSize }: LayoutTabProps) {
+function LayoutTab({ state, onSaveViewport, onTestPattern, onUpdateWorldSize, onSaveWorldSettings }: LayoutTabProps) {
     const { displays, sendRateSetting, worldW, setWorldW, worldH, setWorldH,
         bgUrl, setBgUrl, forbiddenZones, setForbiddenZones, spawnPoints, setSpawnPoints, layers, setLayers,
         horizontalBoundaryMode, setHorizontalBoundaryMode, fishSpeedMultiplier, setFishSpeedMultiplier, fishScaleMultiplier,
@@ -409,7 +419,7 @@ function LayoutTab({ state, connected, onSaveViewport, onTestPattern, onUpdateWo
         fishScaleMultiplier?: number;
     }) => {
         const next = { bgUrl, forbiddenZones, spawnPoints, layers, horizontalBoundaryMode, fishSpeedMultiplier, fishScaleMultiplier, ...patch };
-        if (connected) ws.send({ event: "update_world_config", ...next });
+        void onSaveWorldSettings(next);
     };
 
     const onUpdateBgUrl = (url: string) => {

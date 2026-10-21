@@ -2,13 +2,7 @@ import type { ServerWebSocket } from "bun";
 import type { WsClientMessage, WsServerMessage, TestPattern, DisplayClientInfo, ClientConfig, WorldObject } from "@aquarium/shared";
 import { LAYER_CONFIG, PHYSICS, replaceLayerConfig } from "@aquarium/shared";
 import { foodItems } from "./physics/boundaries";
-import { registerClientViewport, unregisterClient, setWorldSize, getWorld,
-  updateForbiddenZones,
-  updateSpawnPoints,
-  updateLayers,
-  updateWorldMotionSettings,
-  restoreWorldSettings,
-} from "./world";
+import { getWorld, registerClientViewport, restoreWorldSettings, unregisterClient } from "./world";
 import { getAllActiveFish, getPendingQueue } from "./fish-manager";
 import { v4 as uuidv4 } from "uuid";
 import { DEFAULT_BACKGROUND_URL, getPersistedSettings, persistViewport, updatePersistedSettings } from "./settings-store";
@@ -23,9 +17,29 @@ const restoredSettings = getPersistedSettings();
 if (restoredSettings.fishLayers) replaceLayerConfig(restoredSettings.fishLayers);
 restoreWorldSettings(restoredSettings.world ?? {});
 let currentBgUrl = restoredSettings.bgUrl ?? DEFAULT_BACKGROUND_URL;
+const REVISION_EPOCH = uuidv4();
+let revisionWatermark = 0;
 
 /** 現在の背景画像URLを取得する */
 export function getCurrentBgUrl(): string { return currentBgUrl; }
+
+/** Restore or change the aquarium background and synchronize connected clients. */
+export function setCurrentBgUrl(url: string): void {
+  currentBgUrl = url;
+  persistServerSettings();
+  const w = getWorld();
+  broadcastToAll({
+    event: "update_world_config",
+    bgUrl: currentBgUrl,
+    forbiddenZones: w.forbiddenZones,
+    spawnPoints: w.spawnPoints,
+    layers: w.layers,
+    horizontalBoundaryMode: w.horizontalBoundaryMode,
+    fishSpeedMultiplier: w.fishSpeedMultiplier,
+    fishScaleMultiplier: w.fishScaleMultiplier,
+    motionSettings: w.motionSettings,
+  });
+}
 
 // ============================================================
 // Store / State
@@ -34,24 +48,206 @@ export function getCurrentBgUrl(): string { return currentBgUrl; }
 export interface ClientData {
   uuid: string;
   clientType: string;
+  accessAuthenticated: boolean;
+  accessSubject: string | null;
+  accessRoles: string[];
+  accessExpiresAt: number | null;
   lastHeartbeat: number;
   screenW: number;
   screenH: number;
   viewport: ClientConfig["viewport"] | null;
   testPattern: TestPattern;
   ping: number;
+  revisionSequence: number;
+  frameSequence: number;
 }
 
 const sockets = new Set<ServerWebSocket<ClientData>>();
 
+export type ViewportSnapshot = Record<string, NonNullable<ClientConfig["viewport"]>>;
+
+/**
+ * Cloudflare Workerから渡された信頼済みDO revisionで、このContainerの同期基準を更新する。
+ * HTTP commandのupstream requestではWorkerがcurrent + 1を渡す。
+ */
+export function refreshRevisionWatermark(revision: number): void {
+  if (Number.isSafeInteger(revision) && revision >= 0) {
+    revisionWatermark = Math.max(revisionWatermark, revision);
+  }
+}
+
+/** Authenticated displayのHTTP viewport変更に限り、同一Access subjectのWS登録を許可する。 */
+export function isDisplaySessionAuthorized(subject: string, uuid: string): boolean {
+  if (!subject || !uuid) return false;
+  return [...sockets].some((ws) =>
+    ws.data.clientType === "display" &&
+    ws.data.uuid === uuid &&
+    ws.data.accessSubject === subject &&
+    hasDisplayAccess(ws),
+  );
+}
+
+function isLocalUntrustedFallback(ws: ServerWebSocket<ClientData>): boolean {
+  return !ws.data.accessAuthenticated && process.env.AQUARIUM_ALLOW_UNTRUSTED_WS === "true";
+}
+
+function hasValidAccessIdentity(ws: ServerWebSocket<ClientData>): boolean {
+  return ws.data.accessAuthenticated &&
+    ws.data.accessExpiresAt !== null &&
+    ws.data.accessExpiresAt > Date.now() / 1000;
+}
+
+function hasAccessRole(ws: ServerWebSocket<ClientData>, ...roles: string[]): boolean {
+  return hasValidAccessIdentity(ws) && roles.some((role) => ws.data.accessRoles.includes(role));
+}
+
+function hasManageAccess(ws: ServerWebSocket<ClientData>): boolean {
+  if (ws.data.clientType === "unknown") return false;
+  return hasAccessRole(ws, "manage", "admin") ||
+    (isLocalUntrustedFallback(ws) && ws.data.clientType === "manage");
+}
+
+function hasDisplayAccess(ws: ServerWebSocket<ClientData>): boolean {
+  return hasAccessRole(ws, "display", "admin") ||
+    (isLocalUntrustedFallback(ws) && ws.data.clientType === "display");
+}
+
+function classifyClientType(uuid: string): string {
+  const prefix = uuid.split(":")[0] ?? "";
+  if (prefix.startsWith("display")) return "display";
+  if (prefix.startsWith("controller")) return "controller";
+  if (prefix.startsWith("guest")) return "guest";
+  if (prefix.startsWith("manage")) return "manage";
+  return "unknown";
+}
+
+function mayRegisterClient(ws: ServerWebSocket<ClientData>, clientType: string): boolean {
+  // 来場者・放流画面は公開クライアント。UUIDは権限には使わない。
+  if (clientType === "controller" || clientType === "guest") return true;
+
+  if (ws.data.accessAuthenticated) {
+    if (!hasValidAccessIdentity(ws)) return false;
+    if (clientType === "display") return hasAccessRole(ws, "display", "admin");
+    if (clientType === "manage") return hasAccessRole(ws, "manage", "admin");
+    return false;
+  }
+
+  // ローカル開発の明示 opt-in のみ、従来のUUID prefix判定を許可する。
+  return process.env.AQUARIUM_ALLOW_UNTRUSTED_WS === "true" &&
+    (clientType === "display" || clientType === "manage");
+}
+
+function rejectSocket(ws: ServerWebSocket<ClientData>, reason: string): void {
+  console.warn(`[WS] Rejected ${ws.data.uuid}: ${reason}`);
+  ws.close(1008, reason);
+}
+
+function isSafeCounter(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function createStateSnapshot(ws: ServerWebSocket<ClientData>): WsServerMessage {
+  const w = getWorld();
+  const snapshot: WsServerMessage = {
+    event: "state_snapshot",
+    clients: getDisplayClientInfoList(),
+    activeFish: getAllActiveFish(),
+    pendingFish: getPendingQueue(),
+    worldW: w.width,
+    worldH: w.height,
+    bgUrl: currentBgUrl,
+    forbiddenZones: w.forbiddenZones,
+    spawnPoints: w.spawnPoints,
+    layers: w.layers,
+    fishLayers: LAYER_CONFIG,
+    horizontalBoundaryMode: w.horizontalBoundaryMode,
+    fishSpeedMultiplier: w.fishSpeedMultiplier,
+    fishScaleMultiplier: w.fishScaleMultiplier,
+    motionSettings: w.motionSettings,
+    systemMetrics: getSystemMetrics(),
+    scene: sceneObjects,
+    frameSequence: ws.data.frameSequence,
+    ...(ws.data.clientType === "display" ? {
+      viewport: ws.data.viewport ?? defaultViewport(ws.data.screenW, ws.data.screenH),
+      debug: { showGrid: false, showId: false },
+      displayNumber: getDisplayNumber(ws),
+    } : {}),
+  };
+  return snapshot;
+}
+
+function getDisplayNumber(target: ServerWebSocket<ClientData>): number {
+  return [...sockets]
+    .filter((socket) => socket.data.clientType === "display")
+    .sort((a, b) => a.data.uuid.localeCompare(b.data.uuid))
+    .findIndex((socket) => socket === target) + 1;
+}
+
+function sendDisplayConfig(ws: ServerWebSocket<ClientData>): void {
+  const w = getWorld();
+  sendTo(ws, {
+    event: "config",
+    viewport: ws.data.viewport ?? defaultViewport(ws.data.screenW, ws.data.screenH),
+    debug: { showGrid: false, showId: false },
+    worldW: w.width,
+    worldH: w.height,
+    bgUrl: currentBgUrl,
+    forbiddenZones: w.forbiddenZones,
+    spawnPoints: w.spawnPoints,
+    layers: w.layers,
+    horizontalBoundaryMode: w.horizontalBoundaryMode,
+    fishSpeedMultiplier: w.fishSpeedMultiplier,
+    fishScaleMultiplier: w.fishScaleMultiplier,
+    motionSettings: w.motionSettings,
+    displayNumber: getDisplayNumber(ws),
+  });
+}
+
+function sendClientSnapshot(ws: ServerWebSocket<ClientData>): void {
+  sendTo(ws, createStateSnapshot(ws));
+  if (ws.data.clientType === "display") {
+    sendDisplayConfig(ws);
+    sendTo(ws, { event: "scene_update", objects: sceneObjects });
+  } else if (ws.data.clientType === "manage") {
+    sendStatePush(ws);
+  }
+}
+
 /**
  * displayIDごとにViewportを永続保存するMap。
  * これにより、displayが再接続しても管理画面で設定したViewportが維持される。
- * サーバー再起動でリセットされる（永続化が必要な場合はファイルに書き出す）。
+ * ローカルsettings-storeとWorkerの内部状態snapshotの両方に保存する。
  */
 const viewportStore = new Map<string, NonNullable<ClientConfig["viewport"]>>(
   Object.entries(restoredSettings.viewports ?? {}),
 );
+
+/** Return a detached copy of the persisted viewport registry for Worker snapshots. */
+export function getViewportSnapshot(): ViewportSnapshot {
+  return Object.fromEntries(
+    [...viewportStore].map(([uuid, viewport]) => [uuid, { ...viewport }]),
+  );
+}
+
+/** Replace all saved viewports and persist them alongside local aquarium settings. */
+export function restoreViewportSnapshot(viewports: ViewportSnapshot): void {
+  viewportStore.clear();
+  for (const [uuid, viewport] of Object.entries(viewports)) {
+    viewportStore.set(uuid, { ...viewport });
+  }
+  updatePersistedSettings({ viewports: getViewportSnapshot() });
+
+  for (const ws of sockets) {
+    if (ws.data.clientType !== "display") continue;
+    const savedViewport = viewportStore.get(ws.data.uuid)
+      ?? [...viewportStore.entries()].find(([uuid]) => uuid.startsWith(`${ws.data.uuid}-`))?.[1];
+    const viewport = savedViewport ?? defaultViewport(ws.data.screenW, ws.data.screenH);
+    ws.data.viewport = viewport;
+    registerClientViewport({ uuid: ws.data.uuid, name: ws.data.uuid, viewport, debug: { showGrid: false, showId: false } });
+    sendTo(ws, { event: "update_viewport", targetUuid: ws.data.uuid, viewport });
+  }
+  pushClientListToManagers();
+}
 
 /** 切断されたディスプレイの履歴を一定期間（猶予期間）保持するためのリスト */
 let disconnectedDisplays: DisplayClientInfo[] = [];
@@ -116,10 +312,9 @@ export function replaceScene(objects: WorldObject[]): void {
 /** シーン更新をdisplay+manageにブロードキャスト */
 function broadcastSceneUpdate(): void {
   const msg: WsServerMessage = { event: "scene_update", objects: sceneObjects };
-  const data = JSON.stringify(msg);
   for (const ws of sockets) {
     if (ws.data.clientType === "display" || ws.data.clientType === "manage") {
-      ws.send(data);
+      sendTo(ws, msg);
     }
   }
 }
@@ -129,14 +324,18 @@ function broadcastSceneUpdate(): void {
 export const wsHandlers = {
   open(ws: ServerWebSocket<ClientData>): void {
     ws.data = {
+      ...ws.data,
       uuid: uuidv4(),
       clientType: "unknown",
+      accessSubject: ws.data.accessSubject ?? null,
       lastHeartbeat: Date.now(),
       screenW: 1920,
       screenH: 1080,
       viewport: null,
       testPattern: "off",
       ping: 0,
+      revisionSequence: 0,
+      frameSequence: 0,
     };
     sockets.add(ws);
     console.log(`[WS] Connected: ${ws.data.uuid}`);
@@ -181,6 +380,19 @@ export const wsHandlers = {
 };
 
 function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): void {
+  if (ws.data.accessAuthenticated && !hasValidAccessIdentity(ws)) {
+    rejectSocket(ws, "Access identity expired");
+    return;
+  }
+
+  // 永続状態の更新はrevisionを割り当てるHTTP commandに集約する。
+  // 古いクライアントがWS経由で送ってきた場合も黙って無視せず、再接続を促す。
+  const event = (msg as { event?: unknown }).event;
+  if (event === "update_viewport" || event === "update_world_size" || event === "update_world_config") {
+    rejectSocket(ws, `${event} is no longer accepted over WebSocket; use the authenticated HTTP command`);
+    return;
+  }
+
   // heartbeat を含む正常な受信を生存確認として扱う。
   ws.data.lastHeartbeat = Date.now();
   switch (msg.event) {
@@ -191,22 +403,30 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       break;
 
     case "register": {
+      const requestedClientType = classifyClientType(msg.uuid);
+      if (!mayRegisterClient(ws, requestedClientType)) {
+        rejectSocket(ws, `registration is not allowed for ${requestedClientType}`);
+        return;
+      }
+
       ws.data.uuid = msg.uuid;
       ws.data.screenW = msg.hardware.w;
       ws.data.screenH = msg.hardware.h;
       ws.data.lastHeartbeat = Date.now();
-
-      // UUID の prefix から種別を判定（例: "display:left-monitor", "manage-uuid"）
-      const prefix = msg.uuid.split(":")[0];
-      ws.data.clientType = prefix.startsWith("display")    ? "display"
-                         : prefix.startsWith("controller") ? "controller"
-                         : prefix.startsWith("guest")      ? "guest"
-                         : prefix.startsWith("manage")     ? "manage"
-                         : "unknown";
+      ws.data.clientType = requestedClientType;
+      ws.data.revisionSequence = msg.lastRevisionEpoch === REVISION_EPOCH && isSafeCounter(msg.lastRevisionSequence)
+        ? msg.lastRevisionSequence
+        : 0;
+      ws.data.frameSequence = msg.lastFrameEpoch === REVISION_EPOCH && isSafeCounter(msg.lastFrameSequence)
+        ? msg.lastFrameSequence
+        : 0;
 
       console.log(`[WS] Registered: ${msg.uuid} (${ws.data.clientType})`);
 
       if (ws.data.clientType === "display") {
+        if (msg.lastFrameEpoch === REVISION_EPOCH && isSafeCounter(msg.lastFrameSequence)) {
+          ws.data.frameSequence = msg.lastFrameSequence;
+        }
         // 保存済みViewportがあれば復元。初回は水槽内に収まる表示範囲を割り当てる。
         const savedVp = viewportStore.get(msg.uuid)
           ?? [...viewportStore.entries()].find(([uuid]) => uuid.startsWith(`${msg.uuid}-`))?.[1];
@@ -217,32 +437,8 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
           persistViewport(msg.uuid, vp);
         }
         registerClientViewport({ uuid: msg.uuid, name: msg.uuid, viewport: vp, debug: { showGrid: false, showId: false } });
-        const w = getWorld();
-        const displayNumber = [...sockets]
-          .filter(socket => socket.data.clientType === "display")
-          .sort((a, b) => a.data.uuid.localeCompare(b.data.uuid))
-          .findIndex(socket => socket === ws) + 1;
-        sendTo(ws, {
-          event: "config",
-          viewport: vp,
-          debug: { showGrid: false, showId: false },
-          worldW: w.width,
-          worldH: w.height,
-          bgUrl: currentBgUrl,
-          forbiddenZones: w.forbiddenZones,
-          spawnPoints: w.spawnPoints,
-          layers: w.layers,
-          horizontalBoundaryMode: w.horizontalBoundaryMode,
-          fishSpeedMultiplier: w.fishSpeedMultiplier,
-          fishScaleMultiplier: w.fishScaleMultiplier,
-          motionSettings: w.motionSettings,
-          displayNumber,
-        });
       }
-      // 初回接続: シーンを送信
-      if (ws.data.clientType === "display" || ws.data.clientType === "manage") {
-        sendTo(ws, { event: "scene_update", objects: sceneObjects });
-      }
+      sendClientSnapshot(ws);
       // 復帰した場合は disconnectedDisplays から除外
       if (ws.data.clientType === "display") {
         disconnectedDisplays = disconnectedDisplays.filter(d => d.uuid !== ws.data.uuid);
@@ -252,13 +448,23 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       pushClientListToManagers();
       break;
     }
-    case "update_viewport":
-      updateDisplayViewport(ws.data.uuid, msg.clientInfo.viewport);
-      // Viewport（Display側）が動いたことを管理画面へ即時反映する
-      pushStateToManagers();
+    case "sync_request": {
+      if (ws.data.clientType === "unknown") {
+        rejectSocket(ws, "sync_request requires registration");
+        return;
+      }
+      if (msg.lastRevisionEpoch === REVISION_EPOCH && isSafeCounter(msg.lastRevisionSequence)) {
+        // Snapshotはclientが実際に適用できた位置から新しい連番で再開する。
+        ws.data.revisionSequence = msg.lastRevisionSequence;
+      }
+      sendClientSnapshot(ws);
       break;
-
+    }
     case "spawn_food":
+      if (ws.data.clientType !== "controller" && ws.data.clientType !== "guest") {
+        rejectSocket(ws, "spawn_food requires a controller or guest registration");
+        return;
+      }
       foodItems.push({
         id: uuidv4(),
         pos: { x: msg.x, y: msg.y },
@@ -267,6 +473,10 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
       break;
 
     case "viewport_preview": {
+      if (!hasManageAccess(ws)) {
+        rejectSocket(ws, "viewport_preview requires manage access");
+        return;
+      }
       // 管理画面からのドラッグ中リアルタイムプレビュー: 対象displayのみに転送
       const target = [...sockets].find(s => s.data.uuid === msg.displayUuid);
       if (target) sendTo(target, { event: "viewport_preview", viewport: msg.viewport });
@@ -274,41 +484,12 @@ function handleMessage(ws: ServerWebSocket<ClientData>, msg: WsClientMessage): v
     }
 
     case "pointer_move": {
+      if (!hasManageAccess(ws)) {
+        rejectSocket(ws, "pointer_move requires manage access");
+        return;
+      }
       // 管理画面からのマウスポインター位置を全てのディスプレイに転送
       broadcastToDisplays({ event: "pointer_move", x: msg.x, y: msg.y });
-      break;
-    }
-    case "update_world_size": {
-      setWorldSize(msg.width, msg.height);
-      persistServerSettings();
-      broadcastToAll({ event: "update_world_size", width: msg.width, height: msg.height });
-      pushStateToManagers();
-      break;
-    }
-
-    case "update_world_config": {
-      // 管理画面から背景や禁止エリアが更新されたら全体へ通知
-      currentBgUrl = msg.bgUrl;
-      updateForbiddenZones(msg.forbiddenZones);
-      updateSpawnPoints(msg.spawnPoints);
-      if (msg.layers) updateLayers(msg.layers);
-      updateWorldMotionSettings(msg.horizontalBoundaryMode, msg.fishSpeedMultiplier, msg.fishScaleMultiplier, msg.motionSettings);
-      persistServerSettings();
-      const w = getWorld();
-
-      broadcastToAll({
-        event: "update_world_config",
-        bgUrl: currentBgUrl,
-        forbiddenZones: msg.forbiddenZones,
-        spawnPoints: msg.spawnPoints,
-        layers: msg.layers,
-        horizontalBoundaryMode: w.horizontalBoundaryMode,
-        fishSpeedMultiplier: w.fishSpeedMultiplier,
-        fishScaleMultiplier: w.fishScaleMultiplier,
-        motionSettings: w.motionSettings,
-      });
-      // 管理画面のstate_pushもトリガー
-      pushStateToManagers();
       break;
     }
   }
@@ -320,21 +501,57 @@ function sendTo(ws: ServerWebSocket<ClientData>, msg: WsServerMessage): void {
   if (ws.readyState === WebSocket.OPEN) {
     // スリープ復帰直後など、送信キューが詰まったクライアントへ古いフレームを積み続けない。
     if (msg.event === "frame" && ws.getBufferedAmount() > 512_000) return;
-    ws.send(JSON.stringify(msg));
+    let outgoing = msg;
+    if (isRevisionedMessage(msg)) {
+      ws.data.revisionSequence += 1;
+      outgoing = {
+        ...msg,
+        revision: revisionWatermark,
+        revisionEpoch: REVISION_EPOCH,
+        revisionSequence: ws.data.revisionSequence,
+      };
+    } else if (msg.event === "frame") {
+      ws.data.frameSequence += 1;
+      outgoing = {
+        ...msg,
+        frameEpoch: REVISION_EPOCH,
+        frameSequence: ws.data.frameSequence,
+      };
+    }
+    ws.send(JSON.stringify(outgoing));
+  }
+}
+
+function isRevisionedMessage(msg: WsServerMessage): boolean {
+  switch (msg.event) {
+    case "config":
+    case "fish_added":
+    case "fish_locked":
+    case "fish_released":
+    case "state_push":
+    case "state_snapshot":
+    case "update_world_config":
+    case "test_pattern":
+    case "update_viewport":
+    case "client_list":
+    case "fish_list":
+    case "scene_update":
+    case "update_world_size":
+      return true;
+    default:
+      return false;
   }
 }
 
 /** 全クライアントにブロードキャスト */
 export function broadcastToAll(msg: WsServerMessage): void {
-  const data = JSON.stringify(msg);
-  for (const ws of sockets) ws.send(data);
+  for (const ws of sockets) sendTo(ws, msg);
 }
 
 /** displayクライアントにのみ送る */
 export function broadcastToDisplays(msg: WsServerMessage): void {
-  const data = JSON.stringify(msg);
   for (const ws of sockets) {
-    if (ws.data.clientType === "display") ws.send(data);
+    if (ws.data.clientType === "display") sendTo(ws, msg);
   }
 }
 
@@ -423,6 +640,12 @@ export function sendTestPattern(pattern: TestPattern, targetUuid?: string): void
 
 /** [ServerLoop] 全manageクライアントへ同期状態(state_push)を送る */
 export function pushStateToManagers(): void {
+  for (const ws of sockets) {
+    if (ws.data.clientType === "manage") sendStatePush(ws);
+  }
+}
+
+function createStatePush(): WsServerMessage {
   const list = getDisplayClientInfoList();
   const fish = getAllActiveFish();
   const pending = getPendingQueue();
@@ -446,10 +669,11 @@ export function pushStateToManagers(): void {
     motionSettings: w.motionSettings,
     systemMetrics: getSystemMetrics(),
   };
-  const data = JSON.stringify(msg);
-  for (const ws of sockets) {
-    if (ws.data.clientType === "manage") ws.send(data);
-  }
+  return msg;
+}
+
+function sendStatePush(ws: ServerWebSocket<ClientData>): void {
+  sendTo(ws, createStatePush());
 }
 
 /** [Server => Manage] クライアントリストの再送 */

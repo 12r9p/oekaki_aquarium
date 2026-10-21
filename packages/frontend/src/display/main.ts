@@ -1,7 +1,8 @@
 import "../styles/global.css";
 import { Application } from "pixi.js";
 import { DISPLAY_ID, STATE, updateStateVP, viewportForCurrentWindow } from "./state";
-import { setupNetwork, ws } from "./network";
+import { setupNetwork } from "./network";
+import { api } from "../shared/api";
 import { setupRenderLoop, initFishLayers, type FishEntry } from "./renderer/fish-renderer";
 import { currentPattern, drawTestPattern } from "./renderer/test-pattern-overlay";
 import { applyViewport } from "./renderer/viewport";
@@ -44,15 +45,11 @@ async function main(): Promise<void> {
     applyViewport(app);
     clearTimeout(resizeSaveTimer);
     resizeSaveTimer = setTimeout(() => {
-      ws.send({
-        event: "update_viewport",
-        clientInfo: {
-          uuid: DISPLAY_ID,
-          name: DISPLAY_ID,
-          viewport: STATE.VP,
-          debug: { showGrid: false, showId: false },
-        },
-      });
+      void api.put(`/api/clients/${encodeURIComponent(DISPLAY_ID)}/viewport`, STATE.VP)
+        .then((response) => {
+          if (!response.ok) console.error(`[Display] Viewport save failed: ${response.status}`);
+        })
+        .catch((error) => console.error("[Display] Viewport save failed:", error));
     }, 250);
   });
 
