@@ -22,11 +22,11 @@ flowchart LR
 
 - Workerと同一オリジンの `/api/*` と `/ws` を使っており、URLにlocalhostを埋め込む構成ではない。
 - 位置計算と接続管理は1つのBun Containerに集約されている。1つの水槽の位置が複数サーバーで食い違わない点は維持する。
-- Containerのローカルファイルが実行中の作業コピーで、`fs.watch` の変更通知を500ms後にR2へ書き戻す。R2側の索引 `library-index.json` は全魚のメタデータを書き換えるため、保存が重なると古い書き込みが後から反映される余地がある。Container停止直前の遅延書き込みにも依存している。
-- Durable ObjectにSQLiteストレージは割り当て済みだが、魚や設定の正本としては使っていない。
+- Containerのローカルファイルは実行中の作業コピーで、`fs.watch` の変更通知を受けてR2へ反映する。R2書き込みはパス単位で直列化されている。既存の`library-index.json`と設定ファイルは、画像・位置checkpointとSQLite初期seedの互換用に残っている。
+- Durable Object SQLiteはcommand receipt、単調増加revision、chunk化した完全状態スナップショットを保持する。初回起動時に既存R2状態からseedし、以後のContainer起動ではSQLiteスナップショットを復元する。魚メタデータ・設定・シーンの検索用projectionもあるが、正規化テーブルへの完全移行はまだ完了していない。
 - サーバーは約60fpsで全表示端末へ魚位置を送り、端末はPixi.jsで描画する。サーバーが計算を担うのはよいが、高頻度パケットの量と遅延を監視する必要がある。
-- WebSocket切断時に再接続はするが、固定3秒間隔だった。切断が続く端末が同時に再試行する同期集中を避けられない。
-- 管理系APIの認証・権限境界とCORSはネットワーク公開を前提に見直す必要がある。CORSはアクセス制御の代わりにならない。
+- WebSocket切断時は指数バックオフとランダムジッターで再接続する。接続・再同期時はrevision付き完全スナップショットを返し、状態イベントの欠落を検出した端末はスナップショットを要求する。過去の差分を再生するログは持たない。
+- Cloudflare Access JWTをWorkerで検証し、管理系ページ/APIと表示端末をroleで制限する。来場者向け公開APIは許可リストに限定している。CORSはアクセス制御の代わりにならない。
 
 ## 目標構成
 
@@ -76,22 +76,22 @@ SQLiteは概念上、次の単位で保持する。
 状態変更はすべてWorkerから水槽のDurable Objectへ送る。ブラウザーからContainerへ直接接続させない。
 
 1. WorkerがCloudflare Accessとロールを検証する。
-2. Durable Objectが`commandId`を重複確認し、状態変更とrevision、command結果をSQLiteの同一トランザクションで確定する。
-3. 確定したcommandを内部APIでContainerへ渡す。Containerは物理演算と表示用フレーム生成を担当し、魚・設定の永続的な正本を持たない。
-4. Container停止中ならcommandはSQLiteに保留し、復帰後にrevision順で再送する。応答は適用完了と保留中を区別する。
-5. 接続中の表示端末へ状態イベントと位置フレームを配る。再接続時の完全な状態はDurable Objectから取得するため、配信中Containerのメモリだけに復帰を依存させない。
-6. Containerは一定間隔の位置・速度スナップショットをDurable Objectへ報告する。毎フレームや画像本体はSQLiteへ保存しない。
+2. Durable Objectが`commandId`を重複確認し、要求中の状態をSQLiteへ記録する。
+3. ContainerがAPI操作を適用し、内部スナップショットAPIで魚・設定・シーン・viewportの状態を返す。画像バイナリは含めない。
+4. Durable Objectがスナップショット、revision、command結果をSQLiteの同一トランザクションで確定してから成功応答を返す。本文は最大8MiBの分割スナップショットで、画像バイナリは含めない。
+5. 初回はContainerがR2から復元した状態をSQLiteへ一度seedする。以後のContainer起動ではSQLiteの完全スナップショットを復元してから外部リクエストを受け付ける。R2の画像本体はそのまま使い、SQLite snapshotより新しい魚位置checkpointは復元時に重ねる。
+6. 接続中の表示端末へrevision付き状態イベントと連番付き位置フレームを配る。イベントの連番が飛んだ端末は差分を続行せず、完全スナップショットを取り直す。
 
-魚の編集、放流、持ち帰り、アーカイブ、設定変更はcommand APIを使う。WebSocketは接続登録、状態通知、位置フレーム、ポインターやViewportの一時プレビューに使う。現在WebSocket経由で送っている永続設定変更は、移行時にcommand APIへ移す。
+魚の編集、放流、持ち帰り、アーカイブ、設定変更、display viewport変更はcommand APIを使う。WebSocketは接続登録、状態通知、位置フレーム、ポインターやViewportの一時プレビューに使う。旧クライアントからの永続設定WebSocketメッセージは受け付けない。
 
 ## 通信契約
 
 1. クライアントは同一オリジンのHTTPS/WSSだけを使う。WorkerがAPI、WebSocket、静的画面、画像配信を振り分ける。
-2. 状態を変えるHTTP/WS操作には `commandId` を付ける。同じIDの再送は二重作成せず、最初の結果を返す。
+2. 状態を変えるHTTP操作には発行時刻入り `commandId` を必須にする。同じIDは7日間再送でき、期限後のIDは拒否する。WebSocketの永続変更はcommand APIへ移行する。
 3. 成功応答には `revision` を含める。Durable Objectは状態変更とrevision更新を1つのSQLiteトランザクションで確定してから応答・配信する。
-4. 状態イベントにもrevisionを含める。クライアントが飛び番を見つけたら差分を適用せず、全スナップショットを取り直す。
-5. 接続直後は `hello`、認証済みロール、最後に適用したrevisionを送る。サーバーは差分が残っていれば差分、なければ `state_snapshot` を返す。
-6. 魚の位置フレームは再生用の一時データで、保存コマンドとは分ける。フレームには `seq` と `serverTime` を付ける。遅れた古いフレームは捨てる。
+4. 状態イベントにはrevision、Container世代内の連番を付ける。クライアントがrevisionまたは連番の欠落を見つけたら差分を続けず、全スナップショットを取り直す。
+5. 接続直後と`sync_request`の後は常に`state_snapshot`を返す。直近の差分ログを保持しないため、差分再生は行わない。
+6. 魚の位置フレームは再生用の一時データで、保存コマンドとは分ける。フレームには世代と`seq`を付ける。遅れた古いフレームは捨てる。
 7. WebSocket再接続は指数バックオフとランダムジッターを使う。接続が一定時間安定したら待ち時間を初期化する。再接続後はスナップショットまたは差分で復帰する。
 8. 画面描画は各端末で60fpsを維持し、ネットワークからは20〜30fps程度の位置サンプルを受けて補間する。送信側は遅い端末の送信待ちを無限に溜めず、古い位置フレームを破棄する。状態変更イベントは位置フレームと別経路で失わないようにする。
 
@@ -115,6 +115,34 @@ SQLiteは概念上、次の単位で保持する。
 - 魚画像・ロゴ・背景はR2からWorker経由で配信し、一意・不変URLだけをエッジキャッシュする。内容を差し替えるときは新しいキーを発行する。
 - `/api/*` と `/ws` は `no-store`。状態の応答を共有キャッシュへ入れない。
 - 表示端末が同じ画像を繰り返し要求しないよう、画像キーと読み込み結果を端末内でもキャッシュする。
+
+## 今回の実装範囲と残作業
+
+### 実装済み
+
+- Workerは`/manage`、`/controller`を`manage`または`admin`、`/display`を`display`または`admin`で保護する。これら以外の`/api/*`は`manage`または`admin`を要求する。
+- 公開APIは`POST /api/scan`、`POST /api/release`、`GET /api/state`に限定する。来場者向け状態応答は`activeFish`だけで、状態APIと画像以外の動的応答は共有キャッシュしない。
+- 公開APIはCloudflareの送信元IPをSHA-256化して、scan 30回/10分、release 60回/10分、state 240回/分に制限する。scan本文は12 MiB、release本文は64 KiBまでとし、超過は413、レート超過は`Retry-After`付き429を返す。生IPはContainerへ転送・保存しない。
+- WorkerはAccess JWTの署名・issuer・audience・有効期限を検証し、確認したidentityだけを内部ヘッダーでContainerへ渡す。UUID prefixによる管理・表示権限付与は廃止した。
+- 変更要求には発行時刻入りcommand IDが必須で、同一IDの再送はSQLiteの受付記録で重複実行を防ぎ、別actorまたは異なる要求内容との衝突を拒否する。command IDの期限は7日で、期限後の再送は拒否する。小さいJSON応答は7日間再送でき、receiptも7日で削除する。SQLiteには最大50,000件を保持し、上限中の新しい変更には`503 command_capacity_reached`を返す。不明なcommandは成功扱いにせず、2分以上pendingのまま再送された場合は`result_unavailable`を返す。
+- Containerの初回seedはR2から読み込んだ完全状態で行い、次回以降は確定済みSQLiteスナップショットを復元する。snapshotには魚位置・設定・シーン・viewportを含め、画像参照URLだけを保存する。`data:`/`blob:`参照は受け付けない。R2位置checkpointがsnapshotより新しければ位置と速度を適用する。別のpending commandまたは不明なcommandがある場合は古い状態を自動適用しない。再起動時にはブラウザー編集セッションの一時ロックを解除する。
+- ブラウザーAPIは同一オリジンに限定し、変更要求へcommand IDを付ける。管理画面の水槽設定と表示端末のviewport保存はHTTP command経路を使う。WebSocketは指数バックオフとジッター、完全snapshot再同期を使う。
+
+### 運用前に設定するもの
+
+- Cloudflare Worker variablesに`CF_ACCESS_TEAM_DOMAIN`と`CF_ACCESS_AUD`を設定する。role claimが`roles`以外の場合は`CF_ACCESS_ROLES_CLAIM`にもclaim pathを設定する。値はリポジトリへ書き込まない。
+- Cloudflare Access側で`manage`、`display`、`admin`を含むJWT claimを発行する。Access policyでは管理端末、放流端末、表示端末に必要なroleを割り当てる。
+- `AQUARIUM_ALLOW_UNTRUSTED_ACCESS=true`はローカル開発時だけ設定する。このバイパスはリクエストhostがloopbackの場合に限り有効。
+- `AQUARIUM_ORIGIN`を使う開発構成では、`AQUARIUM_ORIGIN_MODE=local`も明示する。productionではDurable ObjectのContainer bindingを使う。
+- command IDの形式が変わるため、Workerと静的画面を一緒に公開した後、以前から開いたままの端末画面は再読み込みする。
+
+### まだ設計どおりではない部分
+
+- SQLiteは完全状態のchunked JSON snapshotとcommand receiptを正本として保持し、魚メタデータ・設定・scene projectionsも持つ。R2索引・設定ファイルからSQLiteへの初回seedとprojectionは実装済みだが、正規化テーブルへの段階移行や実データとの運用照合は残る。
+- 状態snapshotは成功したHTTP変更後に保存する。稼働中の魚位置はR2へ約15秒ごとにcheckpointされるため、Container停止時は最後のR2位置保存以降の移動が巻き戻る可能性がある。起動時はSQLiteの完全snapshotを復元し、snapshotより新しいR2位置checkpointをマージする。
+- 旧WebSocket永続変更イベントは拒否し、対象UIはHTTP commandへ移行済み。状態イベントの履歴保存と差分再生は未実装で、欠落時は最大8MiBの完全snapshotを再送する。
+- 不明なcommandは二重実行せずSQLite状態を不確実扱いにし、ContainerのR2 fallbackを自動で正本にしない。運営側で実際の状態を照合して復旧する手順は残る。
+- R2 seed、スナップショット復元、Access policy、複数端末の同時操作、回線断・Container再起動・R2障害を含む本番受け入れ確認と監視設定は運用前に行う。
 
 ## 移行手順
 
