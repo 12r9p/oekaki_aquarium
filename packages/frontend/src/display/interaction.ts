@@ -1,6 +1,5 @@
 import { Application } from "pixi.js";
 import { STATE, updateStateVP, DISPLAY_ID } from "./state";
-import { ws } from "./network";
 import { api } from "../shared/api";
 
 // ============================================================
@@ -87,16 +86,12 @@ export function setupInteractions(app: Application) {
       console.log(`[Interaction] Tapped to feed at World(${wx.toFixed()}, ${wy.toFixed()})`);
     } else {
       // 実際にある程度ドラッグ移動した場合は、新しいViewport位置をサーバーへ永続保存要求
-      ws.send({
-        event: "update_viewport",
-        clientInfo: {
-          uuid: DISPLAY_ID,
-          name: DISPLAY_ID,
-          viewport: STATE.VP,
-          debug: { showGrid: false, showId: false }
-        }
-      });
-      console.log(`[Interaction] Dragged to new VP(${STATE.VP.x}, ${STATE.VP.y}) -> Saved to server`);
+      void api.put(`/api/clients/${encodeURIComponent(DISPLAY_ID)}/viewport`, STATE.VP)
+        .then((response) => {
+          if (!response.ok) throw new Error(`HTTP ${response.status}`);
+          console.log(`[Interaction] Dragged to new VP(${STATE.VP.x}, ${STATE.VP.y}) -> Saved to server`);
+        })
+        .catch((error) => console.error("[Interaction] Viewport save failed:", error));
     }
   };
 

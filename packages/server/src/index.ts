@@ -22,6 +22,8 @@ import {
   addSceneObject,
   updateSceneObject,
   deleteSceneObject,
+  refreshRevisionWatermark,
+  isDisplaySessionAuthorized,
 } from "./ws-handler";
 
 import { scanRoute } from "./routes/scan";
@@ -50,6 +52,7 @@ import { updatePersistedSettings } from "./settings-store";
 import { updateFishLayers } from "./layer-manager";
 import { getSystemMetrics } from "./system-metrics";
 import { closeR2FilesystemMirror, flushR2FilesystemMirror, startR2FilesystemMirror } from "./r2-persistence";
+import { worldSettingsRoute } from "./routes/world-settings";
 
 // ============================================================
 // サーバーエントリーポイント（Bun 単一ポート統合版）
@@ -115,6 +118,7 @@ app.get("/api/pending",         pendingRoute);
 app.post("/api/pending/lock",   lockRoute);
 app.post("/api/pending/unlock", unlockRoute);
 app.post("/api/release",        releaseRoute);
+app.put("/api/world/settings",  (c) => worldSettingsRoute(c, hasManagementAccess(c.req.raw)));
 app.post("/api/fish/:id/pin",   pinRoute);
 
 // 魚削除（管理画面用）
@@ -328,9 +332,12 @@ app.put("/api/pending/:id/artwork", async (c) => {
 
 // Viewport 設定（display クライアントのViewportをサーバー側に保持しつつ更新）
 app.put("/api/clients/:uuid/viewport", async (c) => {
-  if (!hasManagementAccess(c.req.raw)) return c.json({ error: "Forbidden" }, 403);
+  const identity = readAccessIdentity(c.req.raw);
   // クライアント側で encodeURIComponent されているため、ここでデコードして元のUUIDに戻す
   const uuid = decodeURIComponent(c.req.param("uuid"));
+  const authorized = hasManagementAccess(c.req.raw) ||
+    (identity !== null && identity.roles.includes("display") && isDisplaySessionAuthorized(identity.subject, uuid));
+  if (!authorized) return c.json({ error: "Forbidden" }, 403);
   const vp = await c.req.json();
   const ok = updateDisplayViewport(uuid, vp);
   return c.json({ success: ok });
@@ -578,6 +585,11 @@ const server = Bun.serve({
 
   async fetch(req, server) {
     const url = new URL(req.url);
+    const revisionHeader = req.headers.get("X-Aquarium-Revision");
+    if (revisionHeader !== null && /^\d+$/.test(revisionHeader)) {
+      const revision = Number(revisionHeader);
+      if (Number.isSafeInteger(revision)) refreshRevisionWatermark(revision);
+    }
 
     // WS アップグレード
     if (req.headers.get("upgrade") === "websocket" && url.pathname === "/ws") {
@@ -587,8 +599,11 @@ const server = Bun.serve({
           uuid: "",
           clientType: "",
           accessAuthenticated: accessIdentity !== null,
+          accessSubject: accessIdentity?.subject ?? null,
           accessRoles: accessIdentity?.roles ?? [],
           accessExpiresAt: accessIdentity?.expiresAt ?? null,
+          revisionSequence: 0,
+          frameSequence: 0,
           lastHeartbeat: Date.now(),
           screenW: 0,
           screenH: 0,
