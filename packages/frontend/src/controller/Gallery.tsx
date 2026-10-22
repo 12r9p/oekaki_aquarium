@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import type { PendingFish } from "@aquarium/shared";
 import { api } from "../shared/api";
+import { prepareFishUpload } from "../shared/cutout/browser";
 import { Button } from "@/components/ui/button";
 import { Upload } from "lucide-react";
 
@@ -13,6 +14,7 @@ const EDITOR_ID = `editor-${Math.random().toString(36).slice(2, 8)}`;
 export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
     const [fishList, setFishList] = useState<PendingFish[]>([]);
     const [loading, setLoading] = useState(true);
+    const [uploading, setUploading] = useState(false);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const fetchPending = useCallback(async (): Promise<void> => {
@@ -45,12 +47,19 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
     };
 
     const uploadFiles = async (files: FileList | File[]) => {
-        for (const file of Array.from(files)) {
-            if (!file.type.startsWith("image/")) continue;
-            const form = new FormData();
-            form.append("image", file);
-            form.append("autoProcess", "true");
-            await api.request("/api/scan", { method: "POST", body: form });
+        setUploading(true);
+        try {
+            for (const file of Array.from(files)) {
+                if (!file.type.startsWith("image/")) continue;
+                // 切り抜きは端末側で行う（サーバーは魚の動きの計算と同じプロセスのため）
+                const upload = await prepareFishUpload(file);
+                const form = new FormData();
+                form.append("image", upload.file, upload.filename);
+                if (upload.serverAutoProcess) form.append("autoProcess", "true");
+                await api.request("/api/scan", { method: "POST", body: form });
+            }
+        } finally {
+            setUploading(false);
         }
         await fetchPending();
     };
@@ -63,8 +72,8 @@ export function Gallery({ onSelect }: GalleryProps): React.ReactElement {
                         <h1 className="text-xl font-bold tracking-tight">待合室</h1>
                         <p className="mt-1 text-sm text-slate-500">自分の絵を選んで、泳ぎ方を設定します。</p>
                     </div>
-                    <Button className="gap-2" onClick={() => fileInputRef.current?.click()}>
-                        <Upload className="h-4 w-4" />写真・PNGを追加
+                    <Button className="gap-2" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+                        <Upload className="h-4 w-4" />{uploading ? "切り抜き中…" : "写真・PNGを追加"}
                     </Button>
                     <input type="file" ref={fileInputRef} accept="image/png,image/*" capture="environment" multiple className="hidden"
                         onChange={e => e.target.files && void uploadFiles(e.target.files)} />
