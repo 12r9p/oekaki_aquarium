@@ -2,6 +2,7 @@ import { useState, useRef, useCallback } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import type { FishConfig, PendingFish, FishType, Vector2 } from "@aquarium/shared";
 import { api } from "../shared/api";
+import { generateUuid } from "../shared/uuid";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { ArrowLeft, Download, ImagePlus, Waves } from "lucide-react";
@@ -293,7 +294,7 @@ function smoothPath(path: Vector2[]): Vector2[] {
 function getSenderId(): string {
     const stored = localStorage.getItem("aquarium-sender-id");
     if (stored) return stored;
-    const id = crypto.randomUUID();
+    const id = generateUuid();
     localStorage.setItem("aquarium-sender-id", id);
     return id;
 }

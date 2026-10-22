@@ -1,0 +1,1 @@
+const a=[{id:0,maxCount:10,scale:1,opacity:1,speedFactor:1,zIndex:100},{id:1,maxCount:20,scale:.7,opacity:.8,speedFactor:.6,zIndex:50},{id:2,maxCount:50,scale:.4,opacity:.4,speedFactor:.3,zIndex:10}];export{a as L};
