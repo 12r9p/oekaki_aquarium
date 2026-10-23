@@ -44,6 +44,8 @@ function ManageApp(): React.ReactElement {
     const [connected, setConnected] = useState(false);
     const [alert, setAlert] = useState<string | null>(null);
     const [lastError, setLastError] = useState<string | null>(null);
+    const pollInFlight = useRef(false);
+    const pollFailures = useRef(0);
 
     // 新規追加機能: 送信レート設定
     const [sendRateSetting, setSendRateSetting] = useState(33); // プレビュー送信等のレート(ms), 30fps程度;
@@ -111,9 +113,21 @@ function ManageApp(): React.ReactElement {
 
     // 定期ポーリング（バックアップ）
     const poll = useCallback(async () => {
+        if (pollInFlight.current) return;
+        pollInFlight.current = true;
         try {
             const res = await api.request("/api/state");
-            const data = await res.json() as {
+            const payload = await res.json() as unknown;
+            if (!res.ok) {
+                const detail = payload && typeof payload === "object" && "error" in payload
+                    ? `: ${String(payload.error)}`
+                    : "";
+                throw new Error(`GET /api/state failed (HTTP ${res.status})${detail}`);
+            }
+            if (!payload || typeof payload !== "object") {
+                throw new Error("GET /api/state returned an invalid response");
+            }
+            const data = payload as {
                 clients: DisplayClientInfo[];
                 activeFish: ActiveFish[];
                 pendingFish: PendingFish[];
@@ -130,6 +144,9 @@ function ManageApp(): React.ReactElement {
                 motionSettings?: MotionSettings;
                 systemMetrics?: SystemMetrics;
             };
+            if (!Array.isArray(data.clients) || !Array.isArray(data.activeFish) || !Array.isArray(data.pendingFish)) {
+                throw new Error("GET /api/state response is missing clients, activeFish, or pendingFish arrays");
+            }
             setDisplays(data.clients.filter((c) => c.clientType === "display"));
             setActiveFish(data.activeFish);
             setPendingFish(data.pendingFish);
@@ -145,17 +162,32 @@ function ManageApp(): React.ReactElement {
             if (data.fishScaleMultiplier !== undefined) setFishScaleMultiplier(data.fishScaleMultiplier);
             if (data.motionSettings !== undefined) setMotionSettings(data.motionSettings);
             if (data.systemMetrics !== undefined) setSystemMetrics(data.systemMetrics);
+            pollFailures.current = 0;
         } catch (err) {
             console.error("Polling error:", err);
+            pollFailures.current += 1;
             setLastError("サーバーとの接続に問題があります。");
             setTimeout(() => setLastError(null), 5000);
+        } finally {
+            pollInFlight.current = false;
         }
     }, []);
 
     useEffect(() => {
-        void poll();
-        const t = setInterval(() => void poll(), 5_000);
-        return () => clearInterval(t);
+        let stopped = false;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        const run = async (): Promise<void> => {
+            await poll();
+            const retryDelay = pollFailures.current > 0
+                ? Math.min(30_000, 5_000 * 2 ** Math.min(pollFailures.current, 3))
+                : 5_000;
+            if (!stopped) timer = setTimeout(() => void run(), retryDelay);
+        };
+        void run();
+        return () => {
+            stopped = true;
+            if (timer !== undefined) clearTimeout(timer);
+        };
     }, [poll]);
 
     const saveWorldSettings = async (patch: Record<string, unknown>): Promise<void> => {
